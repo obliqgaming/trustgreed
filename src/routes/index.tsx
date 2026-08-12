@@ -272,6 +272,76 @@ function SignInScreen({ onSwitch }: { onSwitch: () => void }) {
 }
 
 function RedeemScreen({ onDone }: { onDone: () => Promise<void> }) {
+  const [isEmpty, setIsEmpty] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .then(({ count }) => {
+        if (!cancelled) setIsEmpty(count === 0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (isEmpty === null) {
+    return (
+      <LedgerCard title="Vérification du registre…">
+        <p className="text-sm text-muted-foreground">Lecture des archives en cours.</p>
+      </LedgerCard>
+    );
+  }
+
+  if (isEmpty) {
+    return <BootstrapFirstProfileScreen onDone={onDone} />;
+  }
+
+  return <RedeemInvitationScreen onDone={onDone} />;
+}
+
+function BootstrapFirstProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
+  const [username, setUsername] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    const { error: rpcError } = await supabase.rpc("bootstrap_first_profile", {
+      p_username: username,
+    });
+    if (rpcError) setError(rpcError.message);
+    else await onDone();
+    setBusy(false);
+  }
+
+  return (
+    <LedgerCard
+      title="Premier au registre"
+      subtitle="Tu es la première personne à rejoindre le monde. Choisis ton pseudo pour fonder le registre."
+    >
+      <form onSubmit={submit} noValidate>
+        <Field
+          label="Pseudo"
+          required
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <LedgerError message={error} />
+        <SealButton type="submit" disabled={busy}>
+          {busy ? "Scellement…" : "Fonder le registre"}
+        </SealButton>
+      </form>
+      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
+    </LedgerCard>
+  );
+}
+
+function RedeemInvitationScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [username, setUsername] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);

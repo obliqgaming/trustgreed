@@ -478,6 +478,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bootstrap_first_profile: {
+        Args: { p_username: string }
+        Returns: {
+          created_at: string
+          id: string
+          invited_by_profile_id: string | null
+          username: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cast_vote: {
         Args: { p_character_id: string; p_step_id: string; p_vote: string }
         Returns: undefined
