@@ -276,12 +276,12 @@ function RedeemScreen({ onDone }: { onDone: () => Promise<void> }) {
 
   useEffect(() => {
     let cancelled = false;
-    supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .then(({ count }) => {
-        if (!cancelled) setIsEmpty(count === 0);
-      });
+    void (async () => {
+      // Lecture directe : si aucune ligne n'est lisible, le registre est vierge.
+      const { data, error } = await supabase.from("profiles").select("id").limit(1);
+      if (cancelled) return;
+      setIsEmpty(!error && (data?.length ?? 0) === 0);
+    })();
     return () => {
       cancelled = true;
     };
