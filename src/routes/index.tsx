@@ -21,6 +21,7 @@ type Guild = { id: string; name: string; gold: number };
 type Member = { id: string; name: string; level: number };
 
 function Index() {
+  const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signup");
