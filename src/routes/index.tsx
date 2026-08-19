@@ -93,7 +93,7 @@ function Index() {
           onClick={() => navigate({ to: "/inviter" })}
           className="mt-6 w-full rounded-sm border border-primary/60 px-4 py-2.5 font-serif tracking-[0.16em] text-primary uppercase hover:bg-primary/10"
         >
-          Inviter quelqu'un
+          Inviter quelqu'un dans la guilde
         </button>
         <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
       </LedgerCard>
@@ -106,7 +106,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   const [tab, setTab] = useState<"create" | "join">("create");
   const [guildName, setGuildName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
-  const [inviterName, setInviterName] = useState("");
+  const [pseudo, setPseudo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -148,22 +148,12 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
     e.preventDefault();
     setError(null);
     setBusy(true);
-    // Trouver le personnage parrain via son nom
-    const { data: inviter } = await supabase
-      .from("characters")
-      .select("id, guild_id")
-      .eq("name", inviterName)
-      .eq("is_alive", true)
-      .maybeSingle();
-    if (!inviter) {
-      setError("Personnage parrain introuvable ou mort.");
-      setBusy(false);
-      return;
-    }
-    const { error: rpcError } = await supabase.rpc("join_guild", {
-      p_guild_id: inviter.guild_id,
+    // Le code d'invitation contient l'info du parrain — on passe
+    // par redeem_guild_invitation (nouvelle RPC, voir SQL ci-dessous)
+    const { error: rpcError } = await supabase.rpc("join_guild_with_code", {
+      p_code: inviteCode,
       p_character_id: character.id,
-      p_invited_by_character_id: inviter.id,
+      p_username: pseudo,
     });
     if (rpcError) setError(rpcError.message);
     else await onDone();
@@ -195,7 +185,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
         </form>
       ) : (
         <form onSubmit={joinGuild} noValidate>
-          <Field label="Nom du personnage qui t'invite" required value={inviterName} onChange={(e) => setInviterName(e.target.value)} />
+          <Field label="Code d'invitation reçu" required value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} />
           <LedgerError message={error} />
           <SealButton type="submit" disabled={busy}>{busy ? "Entrée…" : "Rejoindre"}</SealButton>
           {guilds.length > 0 && (
@@ -205,7 +195,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
                 {guilds.map((g) => (
                   <li key={g.id} className="flex justify-between border border-border/40 px-3 py-2 text-sm">
                     <span className="text-foreground">{g.name}</span>
-                    <span className="font-mono text-primary text-xs">{g.member_count} membres · {Math.round(g.gold)} or</span>
+                    <span className="font-mono text-primary text-xs">{g.member_count} membre{g.member_count > 1 ? "s" : ""} · {Math.round(g.gold)} or</span>
                   </li>
                 ))}
               </ul>
@@ -232,7 +222,7 @@ function SignUpScreen({ onSwitch, onNotice, notice }: { onSwitch: () => void; on
     setBusy(true);
     const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
     if (signUpError) { setError(signUpError.message); setBusy(false); return; }
-    if (!data.session) { onNotice("Compte créé. Confirme ton adresse email, puis connecte-toi."); setBusy(false); return; }
+    if (!data.session) { onNotice("Compte créé. Connecte-toi pour choisir ton pseudo."); setBusy(false); return; }
     const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
     if (rpcError) setError(rpcError.message);
     setBusy(false);
