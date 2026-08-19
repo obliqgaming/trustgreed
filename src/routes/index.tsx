@@ -13,28 +13,11 @@ import {
 
 export const Route = createFileRoute("/")({
   ssr: false,
-  head: () => ({
-    meta: [
-      { title: "Trust & Greed — Registre de guilde" },
-      {
-        name: "description",
-        content:
-          "Rejoins Trust & Greed : crée ton compte avec un code d'invitation, forge ton personnage et entre au registre de la guilde.",
-      },
-      { property: "og:title", content: "Trust & Greed — Registre de guilde" },
-      {
-        property: "og:description",
-        content:
-          "Crée ton compte avec un code d'invitation et inscris ton personnage au registre de la guilde.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
   component: Index,
 });
 
-type Character = { id: string; name: string; level: number; xp: number };
+type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
+type Guild = { id: string; name: string; gold: number; member_count: number };
 
 function Index() {
   const navigate = useNavigate();
@@ -69,7 +52,7 @@ function Index() {
 
     const { data: char } = await supabase
       .from("characters")
-      .select("id, name, level, xp")
+      .select("id, name, level, xp, guild_id")
       .eq("profile_id", session.user.id)
       .eq("is_alive", true)
       .maybeSingle();
@@ -77,45 +60,21 @@ function Index() {
     setReady(true);
   }, [session]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  if (!ready) {
-    return (
-      <LedgerPage>
-        <p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p>
-      </LedgerPage>
-    );
-  }
+  if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
 
-  if (!session) {
-    return (
-      <LedgerPage>
-        {mode === "signup" ? (
-          <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} />
-        ) : (
-          <SignInScreen onSwitch={() => setMode("signup")} />
-        )}
-      </LedgerPage>
-    );
-  }
+  if (!session) return (
+    <LedgerPage>
+      {mode === "signup"
+        ? <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} />
+        : <SignInScreen onSwitch={() => setMode("signup")} />}
+    </LedgerPage>
+  );
 
-  if (profileMissing) {
-    return (
-      <LedgerPage>
-        <RedeemScreen onDone={refresh} />
-      </LedgerPage>
-    );
-  }
-
-  if (!character) {
-    return (
-      <LedgerPage>
-        <CreateCharacterScreen onDone={refresh} />
-      </LedgerPage>
-    );
-  }
+  if (profileMissing) return <LedgerPage><CreateProfileScreen onDone={refresh} /></LedgerPage>;
+  if (!character) return <LedgerPage><CreateCharacterScreen onDone={refresh} /></LedgerPage>;
+  if (!character.guild_id) return <LedgerPage><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
 
   return (
     <LedgerPage>
@@ -132,7 +91,7 @@ function Index() {
         </dl>
         <button
           onClick={() => navigate({ to: "/inviter" })}
-          className="mt-6 w-full rounded-sm border border-primary/60 px-4 py-2.5 font-serif tracking-[0.16em] text-primary uppercase hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none"
+          className="mt-6 w-full rounded-sm border border-primary/60 px-4 py-2.5 font-serif tracking-[0.16em] text-primary uppercase hover:bg-primary/10"
         >
           Inviter quelqu'un
         </button>
@@ -142,19 +101,127 @@ function Index() {
   );
 }
 
-function SignUpScreen({
-  onSwitch,
-  onNotice,
-  notice,
-}: {
-  onSwitch: () => void;
-  onNotice: (v: string | null) => void;
-  notice: string | null;
-}) {
+function GuildScreen({ character, onDone }: { character: Character; onDone: () => Promise<void> }) {
+  const [guilds, setGuilds] = useState<Guild[]>([]);
+  const [tab, setTab] = useState<"create" | "join">("create");
+  const [guildName, setGuildName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviterName, setInviterName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("guilds")
+        .select("id, name, gold")
+        .order("gold", { ascending: false })
+        .limit(10);
+      if (data) {
+        const withCounts = await Promise.all(data.map(async (g) => {
+          const { count } = await supabase
+            .from("characters")
+            .select("id", { count: "exact", head: true })
+            .eq("guild_id", g.id)
+            .eq("is_alive", true);
+          return { ...g, member_count: count ?? 0 };
+        }));
+        setGuilds(withCounts);
+      }
+    })();
+  }, []);
+
+  async function createGuild(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    const { error: rpcError } = await supabase.rpc("create_guild", {
+      p_guild_name: guildName,
+      p_character_id: character.id,
+    });
+    if (rpcError) setError(rpcError.message);
+    else await onDone();
+    setBusy(false);
+  }
+
+  async function joinGuild(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    // Trouver le personnage parrain via son nom
+    const { data: inviter } = await supabase
+      .from("characters")
+      .select("id, guild_id")
+      .eq("name", inviterName)
+      .eq("is_alive", true)
+      .maybeSingle();
+    if (!inviter) {
+      setError("Personnage parrain introuvable ou mort.");
+      setBusy(false);
+      return;
+    }
+    const { error: rpcError } = await supabase.rpc("join_guild", {
+      p_guild_id: inviter.guild_id,
+      p_character_id: character.id,
+      p_invited_by_character_id: inviter.id,
+    });
+    if (rpcError) setError(rpcError.message);
+    else await onDone();
+    setBusy(false);
+  }
+
+  return (
+    <LedgerCard title={character.name} subtitle="Ton personnage n'appartient à aucune guilde.">
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setTab("create")}
+          className={`flex-1 py-2 text-xs tracking-[0.14em] uppercase border rounded-sm ${tab === "create" ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}
+        >
+          Fonder une guilde
+        </button>
+        <button
+          onClick={() => setTab("join")}
+          className={`flex-1 py-2 text-xs tracking-[0.14em] uppercase border rounded-sm ${tab === "join" ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}
+        >
+          Rejoindre une guilde
+        </button>
+      </div>
+
+      {tab === "create" ? (
+        <form onSubmit={createGuild} noValidate>
+          <Field label="Nom de la guilde" required value={guildName} onChange={(e) => setGuildName(e.target.value)} />
+          <LedgerError message={error} />
+          <SealButton type="submit" disabled={busy}>{busy ? "Fondation…" : "Fonder la guilde"}</SealButton>
+        </form>
+      ) : (
+        <form onSubmit={joinGuild} noValidate>
+          <Field label="Nom du personnage qui t'invite" required value={inviterName} onChange={(e) => setInviterName(e.target.value)} />
+          <LedgerError message={error} />
+          <SealButton type="submit" disabled={busy}>{busy ? "Entrée…" : "Rejoindre"}</SealButton>
+          {guilds.length > 0 && (
+            <div className="mt-6">
+              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-3">Guildes actives</p>
+              <ul className="space-y-2">
+                {guilds.map((g) => (
+                  <li key={g.id} className="flex justify-between border border-border/40 px-3 py-2 text-sm">
+                    <span className="text-foreground">{g.name}</span>
+                    <span className="font-mono text-primary text-xs">{g.member_count} membres · {Math.round(g.gold)} or</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </form>
+      )}
+      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
+    </LedgerCard>
+  );
+}
+
+function SignUpScreen({ onSwitch, onNotice, notice }: { onSwitch: () => void; onNotice: (v: string | null) => void; notice: string | null }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -163,66 +230,23 @@ function SignUpScreen({
     setError(null);
     onNotice(null);
     setBusy(true);
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    if (signUpError) {
-      setError(signUpError.message);
-      setBusy(false);
-      return;
-    }
-    if (!data.session) {
-      onNotice(
-        "Compte créé. Confirme ton adresse email, puis connecte-toi : le code d'invitation te sera redemandé.",
-      );
-      setBusy(false);
-      return;
-    }
-    const { error: rpcError } = await supabase.rpc("redeem_invitation", {
-      p_code: code,
-      p_username: username,
-    });
+    const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+    if (signUpError) { setError(signUpError.message); setBusy(false); return; }
+    if (!data.session) { onNotice("Compte créé. Confirme ton adresse email, puis connecte-toi."); setBusy(false); return; }
+    const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
     if (rpcError) setError(rpcError.message);
     setBusy(false);
   }
 
   return (
-    <LedgerCard title="Inscription" subtitle="L'entrée au registre exige un code d'invitation.">
+    <LedgerCard title="Inscription" subtitle="Crée ton compte pour rejoindre le registre.">
       <form onSubmit={submit} noValidate>
-        <Field
-          label="Email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Field
-          label="Mot de passe"
-          type="password"
-          required
-          minLength={6}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <Field
-          label="Pseudo"
-          required
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-        <Field
-          label="Code d'invitation"
-          required
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-        />
+        <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Field label="Mot de passe" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Field label="Pseudo" required value={username} onChange={(e) => setUsername(e.target.value)} />
         <LedgerError message={error} />
         {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
-        <SealButton type="submit" disabled={busy}>
-          {busy ? "Scellement…" : "Sceller l'inscription"}
-        </SealButton>
+        <SealButton type="submit" disabled={busy}>{busy ? "Scellement…" : "Sceller l'inscription"}</SealButton>
       </form>
       <TextLink onClick={onSwitch}>J'ai déjà un compte</TextLink>
     </LedgerCard>
@@ -247,62 +271,17 @@ function SignInScreen({ onSwitch }: { onSwitch: () => void }) {
   return (
     <LedgerCard title="Connexion">
       <form onSubmit={submit} noValidate>
-        <Field
-          label="Email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Field
-          label="Mot de passe"
-          type="password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Field label="Mot de passe" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>
-          {busy ? "Vérification…" : "Entrer"}
-        </SealButton>
+        <SealButton type="submit" disabled={busy}>{busy ? "Vérification…" : "Entrer"}</SealButton>
       </form>
       <TextLink onClick={onSwitch}>Créer un compte</TextLink>
     </LedgerCard>
   );
 }
 
-function RedeemScreen({ onDone }: { onDone: () => Promise<void> }) {
-  const [isEmpty, setIsEmpty] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      // Lecture directe : si aucune ligne n'est lisible, le registre est vierge.
-      const { data, error } = await supabase.from("profiles").select("id").limit(1);
-      if (cancelled) return;
-      setIsEmpty(!error && (data?.length ?? 0) === 0);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (isEmpty === null) {
-    return (
-      <LedgerCard title="Vérification du registre…">
-        <p className="text-sm text-muted-foreground">Lecture des archives en cours.</p>
-      </LedgerCard>
-    );
-  }
-
-  if (isEmpty) {
-    return <BootstrapFirstProfileScreen onDone={onDone} />;
-  }
-
-  return <RedeemInvitationScreen onDone={onDone} />;
-}
-
-function BootstrapFirstProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
+function CreateProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -311,74 +290,18 @@ function BootstrapFirstProfileScreen({ onDone }: { onDone: () => Promise<void> }
     e.preventDefault();
     setError(null);
     setBusy(true);
-    const { error: rpcError } = await supabase.rpc("bootstrap_first_profile", {
-      p_username: username,
-    });
+    const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
     if (rpcError) setError(rpcError.message);
     else await onDone();
     setBusy(false);
   }
 
   return (
-    <LedgerCard
-      title="Premier au registre"
-      subtitle="Tu es la première personne à rejoindre le monde. Choisis ton pseudo pour fonder le registre."
-    >
+    <LedgerCard title="Choisis ton pseudo" subtitle="Ton compte n'est pas encore inscrit au registre.">
       <form onSubmit={submit} noValidate>
-        <Field
-          label="Pseudo"
-          required
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
+        <Field label="Pseudo" required value={username} onChange={(e) => setUsername(e.target.value)} />
         <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>
-          {busy ? "Scellement…" : "Fonder le registre"}
-        </SealButton>
-      </form>
-      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
-    </LedgerCard>
-  );
-}
-
-function RedeemInvitationScreen({ onDone }: { onDone: () => Promise<void> }) {
-  const [username, setUsername] = useState("");
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    const { error: rpcError } = await supabase.rpc("redeem_invitation", {
-      p_code: code,
-      p_username: username,
-    });
-    if (rpcError) setError(rpcError.message);
-    else await onDone();
-    setBusy(false);
-  }
-
-  return (
-    <LedgerCard title="Code d'invitation" subtitle="Ton compte n'est pas encore inscrit au registre.">
-      <form onSubmit={submit} noValidate>
-        <Field
-          label="Pseudo"
-          required
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-        <Field
-          label="Code d'invitation"
-          required
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-        />
-        <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>
-          {busy ? "Scellement…" : "Valider le code"}
-        </SealButton>
+        <SealButton type="submit" disabled={busy}>{busy ? "Scellement…" : "Rejoindre le registre"}</SealButton>
       </form>
       <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
     </LedgerCard>
@@ -403,16 +326,9 @@ function CreateCharacterScreen({ onDone }: { onDone: () => Promise<void> }) {
   return (
     <LedgerCard title="Créer un personnage" subtitle="Un seul nom, inscrit à l'encre.">
       <form onSubmit={submit} noValidate>
-        <Field
-          label="Nom du personnage"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <Field label="Nom du personnage" required value={name} onChange={(e) => setName(e.target.value)} />
         <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>
-          {busy ? "Inscription…" : "Inscrire au registre"}
-        </SealButton>
+        <SealButton type="submit" disabled={busy}>{busy ? "Inscription…" : "Inscrire au registre"}</SealButton>
       </form>
       <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
     </LedgerCard>
