@@ -28,22 +28,15 @@ function ExpeditionPage() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
 
-  const loadCharacter = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { navigate({ to: "/" }); return; }
-    const { data: char } = await supabase
-      .from("characters")
-      .select("id, name, level, guild_id")
-      .eq("profile_id", session.user.id)
-      .eq("is_alive", true)
-      .maybeSingle();
-    if (!char?.guild_id) { navigate({ to: "/" }); return; }
-    setCharacter(char);
-    setReady(true);
-  }, [navigate]);
+  const loadParticipants = useCallback(async (expeditionId: string) => {
+    const { data } = await supabase
+      .from("expedition_participants")
+      .select("character_id, character:characters(name, level)")
+      .eq("expedition_id", expeditionId);
+    setParticipants((data as any) ?? []);
+  }, []);
 
   const loadExpedition = useCallback(async (guildId: string) => {
-    // Cherche une expédition en salle d'attente pour cette guilde
     const { data } = await supabase
       .from("expeditions")
       .select("id, status, target_size, created_by_character_id")
@@ -51,32 +44,56 @@ function ExpeditionPage() {
       .eq("status", "waiting")
       .maybeSingle();
     setExpedition(data ?? null);
-    if (data) loadParticipants(data.id);
-  }, []);
+    if (data) await loadParticipants(data.id);
+    return data;
+  }, [loadParticipants]);
 
-  const loadParticipants = async (expeditionId: string) => {
-    const { data } = await supabase
-      .from("expedition_participants")
-      .select("character_id, character:characters(name, level)")
-      .eq("expedition_id", expeditionId);
-    setParticipants((data as any) ?? []);
-  };
-
-  useEffect(() => { void loadCharacter(); }, [loadCharacter]);
+  const loadCharacter = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { navigate({ to: "/" }); return null; }
+    const { data: char } = await supabase
+      .from("characters")
+      .select("id, name, level, guild_id")
+      .eq("profile_id", session.user.id)
+      .eq("is_alive", true)
+      .maybeSingle();
+    if (!char?.guild_id) { navigate({ to: "/" }); return null; }
+    setCharacter(char);
+    return char;
+  }, [navigate]);
 
   useEffect(() => {
-    if (!character?.guild_id) return;
-    void loadExpedition(character.guild_id);
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    // Realtime : mise à jour automatique quand quelqu'un s'inscrit
-    const channel = supabase
-      .channel("expedition_participants")
-      .on("postgres_changes", { event: "*", schema: "public", table: "expedition_participants" }, () => {
-        if (expedition?.id) loadParticipants(expedition.id);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [character, expedition?.id, loadExpedition]);
+    void (async () => {
+      const char = await loadCharacter();
+      if (!char?.guild_id) return;
+      const exp = await loadExpedition(char.guild_id);
+      setReady(true);
+
+      if (!exp) return;
+
+      // Realtime : écoute les changements sur expedition_participants
+      // pour cette expédition précise. Zéro polling.
+      channel = supabase
+        .channel(`ep_participants_${exp.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "expedition_participants",
+            filter: `expedition_id=eq.${exp.id}`,
+          },
+          () => { void loadParticipants(exp.id); }
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [loadCharacter, loadExpedition, loadParticipants]);
 
   async function createExpedition() {
     if (!character?.guild_id) return;
@@ -87,9 +104,21 @@ function ExpeditionPage() {
       p_target_size: targetSize,
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
-    // S'inscrire automatiquement comme premier participant
-    await supabase.from("expedition_participants").insert({ expedition_id: data.id, character_id: character.id });
+
+    const expId = (data as any).id;
+    await supabase.from("expedition_participants").insert({
+      expedition_id: expId,
+      character_id: character.id,
+    });
     await loadExpedition(character.guild_id);
+
+    // Abonne le Realtime maintenant qu'on a l'ID
+    supabase
+      .channel(`ep_participants_${expId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "expedition_participants", filter: `expedition_id=eq.${expId}` },
+        () => { void loadParticipants(expId); })
+      .subscribe();
+
     setBusy(false);
   }
 
@@ -111,9 +140,8 @@ function ExpeditionPage() {
       p_expedition_id: expedition.id,
       p_character_id: character.id,
     });
-    if (rpcError) setError(rpcError.message);
-    else navigate({ to: `/vote?expedition=${expedition.id}` });
-    setBusy(false);
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    navigate({ to: "/vote", search: { expedition: expedition.id } });
   }
 
   const isLeader = expedition?.created_by_character_id === character?.id;
@@ -127,11 +155,11 @@ function ExpeditionPage() {
       {!expedition ? (
         <LedgerCard title="Nouvelle expédition" subtitle="Définis la taille du groupe cible.">
           <div className="mb-4">
-            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible du groupe</p>
-            <div className="flex gap-2">
-              {[3, 4, 5, 6, 8, 10].map((n) => (
+            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>
+            <div className="flex gap-2 flex-wrap">
+              {[3, 4, 5, 10, 20].map((n) => (
                 <button key={n} onClick={() => setTargetSize(n)}
-                  className={`flex-1 py-2 text-sm font-mono border rounded-sm ${targetSize === n ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
+                  className={`px-4 py-2 text-sm font-mono border rounded-sm ${targetSize === n ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
                   {n}
                 </button>
               ))}
@@ -145,7 +173,7 @@ function ExpeditionPage() {
       ) : (
         <LedgerCard
           title="Salle d'attente"
-          subtitle={`${participants.length} / ${expedition.target_size} participants · minimum 3 pour lancer`}
+          subtitle={`${participants.length} / ${expedition.target_size} · minimum 3 pour lancer`}
         >
           <ul className="space-y-1 mb-4">
             {participants.map((p) => (
@@ -155,7 +183,7 @@ function ExpeditionPage() {
               </li>
             ))}
             {Array.from({ length: Math.max(0, expedition.target_size - participants.length) }).map((_, i) => (
-              <li key={`empty-${i}`} className="flex px-3 py-2 text-sm border border-border/20 text-muted-foreground/40 italic">
+              <li key={`empty-${i}`} className="px-3 py-2 text-sm border border-border/20 text-muted-foreground/40 italic">
                 En attente…
               </li>
             ))}
@@ -166,17 +194,12 @@ function ExpeditionPage() {
           {!isParticipant && (
             <SealButton onClick={joinExpedition} disabled={busy}>{busy ? "Inscription…" : "Rejoindre l'expédition"}</SealButton>
           )}
-
           {isLeader && (
-            <button
-              onClick={startExpedition}
-              disabled={!canStart || busy}
-              className="mt-3 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-primary/60 text-primary hover:bg-primary/10"
-            >
+            <button onClick={startExpedition} disabled={!canStart || busy}
+              className="mt-3 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-primary/60 text-primary hover:bg-primary/10">
               {canStart ? "Lancer l'expédition" : `Attente de membres (${participants.length}/3 min.)`}
             </button>
           )}
-
           {!isLeader && isParticipant && (
             <p className="text-center text-xs text-muted-foreground mt-3">En attente du chef de groupe…</p>
           )}
