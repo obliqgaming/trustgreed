@@ -89,10 +89,10 @@ function Index() {
         </div>
 
         <button
-          disabled={members.length < 3}
-          className="mt-2 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-primary/60 text-primary hover:bg-primary/10"
+          onClick={() => navigate({ to: "/expedition" })}
+          className="mt-2 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors border-primary/60 text-primary hover:bg-primary/10"
         >
-          {members.length < 3 ? `Expédition — il faut ${3 - members.length} membre${3 - members.length > 1 ? "s" : ""} de plus` : "Lancer une expédition"}
+          Partir en expédition
         </button>
 
         <div className="mt-3 border-t border-border/20 pt-3">
