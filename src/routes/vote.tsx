@@ -1,12 +1,7 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  LedgerCard,
-  LedgerError,
-  LedgerPage,
-  TextLink,
-} from "@/components/ledger";
+import { LedgerCard, LedgerError, LedgerPage, TextLink } from "@/components/ledger";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -18,34 +13,17 @@ export const Route = createFileRoute("/vote")({
 
 type Character = { id: string; name: string };
 type Step = {
-  id: string;
-  step_number: number;
-  event_type: string;
-  risk_level: string;
-  loot_min: number;
-  loot_max: number;
-  vote_deadline: string;
-  resolved: boolean;
-  deaths_count: number;
+  id: string; step_number: number; event_type: string; risk_level: string;
+  loot_min: number; loot_max: number; vote_deadline: string; resolved: boolean; deaths_count: number;
 };
 type Participant = { character_id: string; character: { name: string } };
 
-const RISK_LABELS: Record<string, string> = {
-  faible: "Faible",
-  moyen: "Moyen",
-  eleve: "Élevé",
-};
-
-const RISK_COLORS: Record<string, string> = {
-  faible: "text-emerald-400",
-  moyen: "text-amber-400",
-  eleve: "text-red-400",
-};
+const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
+const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
 function VotePage() {
   const navigate = useNavigate();
   const { expedition: expeditionId } = useSearch({ from: "/vote" });
-
   const [character, setCharacter] = useState<Character | null>(null);
   const [step, setStep] = useState<Step | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -55,8 +33,15 @@ function VotePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const [resolving, setResolving] = useState(false);
-  const [result, setResult] = useState<{ deaths: number; loot: number; returned: boolean } | null>(null);
+  const [result, setResult] = useState<{ deaths: number; loot: number; ended: boolean; survivorCount: number } | null>(null);
+
+  const loadVotedIds = useCallback(async (stepId: string) => {
+    const { data } = await supabase
+      .from("step_votes")
+      .select("character_id")
+      .eq("step_id", stepId);
+    setVotedIds((data ?? []).map((v: any) => v.character_id));
+  }, []);
 
   const loadStep = useCallback(async () => {
     const { data } = await supabase
@@ -66,23 +51,13 @@ function VotePage() {
       .order("step_number", { ascending: false })
       .limit(1)
       .maybeSingle();
-    setStep(data ?? null);
+    if (data) {
+      setStep(data);
+      setMyVote(null); // reset vote pour la nouvelle étape
+      await loadVotedIds(data.id);
+    }
     return data;
-  }, [expeditionId]);
-
-  const loadVotedIds = useCallback(async (stepId: string) => {
-    // On sait juste combien de gens ont voté (pas qui ni quoi) — secret préservé
-    const { count } = await supabase
-      .from("step_votes")
-      .select("id", { count: "exact", head: true })
-      .eq("step_id", stepId);
-    // On ne récupère que les character_ids ayant voté, pas le contenu
-    const { data } = await supabase
-      .from("step_votes")
-      .select("character_id")
-      .eq("step_id", stepId);
-    setVotedIds((data ?? []).map((v: any) => v.character_id));
-  }, []);
+  }, [expeditionId, loadVotedIds]);
 
   useEffect(() => {
     void (async () => {
@@ -104,21 +79,24 @@ function VotePage() {
         .eq("expedition_id", expeditionId);
       setParticipants((parts as any) ?? []);
 
-      const currentStep = await loadStep();
-      if (currentStep) await loadVotedIds(currentStep.id);
+      // Vérifier si ce personnage est toujours vivant dans l'expédition
+      const isParticipant = (parts ?? []).some((p: any) => p.character_id === char.id);
+      if (!isParticipant) { navigate({ to: "/" }); return; }
 
+      await loadStep();
       setReady(true);
 
-      // Realtime : mise à jour des votes en direct (sans révéler le contenu)
+      // Realtime : votes + nouvelles étapes
       const channel = supabase
-        .channel(`votes_${expeditionId}`)
-        .on("postgres_changes", { event: "*", schema: "public", table: "step_votes" }, async () => {
-          const s = await loadStep();
-          if (s) await loadVotedIds(s.id);
-        })
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "expedition_steps" }, async () => {
-          await loadStep();
-        })
+        .channel(`vote_room_${expeditionId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "step_votes" },
+          async () => { if (step?.id) await loadVotedIds(step.id); })
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "expedition_steps",
+          filter: `expedition_id=eq.${expeditionId}` },
+          async () => { await loadStep(); })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "expedition_steps",
+          filter: `expedition_id=eq.${expeditionId}` },
+          async () => { await loadStep(); })
         .subscribe();
 
       return () => { supabase.removeChannel(channel); };
@@ -127,15 +105,18 @@ function VotePage() {
 
   // Minuteur
   useEffect(() => {
-    if (!step?.vote_deadline || step.resolved) return;
-    const tick = () => {
-      const left = Math.max(0, Math.floor((new Date(step.vote_deadline).getTime() - Date.now()) / 1000));
-      setTimeLeft(left);
-    };
+    if (!step?.vote_deadline || step.resolved) { setTimeLeft(null); return; }
+    const tick = () => setTimeLeft(Math.max(0, Math.floor((new Date(step.vote_deadline).getTime() - Date.now()) / 1000)));
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [step]);
+  }, [step?.id, step?.vote_deadline, step?.resolved]);
+
+  // Vérifier si j'ai déjà voté à cette étape
+  useEffect(() => {
+    if (!step?.id || !character?.id) return;
+    if (votedIds.includes(character.id)) setMyVote("voté");
+  }, [votedIds, step?.id, character?.id]);
 
   async function castVote(vote: "continuer" | "rentrer") {
     if (!step || !character || myVote) return;
@@ -146,60 +127,88 @@ function VotePage() {
       p_vote: vote,
     });
     if (rpcError) setError(rpcError.message);
-    else setMyVote(vote);
+    else { setMyVote(vote); await loadVotedIds(step.id); }
     setBusy(false);
   }
 
   async function resolveStep() {
     if (!step) return;
-    setResolving(true);
-    const { data, error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
-    if (rpcError) { setError(rpcError.message); setResolving(false); return; }
-    const resolved = data as Step;
+    setBusy(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
 
-    // Vérifie si l'expédition est terminée
+    // Recharger l'étape résolue pour avoir deaths_count
+    const { data: resolvedStep } = await supabase
+      .from("expedition_steps")
+      .select("deaths_count")
+      .eq("id", step.id)
+      .maybeSingle();
+
     const { data: exp } = await supabase
       .from("expeditions")
       .select("status, total_loot_kept")
       .eq("id", expeditionId)
       .maybeSingle();
 
-    const returned = (resolved.deaths_count === 0 && votedIds.length === 0) || exp?.status === "completed";
+    const { count: survivorCount } = await supabase
+      .from("expedition_participants")
+      .select("character_id", { count: "exact", head: true })
+      .eq("expedition_id", expeditionId);
+
     setResult({
-      deaths: resolved.deaths_count,
+      deaths: resolvedStep?.deaths_count ?? 0,
       loot: Math.round(exp?.total_loot_kept ?? 0),
-      returned: exp?.status === "completed",
+      ended: exp?.status === "completed",
+      survivorCount: survivorCount ?? 0,
     });
-    await loadStep();
-    setResolving(false);
+    setBusy(false);
   }
 
+  const aliveParticipants = participants.filter(p => !votedIds.includes(p.character_id) || votedIds.includes(p.character_id));
   const allVoted = participants.length > 0 && votedIds.length >= participants.length;
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
-  const canResolve = (allVoted || deadlineExpired) && !step?.resolved && !resolving;
-
+  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
+  // Écran de résultat d'une étape
   if (result) {
     return (
       <LedgerPage>
         <LedgerCard
-          title={result.returned ? "Expédition terminée" : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie"}
-          subtitle={result.returned ? `Butin rapporté à la guilde : ${result.loot} or` : "L'expédition continue…"}
+          title={result.ended
+            ? "Expédition terminée"
+            : result.deaths > 0
+              ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}`
+              : "Étape franchie — on continue"}
+          subtitle={result.ended
+            ? `Butin rapporté à la guilde : ${result.loot} or`
+            : result.deaths > 0
+              ? "L'expédition continue avec les survivants."
+              : "Une nouvelle épreuve vous attend."}
         >
-          {result.deaths > 0 && (
+          {result.deaths > 0 && !result.ended && (
             <p className="text-sm text-muted-foreground mb-4">
               {result.deaths} membre{result.deaths > 1 ? "s ont" : " a"} péri. La guilde en porte les conséquences.
             </p>
           )}
-          {result.returned ? (
-            <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>
+          {result.ended ? (
+            <>
+              {result.survivorCount === 0 && (
+                <p className="text-sm text-red-400 mb-4">Expédition anéantie. Aucun survivant. Butin perdu.</p>
+              )}
+              <button
+                onClick={() => navigate({ to: "/" })}
+                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10"
+              >
+                Retour à la guilde
+              </button>
+            </>
           ) : (
             <button
-              onClick={async () => { setResult(null); await loadStep(); }}
-              className="mt-2 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10"
+              onClick={() => { setResult(null); void loadStep(); }}
+              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10"
             >
               Voir l'étape suivante
             </button>
@@ -213,7 +222,7 @@ function VotePage() {
     <LedgerPage>
       <LedgerCard
         title={step ? `Étape ${step.step_number} — ${step.event_type}` : "Expédition"}
-        subtitle={step ? `Risque : ${RISK_LABELS[step.risk_level] ?? step.risk_level} · Butin potentiel : ${step.loot_min}–${step.loot_max} or` : ""}
+        subtitle={step ? `Risque : ${RISK_LABEL[step.risk_level] ?? step.risk_level} · Butin potentiel : ${step.loot_min}–${step.loot_max} or` : ""}
       >
         {step && !step.resolved && (
           <>
@@ -225,28 +234,19 @@ function VotePage() {
               </span>
             </div>
 
-            {/* Risque */}
-            <div className="mb-4">
-              <span className={`text-sm font-semibold ${RISK_COLORS[step.risk_level]}`}>
-                ⚠ Risque {RISK_LABELS[step.risk_level]}
-              </span>
-            </div>
+            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
+              ⚠ Risque {RISK_LABEL[step.risk_level]}
+            </p>
 
-            {/* Vote */}
+            {/* Boutons de vote */}
             {!myVote ? (
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <button
-                  onClick={() => castVote("continuer")}
-                  disabled={busy}
-                  className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30"
-                >
+                <button onClick={() => castVote("continuer")} disabled={busy}
+                  className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
                   Continuer
                 </button>
-                <button
-                  onClick={() => castVote("rentrer")}
-                  disabled={busy}
-                  className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30"
-                >
+                <button onClick={() => castVote("rentrer")} disabled={busy}
+                  className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30">
                   Rentrer
                 </button>
               </div>
@@ -256,34 +256,42 @@ function VotePage() {
               </div>
             )}
 
-            {/* Compteur de votes (sans révéler qui a voté quoi) */}
+            {/* Compteur de votes — barres anonymes */}
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
                 Votes reçus : {votedIds.length} / {participants.length}
               </p>
               <div className="flex gap-1">
                 {participants.map((p) => (
-                  <div
-                    key={p.character_id}
-                    title={(p.character as any)?.name ?? ""}
-                    className={`h-2 flex-1 rounded-sm ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/30"}`}
-                  />
+                  <div key={p.character_id}
+                    className={`h-2 flex-1 rounded-sm transition-colors ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/30"}`} />
                 ))}
               </div>
             </div>
 
             <LedgerError message={error} />
 
-            {/* Résolution — visible par tous, déclenche le résultat */}
+            {/* Résolution disponible pour tous — n'importe qui peut déclencher */}
             {canResolve && (
-              <button
-                onClick={resolveStep}
-                disabled={resolving}
-                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30"
-              >
-                {resolving ? "Résolution…" : "Révéler le résultat"}
+              <button onClick={resolveStep} disabled={busy}
+                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
+                {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
+
+            {/* Liste des participants (sans révéler qui a voté quoi) */}
+            <div className="mt-4 border-t border-border/20 pt-4">
+              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
+              <ul className="space-y-1">
+                {participants.map((p) => (
+                  <li key={p.character_id}
+                    className={`flex justify-between px-3 py-1.5 text-xs border ${p.character_id === character?.id ? "border-primary/40 text-primary" : "border-border/20 text-muted-foreground"}`}>
+                    <span>{(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}</span>
+                    <span>{votedIds.includes(p.character_id) ? "✓" : "…"}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </>
         )}
       </LedgerCard>
