@@ -2,14 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Field,
-  LedgerCard,
-  LedgerError,
-  LedgerPage,
-  SealButton,
-  TextLink,
-} from "@/components/ledger";
+import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -19,6 +12,8 @@ export const Route = createFileRoute("/")({
 type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
 type Guild = { id: string; name: string; gold: number };
 type Member = { id: string; name: string; level: number };
+type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
+type ActiveExpedition = { id: string; status: string; participant_count: number } | null;
 
 function Index() {
   const navigate = useNavigate();
@@ -29,6 +24,8 @@ function Index() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [guild, setGuild] = useState<Guild | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [history, setHistory] = useState<HistoryEvent[]>([]);
+  const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,24 +35,50 @@ function Index() {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!session?.user) { setCharacter(null); setProfileMissing(false); setGuild(null); setMembers([]); return; }
+    if (!session?.user) { setCharacter(null); setProfileMissing(false); setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null); return; }
+
     const { data: profile } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
     setProfileMissing(!profile);
+
     const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id").eq("profile_id", session.user.id).eq("is_alive", true).maybeSingle();
     setCharacter(char ?? null);
+
     if (char?.guild_id) {
       const { data: g } = await supabase.from("guilds").select("id, name, gold").eq("id", char.guild_id).maybeSingle();
       setGuild(g ?? null);
+
       const { data: m } = await supabase.from("characters").select("id, name, level").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
       setMembers(m ?? []);
+
+      const { data: h } = await supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10);
+      setHistory(h ?? []);
+
+      // Expédition en cours (waiting ou active)
+      const { data: exp } = await supabase.from("expeditions").select("id, status").eq("guild_id", char.guild_id).in("status", ["waiting", "active"]).maybeSingle();
+      if (exp) {
+        const { count } = await supabase.from("expedition_participants").select("character_id", { count: "exact", head: true }).eq("expedition_id", exp.id);
+        setActiveExpedition({ id: exp.id, status: exp.status, participant_count: count ?? 0 });
+      } else {
+        setActiveExpedition(null);
+      }
     } else {
-      setGuild(null);
-      setMembers([]);
+      setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null);
     }
     setReady(true);
   }, [session]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  // Realtime : mise à jour auto si une expédition démarre ou si l'or change
+  useEffect(() => {
+    if (!guild?.id) return;
+    const channel = supabase.channel(`guild_${guild.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "expeditions", filter: `guild_id=eq.${guild.id}` }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "guild_history_events", filter: `guild_id=eq.${guild.id}` }, () => void refresh())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "guilds", filter: `id=eq.${guild.id}` }, () => void refresh())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [guild?.id, refresh]);
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
   if (!session) return <LedgerPage>{mode === "signup" ? <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} /> : <SignInScreen onSwitch={() => setMode("signup")} />}</LedgerPage>;
@@ -63,11 +86,36 @@ function Index() {
   if (!character) return <LedgerPage><CreateCharacterScreen onDone={refresh} /></LedgerPage>;
   if (!character.guild_id) return <LedgerPage><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
 
+  const isInExpedition = activeExpedition && members.some(m => m.id === character.id);
+
   return (
     <LedgerPage>
-      <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor de la guilde : ${Math.round(guild?.gold ?? 0)} or`}>
+      <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""}`}>
+
+        {/* Bandeau expédition en cours */}
+        {activeExpedition && (
+          <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
+            <p className="text-xs tracking-[0.14em] uppercase text-primary mb-1">
+              {activeExpedition.status === "waiting" ? "Salle d'attente ouverte" : "Expédition en cours"}
+            </p>
+            <p className="text-sm text-muted-foreground mb-2">
+              {activeExpedition.participant_count} participant{activeExpedition.participant_count > 1 ? "s" : ""}
+              {activeExpedition.status === "waiting" ? " — en attente du lancement" : " — en route"}
+            </p>
+            <button
+              onClick={() => activeExpedition.status === "active"
+                ? navigate({ to: "/vote", search: { expedition: activeExpedition.id } })
+                : navigate({ to: "/expedition" })}
+              className="w-full text-xs tracking-[0.12em] uppercase border border-primary/40 text-primary py-1.5 hover:bg-primary/10"
+            >
+              {activeExpedition.status === "active" ? "Rejoindre l'expédition" : "Voir la salle d'attente"}
+            </button>
+          </div>
+        )}
+
+        {/* Membres */}
         <div className="mb-4">
-          <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Membres ({members.length})</p>
+          <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Membres</p>
           <ul className="space-y-1">
             {members.map((m) => (
               <li key={m.id} className={`flex justify-between px-3 py-2 text-sm border ${m.id === character.id ? "border-primary/60 text-primary" : "border-border/30 text-foreground"}`}>
@@ -78,6 +126,7 @@ function Index() {
           </ul>
         </div>
 
+        {/* Stats perso */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="border border-border/60 p-3">
             <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Niveau</dt>
@@ -89,18 +138,34 @@ function Index() {
           </div>
         </div>
 
-        <button
-          onClick={() => navigate({ to: "/expedition" })}
-          className="mt-2 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors border-primary/60 text-primary hover:bg-primary/10"
-        >
-          Partir en expédition
-        </button>
+        {/* Bouton expédition */}
+        {!activeExpedition && (
+          <button onClick={() => navigate({ to: "/expedition" })}
+            className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 mb-3">
+            Partir en expédition
+          </button>
+        )}
+
+        {/* Historique */}
+        {history.length > 0 && (
+          <div className="mt-4 border-t border-border/20 pt-4">
+            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Historique</p>
+            <ul className="space-y-1">
+              {history.map((e) => (
+                <li key={e.id} className="px-3 py-2 border border-border/20 text-xs text-muted-foreground">
+                  <span className={`inline-block mr-2 ${e.event_type === "member_died" ? "text-red-400" : e.event_type === "expedition_completed" ? "text-primary" : "text-muted-foreground"}`}>
+                    {e.event_type === "member_died" ? "✝" : e.event_type === "expedition_completed" ? "⚔" : "·"}
+                  </span>
+                  {e.description}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mt-3 border-t border-border/20 pt-3">
-          <button
-            onClick={() => window.location.href = "/inviter"}
-            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1"
-          >
+          <button onClick={() => navigate({ to: "/inviter" })}
+            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Inviter quelqu'un dans la guilde
           </button>
         </div>
@@ -149,7 +214,8 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
     <LedgerCard title={character.name} subtitle="Ton personnage n'appartient à aucune guilde.">
       <div className="flex gap-2 mb-6">
         {(["create", "join"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 text-xs tracking-[0.14em] uppercase border rounded-sm ${tab === t ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
+          <button key={t} onClick={() => setTab(t)}
+            className={`flex-1 py-2 text-xs tracking-[0.14em] uppercase border rounded-sm ${tab === t ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
             {t === "create" ? "Fonder" : "Rejoindre"}
           </button>
         ))}
