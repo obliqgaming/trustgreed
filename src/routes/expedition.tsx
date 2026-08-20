@@ -41,59 +41,69 @@ function ExpeditionPage() {
       .from("expeditions")
       .select("id, status, target_size, created_by_character_id")
       .eq("guild_id", guildId)
-      .eq("status", "waiting")
+      .in("status", ["waiting", "active"])
       .maybeSingle();
     setExpedition(data ?? null);
-    if (data) await loadParticipants(data.id);
+    if (data?.id) await loadParticipants(data.id);
     return data;
   }, [loadParticipants]);
 
-  const loadCharacter = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { navigate({ to: "/" }); return null; }
-    const { data: char } = await supabase
-      .from("characters")
-      .select("id, name, level, guild_id")
-      .eq("profile_id", session.user.id)
-      .eq("is_alive", true)
-      .maybeSingle();
-    if (!char?.guild_id) { navigate({ to: "/" }); return null; }
-    setCharacter(char);
-    return char;
-  }, [navigate]);
-
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let expChannel: ReturnType<typeof supabase.channel> | null = null;
+    let partChannel: ReturnType<typeof supabase.channel> | null = null;
 
     void (async () => {
-      const char = await loadCharacter();
-      if (!char?.guild_id) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { navigate({ to: "/" }); return; }
+
+      const { data: char } = await supabase
+        .from("characters")
+        .select("id, name, level, guild_id")
+        .eq("profile_id", session.user.id)
+        .eq("is_alive", true)
+        .maybeSingle();
+      if (!char?.guild_id) { navigate({ to: "/" }); return; }
+      setCharacter(char);
+
       const exp = await loadExpedition(char.guild_id);
       setReady(true);
 
+      // Si l'expédition est déjà active, rediriger immédiatement
+      if (exp?.status === "active") {
+        navigate({ to: "/vote", search: { expedition: exp.id } });
+        return;
+      }
+
       if (!exp) return;
 
-      // Realtime : écoute les changements sur expedition_participants
-      // pour cette expédition précise. Zéro polling.
-      channel = supabase
-        .channel(`ep_participants_${exp.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "expedition_participants",
-            filter: `expedition_id=eq.${exp.id}`,
-          },
-          () => { void loadParticipants(exp.id); }
-        )
+      // Realtime participants
+      partChannel = supabase
+        .channel(`ep_part_${exp.id}`)
+        .on("postgres_changes", {
+          event: "*", schema: "public", table: "expedition_participants",
+          filter: `expedition_id=eq.${exp.id}`,
+        }, () => { void loadParticipants(exp.id); })
+        .subscribe();
+
+      // Realtime expédition : dès que le statut passe à "active", tout le monde est redirigé
+      expChannel = supabase
+        .channel(`ep_status_${exp.id}`)
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public", table: "expeditions",
+          filter: `id=eq.${exp.id}`,
+        }, (payload) => {
+          if ((payload.new as any)?.status === "active") {
+            navigate({ to: "/vote", search: { expedition: exp.id } });
+          }
+        })
         .subscribe();
     })();
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      if (partChannel) supabase.removeChannel(partChannel);
+      if (expChannel) supabase.removeChannel(expChannel);
     };
-  }, [loadCharacter, loadExpedition, loadParticipants]);
+  }, [navigate, loadExpedition, loadParticipants]);
 
   async function createExpedition() {
     if (!character?.guild_id) return;
@@ -104,21 +114,9 @@ function ExpeditionPage() {
       p_target_size: targetSize,
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
-
     const expId = (data as any).id;
-    await supabase.from("expedition_participants").insert({
-      expedition_id: expId,
-      character_id: character.id,
-    });
+    await supabase.from("expedition_participants").insert({ expedition_id: expId, character_id: character.id });
     await loadExpedition(character.guild_id);
-
-    // Abonne le Realtime maintenant qu'on a l'ID
-    supabase
-      .channel(`ep_participants_${expId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "expedition_participants", filter: `expedition_id=eq.${expId}` },
-        () => { void loadParticipants(expId); })
-      .subscribe();
-
     setBusy(false);
   }
 
@@ -141,6 +139,8 @@ function ExpeditionPage() {
       p_character_id: character.id,
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    // Le Realtime redirigera automatiquement tout le monde via le channel expédition
+    // Le chef est redirigé ici directement
     navigate({ to: "/vote", search: { expedition: expedition.id } });
   }
 
@@ -183,9 +183,7 @@ function ExpeditionPage() {
               </li>
             ))}
             {Array.from({ length: Math.max(0, expedition.target_size - participants.length) }).map((_, i) => (
-              <li key={`empty-${i}`} className="px-3 py-2 text-sm border border-border/20 text-muted-foreground/40 italic">
-                En attente…
-              </li>
+              <li key={`empty-${i}`} className="px-3 py-2 text-sm border border-border/20 text-muted-foreground/40 italic">En attente…</li>
             ))}
           </ul>
 
@@ -197,7 +195,7 @@ function ExpeditionPage() {
           {isLeader && (
             <button onClick={startExpedition} disabled={!canStart || busy}
               className="mt-3 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-primary/60 text-primary hover:bg-primary/10">
-              {canStart ? "Lancer l'expédition" : `Attente de membres (${participants.length}/3 min.)`}
+              {canStart ? "Lancer l'expédition" : `En attente (${participants.length}/3 min.)`}
             </button>
           )}
           {!isLeader && isParticipant && (
