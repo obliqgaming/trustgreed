@@ -163,7 +163,11 @@ function Index() {
           </div>
         )}
 
-        <div className="mt-3 border-t border-border/20 pt-3">
+        <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
+          <button onClick={() => navigate({ to: "/carte" })}
+            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+            Carte des guildes
+          </button>
           <button onClick={() => navigate({ to: "/inviter" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Inviter quelqu'un dans la guilde
