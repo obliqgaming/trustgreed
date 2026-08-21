@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerCard, LedgerError, LedgerPage, TextLink } from "@/components/ledger";
 
@@ -26,6 +26,7 @@ function VotePage() {
   const { expedition: expeditionId } = useSearch({ from: "/vote" });
   const [character, setCharacter] = useState<Character | null>(null);
   const [step, setStep] = useState<Step | null>(null);
+  const stepRef = useRef<Step | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
@@ -34,6 +35,7 @@ function VotePage() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [result, setResult] = useState<{ deaths: number; loot: number; ended: boolean; survivorCount: number } | null>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const loadVotedIds = useCallback(async (stepId: string) => {
     const { data } = await supabase
@@ -41,7 +43,20 @@ function VotePage() {
       .select("character_id")
       .eq("step_id", stepId);
     setVotedIds((data ?? []).map((v: any) => v.character_id));
+    return (data ?? []).map((v: any) => v.character_id);
   }, []);
+
+  const subscribeToStep = useCallback((stepId: string) => {
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    const channel = supabase
+      .channel(`votes_step_${stepId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "step_votes",
+        filter: `step_id=eq.${stepId}`,
+      }, () => { void loadVotedIds(stepId); })
+      .subscribe();
+    channelRef.current = channel;
+  }, [loadVotedIds]);
 
   const loadStep = useCallback(async () => {
     const { data } = await supabase
@@ -52,12 +67,18 @@ function VotePage() {
       .limit(1)
       .maybeSingle();
     if (data) {
+      const isNewStep = stepRef.current?.id !== data.id;
+      stepRef.current = data;
       setStep(data);
-      setMyVote(null); // reset vote pour la nouvelle étape
-      await loadVotedIds(data.id);
+      if (isNewStep) {
+        setMyVote(null);
+        setVotedIds([]);
+        subscribeToStep(data.id);
+        await loadVotedIds(data.id);
+      }
     }
     return data;
-  }, [expeditionId, loadVotedIds]);
+  }, [expeditionId, loadVotedIds, subscribeToStep]);
 
   useEffect(() => {
     void (async () => {
@@ -79,29 +100,53 @@ function VotePage() {
         .eq("expedition_id", expeditionId);
       setParticipants((parts as any) ?? []);
 
-      // Vérifier si ce personnage est toujours vivant dans l'expédition
       const isParticipant = (parts ?? []).some((p: any) => p.character_id === char.id);
       if (!isParticipant) { navigate({ to: "/" }); return; }
 
-      await loadStep();
+      const currentStep = await loadStep();
       setReady(true);
 
-      // Realtime : votes + nouvelles étapes
-      const channel = supabase
-        .channel(`vote_room_${expeditionId}`)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "step_votes" },
-          async () => { if (step?.id) await loadVotedIds(step.id); })
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "expedition_steps",
-          filter: `expedition_id=eq.${expeditionId}` },
-          async () => { await loadStep(); })
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "expedition_steps",
-          filter: `expedition_id=eq.${expeditionId}` },
-          async () => { await loadStep(); })
+      // Écouter les nouvelles étapes (quand resolve génère la suivante)
+      const stepsChannel = supabase
+        .channel(`expedition_steps_${expeditionId}`)
+        .on("postgres_changes", {
+          event: "INSERT", schema: "public", table: "expedition_steps",
+          filter: `expedition_id=eq.${expeditionId}`,
+        }, () => { void loadStep(); })
         .subscribe();
 
-      return () => { supabase.removeChannel(channel); };
+      // Écouter la fin de l'expédition
+      const expChannel = supabase
+        .channel(`expedition_end_${expeditionId}`)
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public", table: "expeditions",
+          filter: `id=eq.${expeditionId}`,
+        }, async (payload) => {
+          if ((payload.new as any)?.status === "completed") {
+            const { data: exp } = await supabase
+              .from("expeditions")
+              .select("total_loot_kept")
+              .eq("id", expeditionId)
+              .maybeSingle();
+            const { data: step } = await supabase
+              .from("expedition_steps")
+              .select("deaths_count")
+              .eq("expedition_id", expeditionId)
+              .order("step_number", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            setResult({ deaths: step?.deaths_count ?? 0, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, survivorCount: 0 });
+          }
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(stepsChannel);
+        supabase.removeChannel(expChannel);
+        if (channelRef.current) supabase.removeChannel(channelRef.current);
+      };
     })();
-  }, [expeditionId, navigate, loadStep, loadVotedIds]);
+  }, [expeditionId, navigate, loadStep]);
 
   // Minuteur
   useEffect(() => {
@@ -112,11 +157,10 @@ function VotePage() {
     return () => clearInterval(interval);
   }, [step?.id, step?.vote_deadline, step?.resolved]);
 
-  // Vérifier si j'ai déjà voté à cette étape
+  // Détecter si j'ai déjà voté
   useEffect(() => {
-    if (!step?.id || !character?.id) return;
-    if (votedIds.includes(character.id)) setMyVote("voté");
-  }, [votedIds, step?.id, character?.id]);
+    if (character?.id && votedIds.includes(character.id)) setMyVote("voté");
+  }, [votedIds, character?.id]);
 
   async function castVote(vote: "continuer" | "rentrer") {
     if (!step || !character || myVote) return;
@@ -127,7 +171,10 @@ function VotePage() {
       p_vote: vote,
     });
     if (rpcError) setError(rpcError.message);
-    else { setMyVote(vote); await loadVotedIds(step.id); }
+    else {
+      setMyVote(vote);
+      await loadVotedIds(step.id);
+    }
     setBusy(false);
   }
 
@@ -137,7 +184,6 @@ function VotePage() {
     const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
 
-    // Recharger l'étape résolue pour avoir deaths_count
     const { data: resolvedStep } = await supabase
       .from("expedition_steps")
       .select("deaths_count")
@@ -150,21 +196,14 @@ function VotePage() {
       .eq("id", expeditionId)
       .maybeSingle();
 
-    const { count: survivorCount } = await supabase
-      .from("expedition_participants")
-      .select("character_id", { count: "exact", head: true })
-      .eq("expedition_id", expeditionId);
-
-    setResult({
-      deaths: resolvedStep?.deaths_count ?? 0,
-      loot: Math.round(exp?.total_loot_kept ?? 0),
-      ended: exp?.status === "completed",
-      survivorCount: survivorCount ?? 0,
-    });
+    if (exp?.status === "completed") {
+      setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, survivorCount: 0 });
+    } else {
+      setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: 0, ended: false, survivorCount: 0 });
+    }
     setBusy(false);
   }
 
-  const aliveParticipants = participants.filter(p => !votedIds.includes(p.character_id) || votedIds.includes(p.character_id));
   const allVoted = participants.length > 0 && votedIds.length >= participants.length;
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy;
@@ -172,44 +211,21 @@ function VotePage() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
-  // Écran de résultat d'une étape
   if (result) {
     return (
       <LedgerPage>
         <LedgerCard
-          title={result.ended
-            ? "Expédition terminée"
-            : result.deaths > 0
-              ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}`
-              : "Étape franchie — on continue"}
-          subtitle={result.ended
-            ? `Butin rapporté à la guilde : ${result.loot} or`
-            : result.deaths > 0
-              ? "L'expédition continue avec les survivants."
-              : "Une nouvelle épreuve vous attend."}
+          title={result.ended ? "Expédition terminée" : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie"}
+          subtitle={result.ended ? `Butin rapporté à la guilde : ${result.loot} or` : result.deaths > 0 ? "L'expédition continue avec les survivants." : "Une nouvelle épreuve vous attend."}
         >
-          {result.deaths > 0 && !result.ended && (
-            <p className="text-sm text-muted-foreground mb-4">
-              {result.deaths} membre{result.deaths > 1 ? "s ont" : " a"} péri. La guilde en porte les conséquences.
-            </p>
-          )}
           {result.ended ? (
-            <>
-              {result.survivorCount === 0 && (
-                <p className="text-sm text-red-400 mb-4">Expédition anéantie. Aucun survivant. Butin perdu.</p>
-              )}
-              <button
-                onClick={() => navigate({ to: "/" })}
-                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10"
-              >
-                Retour à la guilde
-              </button>
-            </>
+            <button onClick={() => navigate({ to: "/" })}
+              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
+              Retour à la guilde
+            </button>
           ) : (
-            <button
-              onClick={() => { setResult(null); void loadStep(); }}
-              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10"
-            >
+            <button onClick={() => { setResult(null); void loadStep(); }}
+              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Voir l'étape suivante
             </button>
           )}
@@ -226,7 +242,6 @@ function VotePage() {
       >
         {step && !step.resolved && (
           <>
-            {/* Minuteur */}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
               <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
               <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
@@ -238,7 +253,6 @@ function VotePage() {
               ⚠ Risque {RISK_LABEL[step.risk_level]}
             </p>
 
-            {/* Boutons de vote */}
             {!myVote ? (
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button onClick={() => castVote("continuer")} disabled={busy}
@@ -252,11 +266,10 @@ function VotePage() {
               </div>
             ) : (
               <div className="mb-4 px-3 py-3 border border-border/40 text-sm text-muted-foreground text-center">
-                Vote enregistré. En attente des autres…
+                Vote enregistré — en attente des autres…
               </div>
             )}
 
-            {/* Compteur de votes — barres anonymes */}
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
                 Votes reçus : {votedIds.length} / {participants.length}
@@ -264,14 +277,13 @@ function VotePage() {
               <div className="flex gap-1">
                 {participants.map((p) => (
                   <div key={p.character_id}
-                    className={`h-2 flex-1 rounded-sm transition-colors ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/30"}`} />
+                    className={`h-2 flex-1 rounded-sm transition-colors duration-300 ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/30"}`} />
                 ))}
               </div>
             </div>
 
             <LedgerError message={error} />
 
-            {/* Résolution disponible pour tous — n'importe qui peut déclencher */}
             {canResolve && (
               <button onClick={resolveStep} disabled={busy}
                 className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
@@ -279,7 +291,6 @@ function VotePage() {
               </button>
             )}
 
-            {/* Liste des participants (sans révéler qui a voté quoi) */}
             <div className="mt-4 border-t border-border/20 pt-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <ul className="space-y-1">
@@ -287,7 +298,9 @@ function VotePage() {
                   <li key={p.character_id}
                     className={`flex justify-between px-3 py-1.5 text-xs border ${p.character_id === character?.id ? "border-primary/40 text-primary" : "border-border/20 text-muted-foreground"}`}>
                     <span>{(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}</span>
-                    <span>{votedIds.includes(p.character_id) ? "✓" : "…"}</span>
+                    <span className={votedIds.includes(p.character_id) ? "text-primary" : ""}>
+                      {votedIds.includes(p.character_id) ? "✓" : "…"}
+                    </span>
                   </li>
                 ))}
               </ul>
