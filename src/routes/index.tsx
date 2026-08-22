@@ -19,7 +19,7 @@ function Index() {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [mode, setMode] = useState<"landing" | "signin" | "signup">("landing");
   const [profileMissing, setProfileMissing] = useState(false);
   const [character, setCharacter] = useState<Character | null>(null);
   const [guild, setGuild] = useState<Guild | null>(null);
@@ -81,7 +81,31 @@ function Index() {
   }, [guild?.id, refresh]);
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
-  if (!session) return <LedgerPage>{mode === "signup" ? <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} /> : <SignInScreen onSwitch={() => setMode("signup")} />}</LedgerPage>;
+  if (!session) return (
+    <LedgerPage>
+      {mode === "landing" ? (
+        <LedgerCard title="Trust & Greed" subtitle="Un monde de guildes. Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
+          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+            Forme une guilde. Pars en expédition. À chaque étape, vote en secret : rentrer avec ce que tu as, ou continuer vers plus — au risque de tout perdre. La mort est définitive.
+          </p>
+          <div className="space-y-2">
+            <button onClick={() => setMode("signup")}
+              className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
+              Rejoindre le registre
+            </button>
+            <button onClick={() => setMode("signin")}
+              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.14em] uppercase border-border/40 text-muted-foreground hover:bg-border/10">
+              J'ai déjà un compte
+            </button>
+          </div>
+        </LedgerCard>
+      ) : mode === "signup" ? (
+        <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} />
+      ) : (
+        <SignInScreen onSwitch={() => setMode("signup")} />
+      )}
+    </LedgerPage>
+  );
   if (profileMissing) return <LedgerPage><CreateProfileScreen onDone={refresh} /></LedgerPage>;
   if (!character) return <LedgerPage><DeadScreen onDone={refresh} /></LedgerPage>;
   if (!character.guild_id) return <LedgerPage><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
