@@ -24,6 +24,7 @@ function ExpeditionPage() {
   const [expedition, setExpedition] = useState<Expedition | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [targetSize, setTargetSize] = useState(3);
+  const [voteWindow, setVoteWindow] = useState(180);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -124,6 +125,8 @@ function ExpeditionPage() {
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
     const expId = (data as any).id;
+    // Sauvegarder la durée choisie
+    await supabase.from("expeditions").update({ vote_window_seconds: voteWindow }).eq("id", expId);
     await supabase.from("expedition_participants").insert({ expedition_id: expId, character_id: character.id });
     await loadExpedition(character.guild_id);
     setBusy(false);
@@ -174,6 +177,26 @@ function ExpeditionPage() {
               ))}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">Plus le groupe est grand, plus le butin potentiel est élevé.</p>
+          </div>
+
+          <div className="mb-4">
+            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Durée de vote par étape</p>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { label: "3 min", value: 180 },
+                { label: "1h", value: 3600 },
+                { label: "6h", value: 21600 },
+                { label: "24h", value: 86400 },
+              ].map((opt) => (
+                <button key={opt.value} onClick={() => setVoteWindow(opt.value)}
+                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow === opt.value ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {voteWindow <= 180 ? "Mode session — tous connectés en même temps." : "Mode asynchrone — chacun vote dans son temps."}
+            </p>
           </div>
           <LedgerError message={error} />
           <SealButton onClick={createExpedition} disabled={busy}>{busy ? "Création…" : "Ouvrir la salle d'attente"}</SealButton>
