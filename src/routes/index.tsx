@@ -97,6 +97,16 @@ function Index() {
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.14em] uppercase border-border/40 text-muted-foreground hover:bg-border/10">
               J'ai déjà un compte
             </button>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => navigate({ to: "/carte" })}
+                className="flex-1 text-xs tracking-[0.12em] uppercase text-muted-foreground/60 hover:text-primary transition-colors py-1">
+                Carte des guildes
+              </button>
+              <button onClick={() => navigate({ to: "/monde" })}
+                className="flex-1 text-xs tracking-[0.12em] uppercase text-muted-foreground/60 hover:text-primary transition-colors py-1">
+                Le monde
+              </button>
+            </div>
           </div>
         </LedgerCard>
       ) : mode === "signup" ? (

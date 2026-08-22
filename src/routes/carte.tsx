@@ -31,6 +31,7 @@ function CartePage() {
           .maybeSingle();
         setMyGuildId(char?.guild_id ?? null);
       }
+      // Pas de redirection si pas connecté — la carte est publique
 
       const { data: guildData } = await supabase
         .from("guilds")
@@ -91,10 +92,18 @@ function CartePage() {
             <h1 className="font-serif text-2xl tracking-[0.16em] uppercase text-primary">Carte des guildes</h1>
             <p className="text-xs text-muted-foreground mt-1">{guilds.length} guilde{guilds.length > 1 ? "s" : ""} active{guilds.length > 1 ? "s" : ""}</p>
           </div>
-          <button onClick={() => navigate({ to: "/" })}
-            className="text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors">
-            Retour
-          </button>
+          <div className="flex gap-3">
+            {!myGuildId && (
+              <button onClick={() => navigate({ to: "/" })}
+                className="text-xs tracking-[0.12em] uppercase border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-colors">
+                Rejoindre
+              </button>
+            )}
+            <button onClick={() => navigate({ to: "/" })}
+              className="text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors">
+              {myGuildId ? "Retour" : "Connexion"}
+            </button>
+          </div>
         </div>
 
         {guilds.length === 0 ? (
