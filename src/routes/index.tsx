@@ -198,6 +198,10 @@ function Index() {
         )}
 
         <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
+          <button onClick={() => navigate({ to: "/monde" })}
+            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+            Le monde
+          </button>
           <button onClick={() => navigate({ to: "/carte" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Carte des guildes
@@ -206,10 +210,51 @@ function Index() {
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Inviter quelqu'un dans la guilde
           </button>
+          <LeaveGuildButton character={character} onDone={refresh} />
         </div>
         <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
       </LedgerCard>
     </LedgerPage>
+  );
+}
+
+function LeaveGuildButton({ character, onDone }: { character: Character; onDone: () => Promise<void> }) {
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function leave() {
+    setBusy(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("leave_guild", { p_character_id: character.id });
+    if (rpcError) { setError(rpcError.message); setBusy(false); setConfirm(false); return; }
+    await onDone();
+    setBusy(false);
+  }
+
+  if (!confirm) return (
+    <button onClick={() => setConfirm(true)}
+      className="w-full text-xs tracking-[0.12em] uppercase text-red-400/50 hover:text-red-400 transition-colors py-1">
+      Quitter la guilde
+    </button>
+  );
+
+  return (
+    <div className="border border-red-400/30 px-3 py-2 mt-1">
+      <p className="text-xs text-red-400/70 mb-2">
+        Tu partiras avec ta part de l'or. Cette action est irréversible.
+      </p>
+      {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+      <div className="flex gap-2">
+        <button onClick={leave} disabled={busy}
+          className="flex-1 text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
+          {busy ? "Départ…" : "Confirmer"}
+        </button>
+        <button onClick={() => setConfirm(false)}
+          className="flex-1 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground py-1.5 hover:bg-border/10">
+          Annuler
+        </button>
+      </div>
+    </div>
   );
 }
 
