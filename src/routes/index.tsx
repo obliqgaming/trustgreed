@@ -53,11 +53,24 @@ function Index() {
       const { data: h } = await supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10);
       setHistory(h ?? []);
 
-      // Expédition en cours (waiting ou active)
       const { data: exp } = await supabase.from("expeditions").select("id, status").eq("guild_id", char.guild_id).in("status", ["waiting", "active"]).maybeSingle();
       if (exp) {
         const { count } = await supabase.from("expedition_participants").select("character_id", { count: "exact", head: true }).eq("expedition_id", exp.id);
         setActiveExpedition({ id: exp.id, status: exp.status, participant_count: count ?? 0 });
+
+        // Si participant à une expédition active, rediriger directement
+        if (exp.status === "active") {
+          const isParticipant = await supabase
+            .from("expedition_participants")
+            .select("character_id")
+            .eq("expedition_id", exp.id)
+            .eq("character_id", char.id)
+            .maybeSingle();
+          if (isParticipant.data) {
+            // Laisser le composant se monter avant de rediriger
+            setTimeout(() => navigate({ to: "/vote", search: { expedition: exp.id } }), 500);
+          }
+        }
       } else {
         setActiveExpedition(null);
       }
@@ -137,12 +150,16 @@ function Index() {
               {activeExpedition.status === "waiting" ? " — en attente du lancement" : " — en route"}
             </p>
             <button
-              onClick={() => activeExpedition.status === "active"
-                ? navigate({ to: "/vote", search: { expedition: activeExpedition.id } })
-                : navigate({ to: "/expedition" })}
+              onClick={() => {
+                if (activeExpedition.status === "active") {
+                  navigate({ to: "/vote", search: { expedition: activeExpedition.id } });
+                } else {
+                  navigate({ to: "/expedition" });
+                }
+              }}
               className="w-full text-xs tracking-[0.12em] uppercase border border-primary/40 text-primary py-1.5 hover:bg-primary/10"
             >
-              {activeExpedition.status === "active" ? "Rejoindre l'expédition" : "Voir la salle d'attente"}
+              {activeExpedition.status === "active" ? "Rejoindre l'expédition →" : "Voir la salle d'attente →"}
             </button>
           </div>
         )}
