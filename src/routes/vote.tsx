@@ -40,20 +40,22 @@ function VotePage() {
 
   const stepIdRef = useRef<string | null>(null);
   const characterIdRef = useRef<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Charge les character_ids ayant voté sur l'étape courante
-  const loadVotedIds = useCallback(async (stepId: string) => {
+  const loadVotedIds = useCallback(async (stepId: string, charId?: string) => {
     const { data } = await supabase
       .from("step_votes")
       .select("character_id")
       .eq("step_id", stepId);
     const ids = (data ?? []).map((v: any) => v.character_id);
     setVotedIds(ids);
+    // Restaurer myVote si déjà voté (survit au F5)
+    const cid = charId ?? characterIdRef.current;
+    if (cid && ids.includes(cid)) setMyVote("voté");
     return ids;
   }, []);
 
-  // Charge la dernière étape de l'expédition
-  const loadStep = useCallback(async () => {
+  const loadStep = useCallback(async (charId?: string) => {
     const { data } = await supabase
       .from("expedition_steps")
       .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description")
@@ -68,28 +70,29 @@ function VotePage() {
       setStep(data);
       if (isNew) {
         setMyVote(null);
-        const ids = await loadVotedIds(data.id);
-        // Détecter si déjà voté
-        if (characterIdRef.current && ids.includes(characterIdRef.current)) {
-          setMyVote("voté");
-        }
+        setVotedIds([]);
       }
+      await loadVotedIds(data.id, charId);
     }
     return data;
   }, [expeditionId, loadVotedIds]);
 
-  // Init
+  // Poll léger toutes les 8 secondes — fallback si Realtime manque un événement
+  const startPoll = useCallback((charId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => {
+      if (stepIdRef.current) void loadVotedIds(stepIdRef.current, charId);
+    }, 8000);
+  }, [loadVotedIds]);
+
   useEffect(() => {
     void (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { navigate({ to: "/" }); return; }
 
       const { data: char } = await supabase
-        .from("characters")
-        .select("id, name")
-        .eq("profile_id", session.user.id)
-        .eq("is_alive", true)
-        .maybeSingle();
+        .from("characters").select("id, name")
+        .eq("profile_id", session.user.id).eq("is_alive", true).maybeSingle();
       if (!char) { navigate({ to: "/" }); return; }
       setCharacter(char);
       characterIdRef.current = char.id;
@@ -100,49 +103,42 @@ function VotePage() {
         .eq("expedition_id", expeditionId);
       const partList = (parts as any) ?? [];
       setParticipants(partList);
+      if (!partList.some((p: any) => p.character_id === char.id)) { navigate({ to: "/" }); return; }
 
-      if (!partList.some((p: any) => p.character_id === char.id)) {
-        navigate({ to: "/" }); return;
-      }
-
-      await loadStep();
+      await loadStep(char.id);
       setReady(true);
+      startPoll(char.id);
 
-      // Channel unique sur l'expédition — écoute tout
-      const channel = supabase
-        .channel(`exp_${expeditionId}`)
-        // Nouveau vote inséré
-        .on("postgres_changes", {
-          event: "INSERT", schema: "public", table: "step_votes",
-        }, (payload) => {
-          // Vérifier que c'est bien pour l'étape courante
-          if ((payload.new as any).step_id === stepIdRef.current) {
-            setVotedIds(prev => {
-              const cid = (payload.new as any).character_id;
-              return prev.includes(cid) ? prev : [...prev, cid];
-            });
-          }
-        })
-        // Nouvelle étape créée (resolve_step a généré la suivante)
-        .on("postgres_changes", {
-          event: "INSERT", schema: "public", table: "expedition_steps",
-          filter: `expedition_id=eq.${expeditionId}`,
-        }, () => { void loadStep(); })
-        // Expédition terminée
-        .on("postgres_changes", {
-          event: "UPDATE", schema: "public", table: "expeditions",
-          filter: `id=eq.${expeditionId}`,
-        }, async (payload) => {
-          if ((payload.new as any)?.status === "completed") {
-            const loot = Math.round((payload.new as any)?.total_loot_kept ?? 0);
-            setResult({ deaths: 0, loot, ended: true });
-          }
-        })
+      const channel = supabase.channel(`exp_${expeditionId}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "step_votes" },
+          (payload) => {
+            if ((payload.new as any).step_id === stepIdRef.current) {
+              setVotedIds(prev => {
+                const cid = (payload.new as any).character_id;
+                return prev.includes(cid) ? prev : [...prev, cid];
+              });
+            }
+          })
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "expedition_steps",
+            filter: `expedition_id=eq.${expeditionId}` },
+          () => { void loadStep(char.id); })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "expeditions",
+            filter: `id=eq.${expeditionId}` },
+          async (payload) => {
+            if ((payload.new as any)?.status === "completed") {
+              const loot = Math.round((payload.new as any)?.total_loot_kept ?? 0);
+              setResult({ deaths: 0, loot, ended: true });
+              if (pollRef.current) clearInterval(pollRef.current);
+            }
+          })
         .subscribe();
 
-      return () => { supabase.removeChannel(channel); };
+      return () => {
+        supabase.removeChannel(channel);
+        if (pollRef.current) clearInterval(pollRef.current);
+      };
     })();
-  }, [expeditionId, navigate, loadStep]);
+  }, [expeditionId, navigate, loadStep, startPoll]);
 
   // Minuteur
   useEffect(() => {
@@ -158,9 +154,7 @@ function VotePage() {
     if (!step || !character || myVote) return;
     setError(null); setBusy(true);
     const { error: rpcError } = await supabase.rpc("cast_vote", {
-      p_step_id: step.id,
-      p_character_id: character.id,
-      p_vote: vote,
+      p_step_id: step.id, p_character_id: character.id, p_vote: vote,
     });
     if (rpcError) { setError(rpcError.message); }
     else {
@@ -176,24 +170,17 @@ function VotePage() {
     const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
 
-    // Lire le résultat
     const { data: resolvedStep } = await supabase
-      .from("expedition_steps")
-      .select("deaths_count")
-      .eq("id", step.id)
-      .maybeSingle();
-
+      .from("expedition_steps").select("deaths_count").eq("id", step.id).maybeSingle();
     const { data: exp } = await supabase
-      .from("expeditions")
-      .select("status, total_loot_kept")
-      .eq("id", expeditionId)
-      .maybeSingle();
+      .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
 
     setResult({
       deaths: resolvedStep?.deaths_count ?? 0,
       loot: Math.round(exp?.total_loot_kept ?? 0),
       ended: exp?.status === "completed",
     });
+    if (pollRef.current) clearInterval(pollRef.current);
     setBusy(false);
   }
 
@@ -204,27 +191,17 @@ function VotePage() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
-  // Écran résultat
   if (result) {
-    const title = result.ended
-      ? "Expédition terminée"
-      : result.deaths > 0
-        ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}`
-        : "Étape franchie";
-
-    const subtitle = result.ended
-      ? `Butin rapporté à la guilde : ${result.loot} or`
-      : result.deaths > 0
-        ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri. L'expédition continue.`
-        : "Le groupe avance. Une nouvelle épreuve les attend.";
-
+    const title = result.ended ? "Expédition terminée"
+      : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
+    const subtitle = result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
+      : result.deaths > 0 ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri. L'expédition continue.`
+      : "Le groupe avance. Une nouvelle épreuve les attend.";
     return (
       <LedgerPage>
         <LedgerCard title={title} subtitle={subtitle}>
           {result.deaths > 0 && !result.ended && (
-            <p className="text-sm text-red-400/80 mb-4">
-              La guilde porte le poids de cette perte.
-            </p>
+            <p className="text-sm text-red-400/80 mb-4">La guilde porte le poids de cette perte.</p>
           )}
           {result.ended ? (
             <button onClick={() => navigate({ to: "/" })}
@@ -250,26 +227,18 @@ function VotePage() {
       >
         {step && !step.resolved && (
           <>
-            {/* Description narrative */}
             {step.description && (
-              <p className="text-sm text-muted-foreground italic mb-4 px-1 leading-relaxed">
-                {step.description}
-              </p>
+              <p className="text-sm text-muted-foreground italic mb-4 px-1 leading-relaxed">{step.description}</p>
             )}
-
-            {/* Minuteur */}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
               <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
               <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
                 {timeLeft !== null ? fmt(timeLeft) : "—"}
               </span>
             </div>
-
             <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
               ⚠ Risque {RISK_LABEL[step.risk_level]}
             </p>
-
-            {/* Vote */}
             {!myVote ? (
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button onClick={() => castVote("continuer")} disabled={busy}
@@ -286,8 +255,6 @@ function VotePage() {
                 Vote enregistré — en attente des autres…
               </div>
             )}
-
-            {/* Compteur votes */}
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
                 Votes reçus : {votedIds.length} / {participants.length}
@@ -299,17 +266,15 @@ function VotePage() {
                 ))}
               </div>
             </div>
-
             <LedgerError message={error} />
-
             {canResolve && (
               <button onClick={resolveStep} disabled={busy}
                 className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
                 {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
+            <ChatBox expeditionId={expeditionId} character={character} />
 
-            {/* Liste groupe */}
             <div className="mt-4 border-t border-border/20 pt-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <ul className="space-y-1">
@@ -328,5 +293,90 @@ function VotePage() {
         )}
       </LedgerCard>
     </LedgerPage>
+  );
+}
+
+type ChatMessage = { id: string; character_id: string; message: string; created_at: string; character: { name: string } };
+
+function ChatBox({ expeditionId, character }: { expeditionId: string; character: Character | null }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("expedition_chat_messages")
+        .select("id, character_id, message, created_at, character:characters(name)")
+        .eq("expedition_id", expeditionId)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      setMessages((data as any) ?? []);
+    })();
+
+    const channel = supabase.channel(`chat_${expeditionId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "expedition_chat_messages",
+          filter: `expedition_id=eq.${expeditionId}` },
+        async () => {
+          const { data } = await supabase
+            .from("expedition_chat_messages")
+            .select("id, character_id, message, created_at, character:characters(name)")
+            .eq("expedition_id", expeditionId)
+            .order("created_at", { ascending: true })
+            .limit(50);
+          setMessages((data as any) ?? []);
+        })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [expeditionId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (!text.trim() || !character || busy) return;
+    setBusy(true);
+    await supabase.from("expedition_chat_messages").insert({
+      expedition_id: expeditionId,
+      character_id: character.id,
+      message: text.trim(),
+    });
+    setText("");
+    setBusy(false);
+  }
+
+  return (
+    <div className="mt-4 border-t border-border/20 pt-4">
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
+      <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
+        {messages.length === 0 ? (
+          <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
+        ) : messages.map((m) => (
+          <div key={m.id} className={`text-xs ${m.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
+            <span className="font-semibold">{(m.character as any)?.name ?? "?"}</span>
+            <span className="mx-1 opacity-40">·</span>
+            <span>{m.message}</span>
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
+      <form onSubmit={send} className="flex gap-2">
+        <input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          maxLength={200}
+          placeholder="Écris quelque chose…"
+          className="flex-1 bg-transparent border border-border/40 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
+        />
+        <button type="submit" disabled={busy || !text.trim()}
+          className="px-3 py-1.5 text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-30">
+          Envoyer
+        </button>
+      </form>
+    </div>
   );
 }

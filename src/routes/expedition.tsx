@@ -51,6 +51,7 @@ function ExpeditionPage() {
   useEffect(() => {
     let expChannel: ReturnType<typeof supabase.channel> | null = null;
     let partChannel: ReturnType<typeof supabase.channel> | null = null;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
     void (async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -68,7 +69,6 @@ function ExpeditionPage() {
       const exp = await loadExpedition(char.guild_id);
       setReady(true);
 
-      // Si l'expédition est déjà active, rediriger immédiatement
       if (exp?.status === "active") {
         navigate({ to: "/vote", search: { expedition: exp.id } });
         return;
@@ -76,7 +76,15 @@ function ExpeditionPage() {
 
       if (!exp) return;
 
-      // Realtime participants
+      // Poll de 8 secondes — fallback si Realtime manque un participant
+      pollInterval = setInterval(async () => {
+        const fresh = await loadExpedition(char.guild_id!);
+        if (fresh?.status === "active") {
+          navigate({ to: "/vote", search: { expedition: fresh.id } });
+          if (pollInterval) clearInterval(pollInterval);
+        }
+      }, 8000);
+
       partChannel = supabase
         .channel(`ep_part_${exp.id}`)
         .on("postgres_changes", {
@@ -85,7 +93,6 @@ function ExpeditionPage() {
         }, () => { void loadParticipants(exp.id); })
         .subscribe();
 
-      // Realtime expédition : dès que le statut passe à "active", tout le monde est redirigé
       expChannel = supabase
         .channel(`ep_status_${exp.id}`)
         .on("postgres_changes", {
@@ -94,6 +101,7 @@ function ExpeditionPage() {
         }, (payload) => {
           if ((payload.new as any)?.status === "active") {
             navigate({ to: "/vote", search: { expedition: exp.id } });
+            if (pollInterval) clearInterval(pollInterval);
           }
         })
         .subscribe();
@@ -102,6 +110,7 @@ function ExpeditionPage() {
     return () => {
       if (partChannel) supabase.removeChannel(partChannel);
       if (expChannel) supabase.removeChannel(expChannel);
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, [navigate, loadExpedition, loadParticipants]);
 
