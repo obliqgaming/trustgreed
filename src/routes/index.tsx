@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
+import { requestNotificationPermission, notifyExpeditionOpen, notifyExpeditionStarted } from "@/lib/notifications";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -80,7 +81,18 @@ function Index() {
     setReady(true);
   }, [session]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  // Demander la permission de notifications au premier chargement
+  useEffect(() => { void requestNotificationPermission(); }, []);
+
+  // Notifier si une expédition s'ouvre dans la guilde
+  useEffect(() => {
+    if (!guild?.id || !activeExpedition) return;
+    if (activeExpedition.status === "waiting") {
+      notifyExpeditionOpen(guild.name, activeExpedition.participant_count, activeExpedition.id);
+    } else if (activeExpedition.status === "active") {
+      notifyExpeditionStarted(guild.name, activeExpedition.id);
+    }
+  }, [activeExpedition?.id, activeExpedition?.status, guild?.name]);
 
   // Realtime : mise à jour auto si une expédition démarre ou si l'or change
   useEffect(() => {
@@ -215,6 +227,10 @@ function Index() {
         )}
 
         <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
+          <button onClick={() => navigate({ to: "/profil" })}
+            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+            Mon profil
+          </button>
           <button onClick={() => navigate({ to: "/monde" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Le monde
