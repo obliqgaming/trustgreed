@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
+import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { requestNotificationPermission, notifyExpeditionOpen, notifyExpeditionStarted } from "@/lib/notifications";
 
 export const Route = createFileRoute("/")({
@@ -142,7 +143,7 @@ function Index() {
     </LedgerPage>
   );
   if (profileMissing) return <LedgerPage><CreateProfileScreen onDone={refresh} /></LedgerPage>;
-  if (!character) return <LedgerPage><DeadScreen onDone={refresh} /></LedgerPage>;
+  if (!character) return <LedgerPage><CreateOrReviveScreen onDone={refresh} /></LedgerPage>;
   if (!character.guild_id) return <LedgerPage><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
 
   const isInExpedition = activeExpedition && members.some(m => m.id === character.id);
@@ -436,7 +437,84 @@ function CreateProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
+function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
+  const [hasDied, setHasDied] = useState<boolean | null>(null);
+  const [name, setName] = useState("");
+  const [portrait, setPortrait] = useState("ombre");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showPortraitPicker, setShowPortraitPicker] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from("characters")
+        .select("id")
+        .eq("profile_id", session.user.id)
+        .eq("is_alive", false)
+        .limit(1)
+        .maybeSingle();
+      setHasDied(!!data);
+    })();
+  }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setError(null); setBusy(true);
+    const { data: char, error: rpcError } = await supabase.rpc("create_character", { p_name: name });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    // Sauvegarder le portrait choisi
+    if (char) {
+      await supabase.from("characters").update({ portrait }).eq("id", (char as any).id);
+    }
+    await onDone();
+    setBusy(false);
+  }
+
+  if (hasDied === null) return null;
+
+  return (
+    <LedgerCard
+      title={hasDied ? "Ton personnage est mort" : "Créer un personnage"}
+      subtitle={hasDied ? "La mort est définitive. Une nouvelle histoire peut commencer." : "Un seul nom, inscrit à l'encre."}
+    >
+      {hasDied && (
+        <div className="mb-4 px-3 py-3 border border-red-400/30 text-xs text-red-400/70">
+          Ton personnage ne reviendra pas. Tu peux en créer un nouveau et rejoindre ou fonder une nouvelle guilde.
+        </div>
+      )}
+      <form onSubmit={submit} noValidate>
+        <Field label="Nom du personnage" required value={name} onChange={(e) => setName(e.target.value)} />
+
+        {/* Aperçu portrait + bouton sélection */}
+        <div className="mt-4">
+          <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Portrait</p>
+          <div className="flex items-center gap-3">
+            <PortraitDisplay portraitId={portrait} size={56} />
+            <button type="button" onClick={() => setShowPortraitPicker(!showPortraitPicker)}
+              className="text-xs tracking-[0.12em] uppercase border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-primary/40 hover:text-primary transition-colors">
+              {showPortraitPicker ? "Fermer" : "Choisir"}
+            </button>
+          </div>
+          {showPortraitPicker && (
+            <div className="mt-3">
+              <PortraitPicker value={portrait} onChange={(id) => { setPortrait(id); setShowPortraitPicker(false); }} />
+            </div>
+          )}
+        </div>
+
+        <LedgerError message={error} />
+        <SealButton type="submit" disabled={busy}>{busy ? "Inscription…" : "Inscrire au registre"}</SealButton>
+      </form>
+      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
+    </LedgerCard>
+  );
+}
+
 function DeadScreen({ onDone }: { onDone: () => Promise<void> }) {
+  return <CreateOrReviveScreen onDone={onDone} />;
+}
   const [hasDied, setHasDied] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);

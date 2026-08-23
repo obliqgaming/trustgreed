@@ -82,15 +82,8 @@ export const PORTRAITS: { id: string; label: string; svg: string }[] = [
   },
 ];
 
-export function PortraitDisplay({
-  portraitId,
-  size = 64,
-}: {
-  portraitId: string;
-  size?: number;
-}) {
+export function PortraitDisplay({ portraitId, size = 64 }: { portraitId: string; size?: number }) {
   const portrait = PORTRAITS.find(p => p.id === portraitId) ?? PORTRAITS[0];
-
   return (
     <div
       style={{ width: size, height: size }}
@@ -100,34 +93,16 @@ export function PortraitDisplay({
   );
 }
 
-export function PortraitPicker({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (id: string) => void;
-}) {
+export function PortraitPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   return (
     <div>
-      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-3">
-        Portrait
-      </p>
-
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-3">Portrait</p>
       <div className="grid grid-cols-3 gap-2">
         {PORTRAITS.map(p => (
-          <button
-            key={p.id}
-            onClick={() => onChange(p.id)}
-            className={`flex flex-col items-center gap-1.5 p-2 border rounded-sm transition-colors ${
-              value === p.id
-                ? "border-primary/60 bg-primary/5"
-                : "border-border/30 hover:border-border/60"
-            }`}
-          >
-            <div
-              className="w-16 h-16 rounded-sm overflow-hidden border border-border/20"
-              dangerouslySetInnerHTML={{ __html: p.svg }}
-            />
+          <button key={p.id} onClick={() => onChange(p.id)}
+            className={`flex flex-col items-center gap-1.5 p-2 border rounded-sm transition-colors ${value === p.id ? "border-primary/60 bg-primary/5" : "border-border/30 hover:border-border/60"}`}>
+            <div className="w-16 h-16 rounded-sm overflow-hidden border border-border/20"
+              dangerouslySetInnerHTML={{ __html: p.svg }} />
             <span className="text-xs text-muted-foreground">{p.label}</span>
           </button>
         ))}
