@@ -6,7 +6,7 @@ import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
 export const Route = createFileRoute("/vote")({
   ssr: false,
   validateSearch: (search: Record<string, unknown>) => ({
-    expedition: String(search.expedition ?? ""),
+    expedition: String(search['expedition'] ?? ""),
   }),
   component: VotePage,
 });
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/vote")({
 type Character = { id: string; name: string };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
-  loot_min: number; loot_max: number; vote_deadline: string;
+  loot_min: number; loot_max: number; vote_deadline: string | null;
   resolved: boolean; deaths_count: number; description: string | null;
 };
 type Participant = { character_id: string; character: { name: string } };
