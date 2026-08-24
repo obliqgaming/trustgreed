@@ -501,6 +501,8 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
 function DeadScreen({ onDone }: { onDone: () => Promise<void> }) {
   return <CreateOrReviveScreen onDone={onDone} />;
 }
+
+function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [hasDied, setHasDied] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
