@@ -10,21 +10,16 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as InviterRouteImport } from './routes/inviter'
 import { Route as CarteRouteImport } from './routes/carte'
-import { Route as MondeRouteImport } from './routes/monde'
 import { Route as ExpeditionRouteImport } from './routes/expedition'
-import { Route as VoteRouteImport } from './routes/vote'
+import { Route as InviterRouteImport } from './routes/inviter'
+import { Route as MondeRouteImport } from './routes/monde'
 import { Route as ProfilRouteImport } from './routes/profil'
+import { Route as VoteRouteImport } from './routes/vote'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InviterRoute = InviterRouteImport.update({
-  id: '/inviter',
-  path: '/inviter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CarteRoute = CarteRouteImport.update({
@@ -32,19 +27,19 @@ const CarteRoute = CarteRouteImport.update({
   path: '/carte',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MondeRoute = MondeRouteImport.update({
-  id: '/monde',
-  path: '/monde',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ExpeditionRoute = ExpeditionRouteImport.update({
   id: '/expedition',
   path: '/expedition',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VoteRoute = VoteRouteImport.update({
-  id: '/vote',
-  path: '/vote',
+const InviterRoute = InviterRouteImport.update({
+  id: '/inviter',
+  path: '/inviter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MondeRoute = MondeRouteImport.update({
+  id: '/monde',
+  path: '/monde',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfilRoute = ProfilRouteImport.update({
@@ -52,51 +47,66 @@ const ProfilRoute = ProfilRouteImport.update({
   path: '/profil',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VoteRoute = VoteRouteImport.update({
+  id: '/vote',
+  path: '/vote',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/inviter': typeof InviterRoute
   '/carte': typeof CarteRoute
-  '/monde': typeof MondeRoute
   '/expedition': typeof ExpeditionRoute
-  '/vote': typeof VoteRoute
+  '/inviter': typeof InviterRoute
+  '/monde': typeof MondeRoute
   '/profil': typeof ProfilRoute
+  '/vote': typeof VoteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/inviter': typeof InviterRoute
   '/carte': typeof CarteRoute
-  '/monde': typeof MondeRoute
   '/expedition': typeof ExpeditionRoute
-  '/vote': typeof VoteRoute
+  '/inviter': typeof InviterRoute
+  '/monde': typeof MondeRoute
   '/profil': typeof ProfilRoute
+  '/vote': typeof VoteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/inviter': typeof InviterRoute
   '/carte': typeof CarteRoute
-  '/monde': typeof MondeRoute
   '/expedition': typeof ExpeditionRoute
-  '/vote': typeof VoteRoute
+  '/inviter': typeof InviterRoute
+  '/monde': typeof MondeRoute
   '/profil': typeof ProfilRoute
+  '/vote': typeof VoteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/inviter' | '/carte' | '/monde' | '/expedition' | '/vote' | '/profil'
+  fullPaths:
+    '/' | '/carte' | '/expedition' | '/inviter' | '/monde' | '/profil' | '/vote'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/inviter' | '/carte' | '/monde' | '/expedition' | '/vote' | '/profil'
-  id: '__root__' | '/' | '/inviter' | '/carte' | '/monde' | '/expedition' | '/vote' | '/profil'
+  to:
+    '/' | '/carte' | '/expedition' | '/inviter' | '/monde' | '/profil' | '/vote'
+  id:
+    | '__root__'
+    | '/'
+    | '/carte'
+    | '/expedition'
+    | '/inviter'
+    | '/monde'
+    | '/profil'
+    | '/vote'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  InviterRoute: typeof InviterRoute
   CarteRoute: typeof CarteRoute
-  MondeRoute: typeof MondeRoute
   ExpeditionRoute: typeof ExpeditionRoute
-  VoteRoute: typeof VoteRoute
+  InviterRoute: typeof InviterRoute
+  MondeRoute: typeof MondeRoute
   ProfilRoute: typeof ProfilRoute
+  VoteRoute: typeof VoteRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -108,25 +118,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/inviter': {
-      id: '/inviter'
-      path: '/inviter'
-      fullPath: '/inviter'
-      preLoaderRoute: typeof InviterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/carte': {
       id: '/carte'
       path: '/carte'
       fullPath: '/carte'
       preLoaderRoute: typeof CarteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/monde': {
-      id: '/monde'
-      path: '/monde'
-      fullPath: '/monde'
-      preLoaderRoute: typeof MondeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expedition': {
@@ -136,11 +132,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ExpeditionRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/vote': {
-      id: '/vote'
-      path: '/vote'
-      fullPath: '/vote'
-      preLoaderRoute: typeof VoteRouteImport
+    '/inviter': {
+      id: '/inviter'
+      path: '/inviter'
+      fullPath: '/inviter'
+      preLoaderRoute: typeof InviterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monde': {
+      id: '/monde'
+      path: '/monde'
+      fullPath: '/monde'
+      preLoaderRoute: typeof MondeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profil': {
@@ -150,17 +153,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfilRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vote': {
+      id: '/vote'
+      path: '/vote'
+      fullPath: '/vote'
+      preLoaderRoute: typeof VoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  InviterRoute: InviterRoute,
   CarteRoute: CarteRoute,
-  MondeRoute: MondeRoute,
   ExpeditionRoute: ExpeditionRoute,
-  VoteRoute: VoteRoute,
+  InviterRoute: InviterRoute,
+  MondeRoute: MondeRoute,
   ProfilRoute: ProfilRoute,
+  VoteRoute: VoteRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
