@@ -31,7 +31,7 @@ function Index() {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); });
     return () => sub.subscription.unsubscribe();
   }, []);
 

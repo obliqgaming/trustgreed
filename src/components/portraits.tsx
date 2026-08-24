@@ -100,10 +100,9 @@ export function PortraitPicker({ value, onChange }: { value: string; onChange: (
       <div className="grid grid-cols-3 gap-2">
         {PORTRAITS.map(p => (
           <button key={p.id} onClick={() => onChange(p.id)}
-            className={`flex flex-col items-center gap-1.5 p-2 border rounded-sm transition-colors ${value === p.id ? "border-primary/60 bg-primary/5" : "border-border/30 hover:border-border/60"}`}>
+            className={`flex flex-col items-center p-2 border rounded-sm transition-colors ${value === p.id ? "border-primary/60 bg-primary/5" : "border-border/30 hover:border-border/60"}`}>
             <div className="w-16 h-16 rounded-sm overflow-hidden border border-border/20"
               dangerouslySetInnerHTML={{ __html: p.svg }} />
-            <span className="text-xs text-muted-foreground">{p.label}</span>
           </button>
         ))}
       </div>
