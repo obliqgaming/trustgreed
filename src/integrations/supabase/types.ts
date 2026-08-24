@@ -26,6 +26,7 @@ export type Database = {
           is_alive: boolean
           level: number
           name: string
+          portrait: string | null
           profile_id: string
           xp: number
         }
@@ -40,6 +41,7 @@ export type Database = {
           is_alive?: boolean
           level?: number
           name: string
+          portrait?: string | null
           profile_id: string
           xp?: number
         }
@@ -54,6 +56,7 @@ export type Database = {
           is_alive?: boolean
           level?: number
           name?: string
+          portrait?: string | null
           profile_id?: string
           xp?: number
         }
@@ -87,6 +90,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      event_templates: {
+        Row: {
+          death_percentage: number
+          event_type: string
+          flavor_texts: string[]
+          id: string
+          loot_base_max: number
+          loot_base_min: number
+          risk_level: string
+        }
+        Insert: {
+          death_percentage: number
+          event_type: string
+          flavor_texts: string[]
+          id?: string
+          loot_base_max: number
+          loot_base_min: number
+          risk_level: string
+        }
+        Update: {
+          death_percentage?: number
+          event_type?: string
+          flavor_texts?: string[]
+          id?: string
+          loot_base_max?: number
+          loot_base_min?: number
+          risk_level?: string
+        }
+        Relationships: []
       }
       expedition_chat_messages: {
         Row: {
@@ -235,6 +268,7 @@ export type Database = {
           target_size: number
           total_loot_earned: number
           total_loot_kept: number
+          vote_window_seconds: number
         }
         Insert: {
           created_at?: string
@@ -248,6 +282,7 @@ export type Database = {
           target_size: number
           total_loot_earned?: number
           total_loot_kept?: number
+          vote_window_seconds?: number
         }
         Update: {
           created_at?: string
@@ -261,6 +296,7 @@ export type Database = {
           target_size?: number
           total_loot_earned?: number
           total_loot_kept?: number
+          vote_window_seconds?: number
         }
         Relationships: [
           {
@@ -333,6 +369,8 @@ export type Database = {
       }
       guilds: {
         Row: {
+          banner: string | null
+          banner_color: string | null
           created_at: string
           founder_profile_id: string
           gold: number
@@ -340,6 +378,8 @@ export type Database = {
           name: string
         }
         Insert: {
+          banner?: string | null
+          banner_color?: string | null
           created_at?: string
           founder_profile_id: string
           gold?: number
@@ -347,6 +387,8 @@ export type Database = {
           name: string
         }
         Update: {
+          banner?: string | null
+          banner_color?: string | null
           created_at?: string
           founder_profile_id?: string
           gold?: number
@@ -478,6 +520,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      award_xp_to_survivors: {
+        Args: {
+          p_expedition_id: string
+          p_is_final?: boolean
+          p_risk_level: string
+        }
+        Returns: undefined
+      }
       bootstrap_first_profile: {
         Args: { p_username: string }
         Returns: {
@@ -510,6 +560,7 @@ export type Database = {
           is_alive: boolean
           level: number
           name: string
+          portrait: string | null
           profile_id: string
           xp: number
         }
@@ -538,6 +589,7 @@ export type Database = {
           target_size: number
           total_loot_earned: number
           total_loot_kept: number
+          vote_window_seconds: number
         }
         SetofOptions: {
           from: "*"
@@ -549,6 +601,8 @@ export type Database = {
       create_guild: {
         Args: { p_character_id: string; p_guild_name: string }
         Returns: {
+          banner: string | null
+          banner_color: string | null
           created_at: string
           founder_profile_id: string
           gold: number
@@ -575,6 +629,21 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "invitations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_profile: {
+        Args: { p_username: string }
+        Returns: {
+          created_at: string
+          id: string
+          invited_by_profile_id: string | null
+          username: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -647,12 +716,31 @@ export type Database = {
           is_alive: boolean
           level: number
           name: string
+          portrait: string | null
           profile_id: string
           xp: number
         }
         SetofOptions: {
           from: "*"
           to: "characters"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      join_guild_with_code: {
+        Args: { p_character_id: string; p_code: string; p_username?: string }
+        Returns: {
+          banner: string | null
+          banner_color: string | null
+          created_at: string
+          founder_profile_id: string
+          gold: number
+          id: string
+          name: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "guilds"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -670,6 +758,7 @@ export type Database = {
           is_alive: boolean
           level: number
           name: string
+          portrait: string | null
           profile_id: string
           xp: number
         }

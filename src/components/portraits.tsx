@@ -88,7 +88,7 @@ export function PortraitDisplay({ portraitId, size = 64 }: { portraitId: string;
     <div
       style={{ width: size, height: size }}
       className="rounded-sm border border-border/40 overflow-hidden flex-shrink-0"
-      dangerouslySetInnerHTML={{ __html: portrait.svg }}
+      dangerouslySetInnerHTML={{ __html: portrait?.svg ?? "" }}
     />
   );
 }
