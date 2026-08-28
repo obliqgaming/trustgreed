@@ -165,44 +165,46 @@ function ExpeditionPage() {
   return (
     <LedgerPage>
       {!expedition ? (
-        <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.png)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.35}} />
+        <>
+          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.png)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.35}} />
           <LedgerCard title="Nouvelle expédition" subtitle="Définis la taille du groupe cible.">
-          <div className="mb-4">
-            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>
-            <div className="flex gap-2 flex-wrap">
-              {[3, 4, 5, 10, 20].map((n) => (
-                <button key={n} onClick={() => setTargetSize(n)}
-                  className={`px-4 py-2 text-sm font-mono border rounded-sm ${targetSize === n ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
-                  {n}
-                </button>
-              ))}
+            <div className="mb-4">
+              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>
+              <div className="flex gap-2 flex-wrap">
+                {[3, 4, 5, 10, 20].map((n) => (
+                  <button key={n} onClick={() => setTargetSize(n)}
+                    className={`px-4 py-2 text-sm font-mono border rounded-sm ${targetSize === n ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Plus le groupe est grand, plus le butin potentiel est élevé.</p>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Plus le groupe est grand, plus le butin potentiel est élevé.</p>
-          </div>
 
-          <div className="mb-4">
-            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Durée de vote par étape</p>
-            <div className="flex gap-2 flex-wrap">
-              {[
-                { label: "3 min", value: 180 },
-                { label: "1h", value: 3600 },
-                { label: "6h", value: 21600 },
-                { label: "24h", value: 86400 },
-              ].map((opt) => (
-                <button key={opt.value} onClick={() => setVoteWindow(opt.value)}
-                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow === opt.value ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
-                  {opt.label}
-                </button>
-              ))}
+            <div className="mb-4">
+              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Durée de vote par étape</p>
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { label: "3 min", value: 180 },
+                  { label: "1h", value: 3600 },
+                  { label: "6h", value: 21600 },
+                  { label: "24h", value: 86400 },
+                ].map((opt) => (
+                  <button key={opt.value} onClick={() => setVoteWindow(opt.value)}
+                    className={`px-4 py-2 text-sm border rounded-sm ${voteWindow === opt.value ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {voteWindow <= 180 ? "Mode session — tous connectés en même temps." : "Mode asynchrone — chacun vote dans son temps."}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {voteWindow <= 180 ? "Mode session — tous connectés en même temps." : "Mode asynchrone — chacun vote dans son temps."}
-            </p>
-          </div>
-          <LedgerError message={error} />
-          <SealButton onClick={createExpedition} disabled={busy}>{busy ? "Création…" : "Ouvrir la salle d'attente"}</SealButton>
-          <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>
-        </LedgerCard>
+            <LedgerError message={error} />
+            <SealButton onClick={createExpedition} disabled={busy}>{busy ? "Création…" : "Ouvrir la salle d'attente"}</SealButton>
+            <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>
+          </LedgerCard>
+        </>
       ) : (
         <LedgerCard
           title="Salle d'attente"
