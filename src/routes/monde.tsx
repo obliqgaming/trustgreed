@@ -108,10 +108,10 @@ function MondePage() {
     return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
   };
 
-  if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Lecture du registre…</p></LedgerPage>;
+  if (!ready) return <LedgerPage bg="/world_map_bg.png"><p className="text-center text-sm text-muted-foreground">Lecture du registre…</p></LedgerPage>;
 
   return (
-    <LedgerPage>
+    <LedgerPage bg="/world_map_bg.png">
       <div className="w-full max-w-2xl mx-auto px-4 py-8">
 
         {/* Header */}

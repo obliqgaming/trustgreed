@@ -107,7 +107,7 @@ function Index() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
   if (!session) return (
-    <LedgerPage bg="/landing_bg.png">
+    <LedgerPage>
       {mode === "landing" ? (
         <LedgerCard title="Trust & Greed" subtitle="Un monde de guildes. Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
           <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
@@ -141,14 +141,14 @@ function Index() {
       )}
     </LedgerPage>
   );
-  if (profileMissing) return <LedgerPage><CreateProfileScreen onDone={refresh} /></LedgerPage>;
-  if (!character) return <LedgerPage><CreateOrReviveScreen onDone={refresh} /></LedgerPage>;
-  if (!character.guild_id) return <LedgerPage><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
+  if (profileMissing) return <LedgerPage bg="/register_book.png"><CreateProfileScreen onDone={refresh} /></LedgerPage>;
+  if (!character) return <LedgerPage bg="/register_book.png"><CreateOrReviveScreen onDone={refresh} /></LedgerPage>;
+  if (!character.guild_id) return <LedgerPage bg="/guild_hall_bg.png"><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
 
   const isInExpedition = activeExpedition && members.some(m => m.id === character.id);
 
   return (
-    <LedgerPage>
+    <LedgerPage bg="/guild_hall_bg.png">
       <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""}`}>
 
         {/* Bandeau expédition en cours */}

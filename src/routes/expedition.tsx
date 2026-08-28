@@ -160,12 +160,13 @@ function ExpeditionPage() {
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const canStart = isLeader && participants.length >= 3;
 
-  if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
+  if (!ready) return <LedgerPage bg="/guild_hall_bg.png"><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
   return (
     <LedgerPage>
       {!expedition ? (
-        <LedgerCard title="Nouvelle expédition" subtitle="Définis la taille du groupe cible.">
+        <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.png)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.35}} />
+          <LedgerCard title="Nouvelle expédition" subtitle="Définis la taille du groupe cible.">
           <div className="mb-4">
             <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>
             <div className="flex gap-2 flex-wrap">

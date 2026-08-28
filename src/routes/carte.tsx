@@ -82,10 +82,10 @@ function CartePage() {
 
   const maxGold = Math.max(...guilds.map(g => g.gold), 1);
 
-  if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Consultation du registre…</p></LedgerPage>;
+  if (!ready) return <LedgerPage bg="/world_map_bg.png"><p className="text-center text-sm text-muted-foreground">Consultation du registre…</p></LedgerPage>;
 
   return (
-    <LedgerPage>
+    <LedgerPage bg="/world_map_bg.png">
       <div className="w-full max-w-2xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
