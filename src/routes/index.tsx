@@ -110,9 +110,15 @@ function Index() {
     <LedgerPage>
       {mode === "landing" ? (
         <LedgerCard title="Trust & Greed" subtitle="Un monde de guildes. Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
-          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+          <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
             Forme une guilde. Pars en expédition. À chaque étape, vote en secret : rentrer avec ce que tu as, ou continuer vers plus — au risque de tout perdre. La mort est définitive.
           </p>
+          <div className="mb-6 space-y-1.5 border border-border/20 px-3 py-3 text-xs text-muted-foreground/70">
+            <p>① Crée un compte et choisis un personnage</p>
+            <p>② Fonde ou rejoins une guilde (via code d'invitation)</p>
+            <p>③ Lance une expédition avec au moins 3 membres</p>
+            <p>④ Vote à chaque étape — personne ne sait ce que les autres ont voté</p>
+          </div>
           <div className="space-y-2">
             <button onClick={() => setMode("signup")}
               className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
@@ -149,7 +155,7 @@ function Index() {
 
   return (
     <LedgerPage bg="/guild_hall_bg.png">
-      <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""}`}>
+      <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""} · il faut 3 membres pour partir en expédition`}>
 
         {/* Bandeau expédition en cours */}
         {activeExpedition && (
@@ -327,7 +333,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   }
 
   return (
-    <LedgerCard title={character.name} subtitle="Ton personnage n'appartient à aucune guilde.">
+    <LedgerCard title={character.name} subtitle="Pour rejoindre une guilde, tu as besoin d'un code d'invitation donné par un membre existant.">
       <div className="flex gap-2 mb-6">
         {(["create", "join"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
@@ -378,7 +384,7 @@ function SignUpScreen({ onSwitch, onNotice, notice }: { onSwitch: () => void; on
     setBusy(false);
   }
   return (
-    <LedgerCard title="Inscription" subtitle="Crée ton compte pour rejoindre le registre.">
+    <LedgerCard title="Inscription" subtitle="Gratuit. Ton compte est actif immédiatement.">
       <form onSubmit={submit} noValidate>
         <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Field label="Mot de passe" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -481,7 +487,7 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
   return (
     <LedgerCard
       title={hasDied ? "Ton personnage est mort" : "Créer un personnage"}
-      subtitle={hasDied ? "La mort est définitive. Une nouvelle histoire peut commencer." : "Un seul nom, inscrit à l'encre."}
+      subtitle={hasDied ? "La mort est définitive. Une nouvelle histoire peut commencer." : "Ce nom sera visible de toute la guilde. Choisis bien."}
     >
       {hasDied && (
         <div className="mb-4 px-3 py-3 border border-red-400/30 text-xs text-red-400/70">

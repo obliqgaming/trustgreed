@@ -167,7 +167,7 @@ function ExpeditionPage() {
       {!expedition ? (
         <>
           <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.png)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.35}} />
-          <LedgerCard title="Nouvelle expédition" subtitle="Définis la taille du groupe cible.">
+          <LedgerCard title="Nouvelle expédition" subtitle="Choisis combien de membres peuvent rejoindre. Plus le groupe est grand, plus le butin est élevé — et plus la trahison est possible.">
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>
               <div className="flex gap-2 flex-wrap">
@@ -208,7 +208,7 @@ function ExpeditionPage() {
       ) : (
         <LedgerCard
           title="Salle d'attente"
-          subtitle={`${participants.length} / ${expedition.target_size} · minimum 3 pour lancer`}
+          subtitle={`${participants.length} / ${expedition.target_size} inscrits · en attente que chacun rejoigne depuis la page guilde`}
         >
           <ul className="space-y-1 mb-4">
             {participants.map((p) => (
@@ -234,7 +234,7 @@ function ExpeditionPage() {
             </button>
           )}
           {!isLeader && isParticipant && (
-            <p className="text-center text-xs text-muted-foreground mt-3">En attente du chef de groupe…</p>
+            <p className="text-center text-xs text-muted-foreground mt-3">En attente que le chef lance l'expédition. Les autres membres de ta guilde peuvent encore rejoindre depuis leur page guilde.</p>
           )}
 
           <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>
