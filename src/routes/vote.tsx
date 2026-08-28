@@ -7,7 +7,7 @@ import { PortraitDisplay } from "@/components/portraits";
 export const Route = createFileRoute("/vote")({
   ssr: false,
   validateSearch: (search: Record<string, unknown>) => ({
-    expedition: String(search['expedition'] ?? ""),
+    expedition: String(search.expedition ?? ""),
   }),
   component: VotePage,
 });
@@ -15,19 +15,12 @@ export const Route = createFileRoute("/vote")({
 type Character = { id: string; name: string };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
-  loot_min: number; loot_max: number; vote_deadline: string | null;
+  loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
 
-
-const EVENT_IMAGES: Record<string, string> = {
-  coffre: "/event_coffre.png",
-  gardien: "/event_gardien.png",
-  passage: "/event_passage.png",
-  porte: "/event_porte.png",
-};
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
@@ -51,10 +44,9 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
 };
 
 function getCinematic(eventType: string, hasDeath: boolean): string {
-  const options = CINEMATICS[eventType] ?? CINEMATICS['passage'];
-  if (!options) return "";
+  const options = CINEMATICS[eventType] ?? CINEMATICS.passage;
   const pool = hasDeath ? options.die : options.survive;
-  return pool[Math.floor(Math.random() * pool.length)] ?? "";
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function VotePage() {
@@ -104,8 +96,8 @@ function VotePage() {
   const fetchVotes = useCallback(async (stepId: string) => {
     const { data } = await supabase.from("step_votes").select("character_id").eq("step_id", stepId);
     const ids = (data ?? []).map((v: any) => v.character_id);
-    setVotedIds(ids);
-    // Restaurer myVote au F5
+    // Protéger myVote : si data est null (erreur RLS), ne pas écraser votedIds
+    if (data !== null) setVotedIds(ids);
     if (characterIdRef.current && ids.includes(characterIdRef.current)) {
       setMyVote(prev => prev ?? "voté");
     }
@@ -122,13 +114,15 @@ function VotePage() {
       .maybeSingle();
 
     if (data) {
-      const isNewStep = stepIdRef.current !== data.id;
+      const isNewStep = stepIdRef.current !== null && stepIdRef.current !== data.id;
       if (isNewStep) {
         stepIdRef.current = data.id;
         setMyVote(null);
         setVotedIds([]);
         setCinematic(null);
         setResult(null);
+      } else {
+        stepIdRef.current = data.id;
       }
       setStep(data);
       await fetchVotes(data.id);
@@ -289,7 +283,6 @@ function VotePage() {
   if (result && iDied) {
     return (
       <LedgerPage>
-        <div style={{position:"fixed",inset:0,backgroundImage:"url(/death_screen.png)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.25}} />
         <LedgerCard title="Tu es mort." subtitle="Ton personnage ne reviendra pas.">
           {cinematic && <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed">{cinematic}</p>}
           <div className="mb-6 px-3 py-4 border border-red-400/30 bg-red-400/5">
@@ -315,7 +308,6 @@ function VotePage() {
       : "Le groupe avance.";
     return (
       <LedgerPage>
-        <div style={{position:"fixed",inset:0,backgroundImage:result.deaths > 0 ? "url(/cinematic_death.png)" : result.ended && result.loot > 0 ? "url(/return_success.png)" : result.ended ? "url(/return_wipe.png)" : "none",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.28}} />
         <LedgerCard title={title} subtitle={subtitle}>
           {result.deadNames.length > 0 && (
             <div className="mb-4 px-3 py-2 border border-red-400/20">
@@ -346,17 +338,7 @@ function VotePage() {
       >
         {step && !step.resolved && (
           <>
-            {EVENT_IMAGES[step.event_type] ? (
-              <div className="w-full mb-4 rounded-sm overflow-hidden" style={{height:"280px",position:"relative"}}>
-                <img src={EVENT_IMAGES[step.event_type]} alt={step.event_type}
-                  className="w-full h-full object-cover"
-                  style={{filter: step.risk_level==="eleve" ? "sepia(0.5) hue-rotate(-15deg) brightness(0.8)" : step.risk_level==="moyen" ? "sepia(0.25) brightness(0.85)" : "brightness(0.9)"}} />
-                <div className="absolute inset-0" style={{background:"linear-gradient(to bottom,rgba(18,17,15,0.1) 0%,transparent 25%,rgba(18,17,15,0.95) 100%)"}} />
-                {step.description && (
-                  <p className="absolute bottom-0 left-0 right-0 text-sm text-foreground/90 italic px-4 pb-3 leading-relaxed">{step.description}</p>
-                )}
-              </div>
-            ) : step.description && (
+            {step.description && (
               <p className="text-sm text-muted-foreground italic mb-4 px-1 leading-relaxed">{step.description}</p>
             )}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
@@ -453,7 +435,13 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchMessages]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  const prevMsgCount = useRef(0);
+  useEffect(() => {
+    if (messages.length > prevMsgCount.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMsgCount.current = messages.length;
+  }, [messages]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
