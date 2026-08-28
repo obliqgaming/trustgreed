@@ -7,7 +7,7 @@ import { PortraitDisplay } from "@/components/portraits";
 export const Route = createFileRoute("/vote")({
   ssr: false,
   validateSearch: (search: Record<string, unknown>) => ({
-    expedition: String(search.expedition ?? ""),
+    expedition: String(search['expedition'] ?? ""),
   }),
   component: VotePage,
 });
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/vote")({
 type Character = { id: string; name: string };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
-  loot_min: number; loot_max: number; vote_deadline: string;
+  loot_min: number; loot_max: number; vote_deadline: string | null;
   resolved: boolean; deaths_count: number; description: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string } };
@@ -53,8 +53,9 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
 
 function getCinematic(eventType: string, hasDeath: boolean): string {
   const options = CINEMATICS[eventType] ?? CINEMATICS.passage;
+  if (!options) return "";
   const pool = hasDeath ? options.die : options.survive;
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pool[Math.floor(Math.random() * pool.length)] ?? "";
 }
 
 function VotePage() {

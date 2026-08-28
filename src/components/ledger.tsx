@@ -6,10 +6,12 @@ export function LedgerPage({ children, bg }: { children: ReactNode; bg?: string 
   return (
     <main
       className="min-h-screen w-full bg-background px-4 py-10 sm:py-16"
-      style={bg ? { backgroundImage: `url(${bg})`, backgroundSize: "cover", backgroundPosition: "center" } : {}}
       style={{
-        backgroundImage: `linear-gradient(rgba(18,17,15,0.88), rgba(18,17,15,0.94)), url(${fondwild.url})`,
+        backgroundImage: bg
+          ? `linear-gradient(rgba(18,17,15,0.88), rgba(18,17,15,0.94)), url(${bg})`
+          : `linear-gradient(rgba(18,17,15,0.88), rgba(18,17,15,0.94)), url(${fondwild.url})`,
         backgroundSize: "cover",
+        backgroundPosition: "center",
         backgroundAttachment: "fixed",
       }}
     >
