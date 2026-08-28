@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
+import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -68,6 +69,9 @@ function VotePage() {
   const [pendingReveal, setPendingReveal] = useState(false); // étape résolue, pas encore vue
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tensionRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => { unlockAudio(); return () => { if (tensionRef.current) clearInterval(tensionRef.current); }; }, []);
   const characterIdRef = useRef<string | null>(null);
   const stepIdRef = useRef<string | null>(null);
 
@@ -210,11 +214,13 @@ function VotePage() {
   async function castVote(vote: "continuer" | "rentrer") {
     if (!step || !character || myVote) return;
     setError(null); setBusy(true);
+    if (vote === "continuer") soundVoteContinuer(); else soundVoteRentrer();
     const { error: rpcError } = await supabase.rpc("cast_vote", {
       p_step_id: step.id, p_character_id: character.id, p_vote: vote,
     });
     if (rpcError) { setError(rpcError.message); }
     else {
+      soundVoteEnregistre();
       setMyVote(vote);
       setVotedIds(prev => prev.includes(character.id) ? prev : [...prev, character.id]);
     }
@@ -223,6 +229,7 @@ function VotePage() {
 
   async function resolveStep() {
     if (!step) return;
+    soundRevealClick();
     setBusy(true); setError(null);
     const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
@@ -245,6 +252,7 @@ function VotePage() {
         .from("characters").select("is_alive").eq("id", character.id).maybeSingle();
       if (charData && !charData.is_alive) {
         if (pollRef.current) clearInterval(pollRef.current);
+        soundMaMort();
         setBusy(false);
         setTimeout(() => { setIDied(true); setResult({ deaths: -1, loot: 0, ended: true, deadNames }); }, 2500);
         return;
@@ -254,13 +262,16 @@ function VotePage() {
     const { data: exp } = await supabase
       .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
 
+    if (exp?.status === "completed" && (exp.total_loot_kept ?? 0) > 0) soundRetourVictoire();
+    else if (exp?.status === "completed") soundRetourWipe();
+    else if (deaths > 0) soundMortMembre();
+    else soundSurvived();
+
     setTimeout(() => {
       setCinematic(null);
-      setPendingReveal(true); // tout le monde voit l'écran "voir le résultat"
+      setPendingReveal(true);
     }, 2500);
 
-    // Stocker les données du résultat pour quand le joueur clique
-    // On les met dans le state mais sans afficher encore
     if (exp?.status === "completed") {
       if (pollRef.current) clearInterval(pollRef.current);
       setResult({ deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, deadNames });
@@ -276,6 +287,8 @@ function VotePage() {
   const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !cinematic;
+  const prevAllVoted = useRef(false);
+  useEffect(() => { if (allVoted && !prevAllVoted.current) soundAllVoted(); prevAllVoted.current = allVoted; }, [allVoted]);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
@@ -455,6 +468,9 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tensionRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => { unlockAudio(); return () => { if (tensionRef.current) clearInterval(tensionRef.current); }; }, []);
 
   const fetchMessages = useCallback(async () => {
     const { data } = await supabase
