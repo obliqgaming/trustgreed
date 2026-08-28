@@ -107,7 +107,7 @@ function Index() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
   if (!session) return (
-    <LedgerPage>
+    <LedgerPage bg="/landing_bg.png">
       {mode === "landing" ? (
         <LedgerCard title="Trust & Greed" subtitle="Un monde de guildes. Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
           <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
