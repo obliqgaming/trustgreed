@@ -503,3 +503,76 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
+function DeadScreen({ onDone }: { onDone: () => Promise<void> }) {
+  return <CreateOrReviveScreen onDone={onDone} />;
+}
+  const [hasDied, setHasDied] = useState<boolean | null>(null);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from("characters")
+        .select("id")
+        .eq("profile_id", session.user.id)
+        .eq("is_alive", false)
+        .limit(1)
+        .maybeSingle();
+      setHasDied(!!data);
+    })();
+  }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("create_character", { p_name: name });
+    if (rpcError) setError(rpcError.message); else await onDone();
+    setBusy(false);
+  }
+
+  if (hasDied === null) return null;
+
+  return (
+    <LedgerCard
+      title={hasDied ? "Ton personnage est mort" : "Créer un personnage"}
+      subtitle={hasDied
+        ? "La mort est définitive. Ton histoire s'arrête ici. Une nouvelle peut commencer."
+        : "Un seul nom, inscrit à l'encre."}
+    >
+      {hasDied && (
+        <div className="mb-4 px-3 py-3 border border-red-400/30 text-xs text-red-400/70">
+          Ton personnage ne reviendra pas. Tu peux en créer un nouveau et rejoindre ou fonder une nouvelle guilde.
+        </div>
+      )}
+      <form onSubmit={submit} noValidate>
+        <Field label="Nom du nouveau personnage" required value={name} onChange={(e) => setName(e.target.value)} />
+        <LedgerError message={error} />
+        <SealButton type="submit" disabled={busy}>{busy ? "Inscription…" : "Inscrire au registre"}</SealButton>
+      </form>
+      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
+    </LedgerCard>
+  );
+}
+
+function CreateCharacterScreen({ onDone }: { onDone: () => Promise<void> }) {
+  const [name, setName] = useState(""); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("create_character", { p_name: name });
+    if (rpcError) setError(rpcError.message); else await onDone();
+    setBusy(false);
+  }
+  return (
+    <LedgerCard title="Créer un personnage" subtitle="Un seul nom, inscrit à l'encre.">
+      <form onSubmit={submit} noValidate>
+        <Field label="Nom du personnage" required value={name} onChange={(e) => setName(e.target.value)} />
+        <LedgerError message={error} />
+        <SealButton type="submit" disabled={busy}>{busy ? "Inscription…" : "Inscrire au registre"}</SealButton>
+      </form>
+      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
+    </LedgerCard>
+  );
+}
