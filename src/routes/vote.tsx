@@ -65,6 +65,7 @@ function VotePage() {
   const [cinematic, setCinematic] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [iDied, setIDied] = useState(false);
+  const [pendingReveal, setPendingReveal] = useState(false); // étape résolue, pas encore vue
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const characterIdRef = useRef<string | null>(null);
@@ -121,11 +122,18 @@ function VotePage() {
         setVotedIds([]);
         setCinematic(null);
         setResult(null);
+        setPendingReveal(false);
+        setIDied(false);
       } else {
         stepIdRef.current = data.id;
       }
       setStep(data);
       await fetchVotes(data.id);
+
+      // Si l'étape est résolue et qu'on n'a pas encore vu le résultat, signaler
+      if (data.resolved && !result && !cinematic) {
+        setPendingReveal(true);
+      }
 
       // Vérifier si expédition terminée
       if (data.resolved) {
@@ -248,13 +256,17 @@ function VotePage() {
 
     setTimeout(() => {
       setCinematic(null);
-      if (exp?.status === "completed") {
-        if (pollRef.current) clearInterval(pollRef.current);
-        setResult({ deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, deadNames });
-      } else {
-        setResult({ deaths, loot: 0, ended: false, deadNames });
-      }
+      setPendingReveal(true); // tout le monde voit l'écran "voir le résultat"
     }, 2500);
+
+    // Stocker les données du résultat pour quand le joueur clique
+    // On les met dans le state mais sans afficher encore
+    if (exp?.status === "completed") {
+      if (pollRef.current) clearInterval(pollRef.current);
+      setResult({ deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, deadNames });
+    } else {
+      setResult({ deaths, loot: 0, ended: false, deadNames });
+    }
 
     setBusy(false);
   }
@@ -269,6 +281,31 @@ function VotePage() {
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
   // Cinématique
+  // Écran intermédiaire : l'étape est résolue, chaque joueur confirme individuellement
+  if (pendingReveal && !cinematic) {
+    return (
+      <LedgerPage>
+        <LedgerCard title="Résultat disponible" subtitle="L'étape a été résolue.">
+          <p className="text-sm text-muted-foreground mb-6 text-center">
+            Prêt à voir ce qui s'est passé ?
+          </p>
+          <button
+            onClick={() => {
+              setPendingReveal(false);
+              // Si pas encore de cinématique, en générer une maintenant
+              if (step && !cinematic) {
+                const hasDeath = (result?.deaths ?? 0) > 0 || iDied;
+                setCinematic(getCinematic(step.event_type, hasDeath));
+              }
+            }}
+            className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
+            Révéler
+          </button>
+        </LedgerCard>
+      </LedgerPage>
+    );
+  }
+
   if (cinematic && !result) {
     return (
       <LedgerPage>
