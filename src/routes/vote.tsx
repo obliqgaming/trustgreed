@@ -6,7 +6,7 @@ import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
 export const Route = createFileRoute("/vote")({
   ssr: false,
   validateSearch: (search: Record<string, unknown>) => ({
-    expedition: String(search['expedition'] ?? ""),
+    expedition: String(search.expedition ?? ""),
   }),
   component: VotePage,
 });
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/vote")({
 type Character = { id: string; name: string };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
-  loot_min: number; loot_max: number; vote_deadline: string | null;
+  loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null;
 };
 type Participant = { character_id: string; character: { name: string } };
@@ -37,25 +37,25 @@ function VotePage() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
-
-  const stepIdRef = useRef<string | null>(null);
-  const characterIdRef = useRef<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const characterIdRef = useRef<string | null>(null);
 
-  const loadVotedIds = useCallback(async (stepId: string, charId?: string) => {
+  // Charge les votes pour un step donné
+  const fetchVotes = useCallback(async (stepId: string) => {
     const { data } = await supabase
       .from("step_votes")
       .select("character_id")
       .eq("step_id", stepId);
     const ids = (data ?? []).map((v: any) => v.character_id);
     setVotedIds(ids);
-    // Restaurer myVote si déjà voté (survit au F5)
-    const cid = charId ?? characterIdRef.current;
-    if (cid && ids.includes(cid)) setMyVote("voté");
+    if (characterIdRef.current && ids.includes(characterIdRef.current)) {
+      setMyVote(prev => prev ?? "voté");
+    }
     return ids;
   }, []);
 
-  const loadStep = useCallback(async (charId?: string) => {
+  // Charge la dernière étape
+  const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
       .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description")
@@ -63,27 +63,21 @@ function VotePage() {
       .order("step_number", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     if (data) {
-      const isNew = stepIdRef.current !== data.id;
-      stepIdRef.current = data.id;
-      setStep(data);
-      if (isNew) {
-        setMyVote(null);
-        setVotedIds([]);
-      }
-      await loadVotedIds(data.id, charId);
+      setStep(prev => {
+        if (prev?.id !== data.id) setMyVote(null);
+        return data;
+      });
+      await fetchVotes(data.id);
     }
     return data;
-  }, [expeditionId, loadVotedIds]);
+  }, [expeditionId, fetchVotes]);
 
-  // Poll léger toutes les 8 secondes — fallback si Realtime manque un événement
-  const startPoll = useCallback((charId: string) => {
+  // Poll toutes les 5 secondes — simple et fiable
+  const startPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => {
-      if (stepIdRef.current) void loadVotedIds(stepIdRef.current, charId);
-    }, 8000);
-  }, [loadVotedIds]);
+    pollRef.current = setInterval(() => { void fetchStep(); }, 5000);
+  }, [fetchStep]);
 
   useEffect(() => {
     void (async () => {
@@ -103,42 +97,17 @@ function VotePage() {
         .eq("expedition_id", expeditionId);
       const partList = (parts as any) ?? [];
       setParticipants(partList);
-      if (!partList.some((p: any) => p.character_id === char.id)) { navigate({ to: "/" }); return; }
+      if (!partList.some((p: any) => p.character_id === char.id)) {
+        navigate({ to: "/" }); return;
+      }
 
-      await loadStep(char.id);
+      await fetchStep();
       setReady(true);
-      startPoll(char.id);
-
-      const channel = supabase.channel(`exp_${expeditionId}`)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "step_votes" },
-          (payload) => {
-            if ((payload.new as any).step_id === stepIdRef.current) {
-              setVotedIds(prev => {
-                const cid = (payload.new as any).character_id;
-                return prev.includes(cid) ? prev : [...prev, cid];
-              });
-            }
-          })
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "expedition_steps",
-            filter: `expedition_id=eq.${expeditionId}` },
-          () => { void loadStep(char.id); })
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "expeditions",
-            filter: `id=eq.${expeditionId}` },
-          async (payload) => {
-            if ((payload.new as any)?.status === "completed") {
-              const loot = Math.round((payload.new as any)?.total_loot_kept ?? 0);
-              setResult({ deaths: 0, loot, ended: true });
-              if (pollRef.current) clearInterval(pollRef.current);
-            }
-          })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-        if (pollRef.current) clearInterval(pollRef.current);
-      };
+      startPoll();
     })();
-  }, [expeditionId, navigate, loadStep, startPoll]);
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [expeditionId, navigate, fetchStep, startPoll]);
 
   // Minuteur
   useEffect(() => {
@@ -175,12 +144,12 @@ function VotePage() {
     const { data: exp } = await supabase
       .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
 
-    setResult({
-      deaths: resolvedStep?.deaths_count ?? 0,
-      loot: Math.round(exp?.total_loot_kept ?? 0),
-      ended: exp?.status === "completed",
-    });
-    if (pollRef.current) clearInterval(pollRef.current);
+    if (exp?.status === "completed") {
+      if (pollRef.current) clearInterval(pollRef.current);
+      setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: Math.round(exp.total_loot_kept ?? 0), ended: true });
+    } else {
+      setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: 0, ended: false });
+    }
     setBusy(false);
   }
 
@@ -195,21 +164,18 @@ function VotePage() {
     const title = result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
     const subtitle = result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
-      : result.deaths > 0 ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri. L'expédition continue.`
-      : "Le groupe avance. Une nouvelle épreuve les attend.";
+      : result.deaths > 0 ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri.`
+      : "Le groupe avance.";
     return (
       <LedgerPage>
         <LedgerCard title={title} subtitle={subtitle}>
-          {result.deaths > 0 && !result.ended && (
-            <p className="text-sm text-red-400/80 mb-4">La guilde porte le poids de cette perte.</p>
-          )}
           {result.ended ? (
             <button onClick={() => navigate({ to: "/" })}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Retour à la guilde
             </button>
           ) : (
-            <button onClick={() => { setResult(null); void loadStep(); }}
+            <button onClick={() => { setResult(null); void fetchStep(); }}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Étape suivante
             </button>
@@ -273,8 +239,6 @@ function VotePage() {
                 {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
-            <ChatBox expeditionId={expeditionId} character={character} />
-
             <div className="mt-4 border-t border-border/20 pt-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <ul className="space-y-1">
@@ -289,6 +253,7 @@ function VotePage() {
                 ))}
               </ul>
             </div>
+            <ChatBox expeditionId={expeditionId} character={character} />
           </>
         )}
       </LedgerCard>
@@ -303,34 +268,23 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchMessages = useCallback(async () => {
+    const { data } = await supabase
+      .from("expedition_chat_messages")
+      .select("id, character_id, message, created_at, character:characters(name)")
+      .eq("expedition_id", expeditionId)
+      .order("created_at", { ascending: true })
+      .limit(50);
+    setMessages((data as any) ?? []);
+  }, [expeditionId]);
 
   useEffect(() => {
-    void (async () => {
-      const { data } = await supabase
-        .from("expedition_chat_messages")
-        .select("id, character_id, message, created_at, character:characters(name)")
-        .eq("expedition_id", expeditionId)
-        .order("created_at", { ascending: true })
-        .limit(50);
-      setMessages((data as any) ?? []);
-    })();
-
-    const channel = supabase.channel(`chat_${expeditionId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "expedition_chat_messages",
-          filter: `expedition_id=eq.${expeditionId}` },
-        async () => {
-          const { data } = await supabase
-            .from("expedition_chat_messages")
-            .select("id, character_id, message, created_at, character:characters(name)")
-            .eq("expedition_id", expeditionId)
-            .order("created_at", { ascending: true })
-            .limit(50);
-          setMessages((data as any) ?? []);
-        })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [expeditionId]);
+    void fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [fetchMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -341,11 +295,10 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
     if (!text.trim() || !character || busy) return;
     setBusy(true);
     await supabase.from("expedition_chat_messages").insert({
-      expedition_id: expeditionId,
-      character_id: character.id,
-      message: text.trim(),
+      expedition_id: expeditionId, character_id: character.id, message: text.trim(),
     });
     setText("");
+    await fetchMessages();
     setBusy(false);
   }
 
@@ -353,25 +306,21 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
     <div className="mt-4 border-t border-border/20 pt-4">
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
       <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
-        {messages.length === 0 ? (
-          <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
-        ) : messages.map((m) => (
-          <div key={m.id} className={`text-xs ${m.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
-            <span className="font-semibold">{(m.character as any)?.name ?? "?"}</span>
-            <span className="mx-1 opacity-40">·</span>
-            <span>{m.message}</span>
-          </div>
-        ))}
+        {messages.length === 0
+          ? <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
+          : messages.map((m) => (
+            <div key={m.id} className={`text-xs ${m.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
+              <span className="font-semibold">{(m.character as any)?.name ?? "?"}</span>
+              <span className="mx-1 opacity-40">·</span>
+              <span>{m.message}</span>
+            </div>
+          ))}
         <div ref={bottomRef} />
       </div>
       <form onSubmit={send} className="flex gap-2">
-        <input
-          value={text}
-          onChange={e => setText(e.target.value)}
-          maxLength={200}
+        <input value={text} onChange={e => setText(e.target.value)} maxLength={200}
           placeholder="Écris quelque chose…"
-          className="flex-1 bg-transparent border border-border/40 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40"
-        />
+          className="flex-1 bg-transparent border border-border/40 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40" />
         <button type="submit" disabled={busy || !text.trim()}
           className="px-3 py-1.5 text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-30">
           Envoyer
