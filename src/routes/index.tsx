@@ -103,6 +103,8 @@ function Index() {
     return () => { supabase.removeChannel(channel); };
   }, [guild?.id, refresh]);
 
+  useEffect(() => { void refresh(); }, [refresh]);
+
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
   if (!session) return (
     <LedgerPage>
