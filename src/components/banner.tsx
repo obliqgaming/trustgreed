@@ -50,7 +50,7 @@ export function GuildBanner({
     <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"
       style={{ borderRadius: 2, border: "1px solid rgba(184,148,77,0.3)" }}>
       <rect width="100" height="100" fill={bgColor} />
-      <path d={sym.path} fill={symbolColor} fillRule="evenodd" opacity="0.9" />
+      <path d={sym?.path ?? ""} fill={symbolColor} fillRule="evenodd" opacity="0.9" />
     </svg>
   );
 }
