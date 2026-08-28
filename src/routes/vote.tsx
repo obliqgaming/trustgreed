@@ -76,7 +76,19 @@ function VotePage() {
   // Poll toutes les 5 secondes — simple et fiable
   const startPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => { void fetchStep(); }, 5000);
+    pollRef.current = setInterval(async () => {
+      // Vérifier d'abord si ce joueur est toujours vivant
+      if (characterIdRef.current) {
+        const { data: charData } = await supabase
+          .from("characters").select("is_alive").eq("id", characterIdRef.current).maybeSingle();
+        if (charData && !charData.is_alive) {
+          clearInterval(pollRef.current!);
+          setResult({ deaths: -1, loot: 0, ended: true });
+          return;
+        }
+      }
+      void fetchStep();
+    }, 5000);
   }, [fetchStep]);
 
   useEffect(() => {
@@ -144,6 +156,18 @@ function VotePage() {
     const { data: exp } = await supabase
       .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
 
+    // Vérifier si CE joueur est mort pendant cette étape
+    if (character) {
+      const { data: charData } = await supabase
+        .from("characters").select("is_alive").eq("id", character.id).maybeSingle();
+      if (charData && !charData.is_alive) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setResult({ deaths: -1, loot: 0, ended: true }); // -1 = signal "je suis mort"
+        setBusy(false);
+        return;
+      }
+    }
+
     if (exp?.status === "completed") {
       if (pollRef.current) clearInterval(pollRef.current);
       setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: Math.round(exp.total_loot_kept ?? 0), ended: true });
@@ -161,6 +185,26 @@ function VotePage() {
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
   if (result) {
+    // Écran spécial : CE joueur est mort
+    if (result.deaths === -1) {
+      return (
+        <LedgerPage>
+          <LedgerCard title="Tu es mort." subtitle="Ton personnage ne reviendra pas.">
+            <div className="mb-6 px-3 py-4 border border-red-400/30 bg-red-400/5">
+              <p className="text-sm text-red-400/80 leading-relaxed">
+                Le sort t'a désigné. Ton histoire s'arrête ici, dans l'obscurité de cette expédition.
+                Ton nom restera dans l'historique de la guilde.
+              </p>
+            </div>
+            <button onClick={() => navigate({ to: "/" })}
+              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-red-400/40 text-red-400/70 hover:bg-red-400/10">
+              Quitter l'expédition
+            </button>
+          </LedgerCard>
+        </LedgerPage>
+      );
+    }
+
     const title = result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
     const subtitle = result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
