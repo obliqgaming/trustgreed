@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
+import { PortraitDisplay } from "@/components/portraits";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -17,11 +18,69 @@ type Step = {
   loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null;
 };
-type Participant = { character_id: string; character: { name: string } };
-type Result = { deaths: number; loot: number; ended: boolean };
+type Participant = { character_id: string; character: { name: string; portrait: string } };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
+
+// Textes de cinématique selon le type d'événement et le résultat
+const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
+  coffre: {
+    survive: [
+      "Le couvercle cède dans un grincement sourd. Ce qui brille à l'intérieur vaut le risque pris.",
+      "Vos mains tremblent en fouillant le contenu. Vous repartez plus riches.",
+      "Le coffre s'ouvre. Personne ne parle. On compte, on prend, on avance.",
+    ],
+    die: [
+      "Le piège se déclenche avant que quiconque ait pu réagir.",
+      "Le coffre était pris. Quelqu'un l'a appris trop tard.",
+      "Un mécanisme invisible. Une fraction de seconde. Trop tard.",
+    ],
+  },
+  gardien: {
+    survive: [
+      "Le combat est court. Brutal. Le groupe continue, essoufflé.",
+      "Il tombe. Vous passez. On ne regarde pas en arrière.",
+      "Il n'était pas seul. Mais vous, si. Vous repartez quand même.",
+    ],
+    die: [
+      "Le gardien était plus rapide qu'il n'en avait l'air.",
+      "La formation s'effondre. L'un d'eux ne se relève pas.",
+      "Il n'a fallu qu'une ouverture. Une seule.",
+    ],
+  },
+  passage: {
+    survive: [
+      "Le passage est étroit, instable. Vous traversez. Tous.",
+      "Le vide en dessous. Les mains qui s'agrippent. Ça tient.",
+      "De l'autre côté, enfin. Le groupe reprend son souffle.",
+    ],
+    die: [
+      "Une planche cède. Un cri. Puis le silence.",
+      "Le passage ne tenait qu'à un fil. Ce fil a rompu.",
+      "On n'entend rien après la chute. On continue.",
+    ],
+  },
+  porte: {
+    survive: [
+      "La porte s'ouvre. Ce qu'il y a derrière valait le détour.",
+      "Le verrou saute. La pièce est vide, sauf pour ce qu'on cherchait.",
+      "On passe. La porte se referme derrière. On ne reviendra pas.",
+    ],
+    die: [
+      "Ce qui était derrière la porte n'attendait que ça.",
+      "La porte s'est ouverte. Elle n'aurait pas dû.",
+      "On pensait savoir. On avait tort.",
+    ],
+  },
+};
+
+function getCinematic(eventType: string, hasDeath: boolean): string {
+  const options = CINEMATICS[eventType] ?? CINEMATICS.passage;
+  const pool = hasDeath ? options.die : options.survive;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 function VotePage() {
   const navigate = useNavigate();
@@ -36,16 +95,13 @@ function VotePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [cinematic, setCinematic] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const characterIdRef = useRef<string | null>(null);
 
-  // Charge les votes pour un step donné
   const fetchVotes = useCallback(async (stepId: string) => {
-    const { data } = await supabase
-      .from("step_votes")
-      .select("character_id")
-      .eq("step_id", stepId);
+    const { data } = await supabase.from("step_votes").select("character_id").eq("step_id", stepId);
     const ids = (data ?? []).map((v: any) => v.character_id);
     setVotedIds(ids);
     if (characterIdRef.current && ids.includes(characterIdRef.current)) {
@@ -54,7 +110,24 @@ function VotePage() {
     return ids;
   }, []);
 
-  // Charge la dernière étape
+  // Recharge les participants VIVANTS (crucial après une mort)
+  const fetchParticipants = useCallback(async () => {
+    const { data } = await supabase
+      .from("expedition_participants")
+      .select("character_id, character:characters(name, portrait)")
+      .eq("expedition_id", expeditionId);
+    // Filtrer uniquement les vivants pour le comptage des votes
+    const { data: aliveChars } = await supabase
+      .from("characters")
+      .select("id")
+      .eq("is_alive", true)
+      .in("id", (data ?? []).map((p: any) => p.character_id));
+    const aliveIds = new Set((aliveChars ?? []).map((c: any) => c.id));
+    // Garder tous les participants pour l'affichage, mais marquer les morts
+    setParticipants((data as any) ?? []);
+    return aliveIds;
+  }, [expeditionId]);
+
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
@@ -65,7 +138,7 @@ function VotePage() {
       .maybeSingle();
     if (data) {
       setStep(prev => {
-        if (prev?.id !== data.id) setMyVote(null);
+        if (prev?.id !== data.id) { setMyVote(null); setVotedIds([]); }
         return data;
       });
       await fetchVotes(data.id);
@@ -73,23 +146,22 @@ function VotePage() {
     return data;
   }, [expeditionId, fetchVotes]);
 
-  // Poll toutes les 5 secondes — simple et fiable
   const startPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
-      // Vérifier d'abord si ce joueur est toujours vivant
       if (characterIdRef.current) {
         const { data: charData } = await supabase
           .from("characters").select("is_alive").eq("id", characterIdRef.current).maybeSingle();
         if (charData && !charData.is_alive) {
           clearInterval(pollRef.current!);
-          setResult({ deaths: -1, loot: 0, ended: true });
+          setResult({ deaths: -1, loot: 0, ended: true, deadNames: [] });
           return;
         }
       }
+      await fetchParticipants();
       void fetchStep();
     }, 5000);
-  }, [fetchStep]);
+  }, [fetchStep, fetchParticipants]);
 
   useEffect(() => {
     void (async () => {
@@ -103,23 +175,21 @@ function VotePage() {
       setCharacter(char);
       characterIdRef.current = char.id;
 
-      const { data: parts } = await supabase
+      await fetchParticipants();
+      const partCheck = await supabase
         .from("expedition_participants")
-        .select("character_id, character:characters(name)")
-        .eq("expedition_id", expeditionId);
-      const partList = (parts as any) ?? [];
-      setParticipants(partList);
-      if (!partList.some((p: any) => p.character_id === char.id)) {
-        navigate({ to: "/" }); return;
-      }
+        .select("character_id")
+        .eq("expedition_id", expeditionId)
+        .eq("character_id", char.id)
+        .maybeSingle();
+      if (!partCheck.data) { navigate({ to: "/" }); return; }
 
       await fetchStep();
       setReady(true);
       startPoll();
     })();
-
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [expeditionId, navigate, fetchStep, startPoll]);
+  }, [expeditionId, navigate, fetchStep, fetchParticipants, startPoll]);
 
   // Minuteur
   useEffect(() => {
@@ -153,58 +223,95 @@ function VotePage() {
 
     const { data: resolvedStep } = await supabase
       .from("expedition_steps").select("deaths_count").eq("id", step.id).maybeSingle();
-    const { data: exp } = await supabase
-      .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
+    const deaths = resolvedStep?.deaths_count ?? 0;
 
-    // Vérifier si CE joueur est mort pendant cette étape
+    // Récupérer les noms des morts
+    const { data: deadChars } = await supabase
+      .from("characters").select("name")
+      .eq("died_in_expedition_id", expeditionId)
+      .eq("is_alive", false);
+    const deadNames = (deadChars ?? []).map((c: any) => c.name);
+
+    // Cinématique
+    setCinematic(getCinematic(step.event_type, deaths > 0));
+
+    // Vérifier si CE joueur est mort
     if (character) {
       const { data: charData } = await supabase
         .from("characters").select("is_alive").eq("id", character.id).maybeSingle();
       if (charData && !charData.is_alive) {
         if (pollRef.current) clearInterval(pollRef.current);
-        setResult({ deaths: -1, loot: 0, ended: true }); // -1 = signal "je suis mort"
         setBusy(false);
+        // Afficher la cinématique puis l'écran de mort
+        setTimeout(() => setResult({ deaths: -1, loot: 0, ended: true, deadNames }), 2500);
         return;
       }
     }
 
-    if (exp?.status === "completed") {
-      if (pollRef.current) clearInterval(pollRef.current);
-      setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: Math.round(exp.total_loot_kept ?? 0), ended: true });
-    } else {
-      setResult({ deaths: resolvedStep?.deaths_count ?? 0, loot: 0, ended: false });
-    }
+    const { data: exp } = await supabase
+      .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
+
+    setTimeout(() => {
+      setCinematic(null);
+      if (exp?.status === "completed") {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setResult({ deaths, loot: Math.round(exp.total_loot_kept ?? 0), ended: true, deadNames });
+      } else {
+        setResult({ deaths, loot: 0, ended: false, deadNames });
+      }
+    }, 2500);
+
     setBusy(false);
   }
 
-  const allVoted = participants.length > 0 && votedIds.length >= participants.length;
+  // Participants vivants pour le comptage
+  const aliveParticipantIds = participants
+    .filter(p => !result) // simplification : on considère tous vivants pendant le vote
+    .map(p => p.character_id);
+
+  // Pour le vrai comptage, utiliser les votedIds vs participants total
+  const allVoted = participants.length > 0 && votedIds.length >= participants.filter(p => true).length;
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
-  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy;
+  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !cinematic;
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
-  if (result) {
-    // Écran spécial : CE joueur est mort
-    if (result.deaths === -1) {
-      return (
-        <LedgerPage>
-          <LedgerCard title="Tu es mort." subtitle="Ton personnage ne reviendra pas.">
-            <div className="mb-6 px-3 py-4 border border-red-400/30 bg-red-400/5">
-              <p className="text-sm text-red-400/80 leading-relaxed">
-                Le sort t'a désigné. Ton histoire s'arrête ici, dans l'obscurité de cette expédition.
-                Ton nom restera dans l'historique de la guilde.
-              </p>
-            </div>
-            <button onClick={() => navigate({ to: "/" })}
-              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-red-400/40 text-red-400/70 hover:bg-red-400/10">
-              Quitter l'expédition
-            </button>
-          </LedgerCard>
-        </LedgerPage>
-      );
-    }
+  // Écran de cinématique
+  if (cinematic && !result) {
+    return (
+      <LedgerPage>
+        <LedgerCard title="" subtitle="">
+          <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">
+            {cinematic}
+          </p>
+        </LedgerCard>
+      </LedgerPage>
+    );
+  }
 
+  // Écran mort personnelle
+  if (result?.deaths === -1) {
+    return (
+      <LedgerPage>
+        <LedgerCard title="Tu es mort." subtitle="Ton personnage ne reviendra pas.">
+          {cinematic && <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed">{cinematic}</p>}
+          <div className="mb-6 px-3 py-4 border border-red-400/30 bg-red-400/5">
+            <p className="text-sm text-red-400/80 leading-relaxed">
+              Le sort t'a désigné. Ton histoire s'arrête ici. Ton nom restera dans l'historique de la guilde.
+            </p>
+          </div>
+          <button onClick={() => navigate({ to: "/" })}
+            className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-red-400/40 text-red-400/70 hover:bg-red-400/10">
+            Quitter l'expédition
+          </button>
+        </LedgerCard>
+      </LedgerPage>
+    );
+  }
+
+  // Écran résultat normal
+  if (result) {
     const title = result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
     const subtitle = result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
@@ -213,13 +320,20 @@ function VotePage() {
     return (
       <LedgerPage>
         <LedgerCard title={title} subtitle={subtitle}>
+          {result.deadNames.length > 0 && (
+            <div className="mb-4 px-3 py-2 border border-red-400/20">
+              {result.deadNames.map(n => (
+                <p key={n} className="text-xs text-red-400/70">✝ {n}</p>
+              ))}
+            </div>
+          )}
           {result.ended ? (
             <button onClick={() => navigate({ to: "/" })}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Retour à la guilde
             </button>
           ) : (
-            <button onClick={() => { setResult(null); void fetchStep(); }}
+            <button onClick={() => { setResult(null); setCinematic(null); void fetchStep(); }}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Étape suivante
             </button>
@@ -283,14 +397,18 @@ function VotePage() {
                 {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
+            {/* Portraits + liste groupe */}
             <div className="mt-4 border-t border-border/20 pt-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
-              <ul className="space-y-1">
+              <ul className="space-y-1.5">
                 {participants.map((p) => (
                   <li key={p.character_id}
-                    className={`flex justify-between px-3 py-1.5 text-xs border ${p.character_id === character?.id ? "border-primary/40 text-primary" : "border-border/20 text-muted-foreground"}`}>
-                    <span>{(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}</span>
-                    <span className={votedIds.includes(p.character_id) ? "text-primary" : ""}>
+                    className={`flex items-center gap-2 px-2 py-1.5 border ${p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
+                    <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={28} />
+                    <span className={`text-xs flex-1 ${p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
+                      {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
+                    </span>
+                    <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
                       {votedIds.includes(p.character_id) ? "✓" : "…"}
                     </span>
                   </li>
@@ -342,7 +460,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
       expedition_id: expeditionId, character_id: character.id, message: text.trim(),
     });
     setText("");
-    await fetchMessages();
+    await fetchMessages(); // refetch immédiat après envoi
     setBusy(false);
   }
 
