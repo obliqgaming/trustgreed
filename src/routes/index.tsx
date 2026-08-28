@@ -4,7 +4,6 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
-import { GuildBanner, BannerPicker } from "@/components/banner";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -12,7 +11,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
-type Guild = { id: string; name: string; gold: number };
+type Guild = { id: string; name: string; gold: number; banner_symbol?: string; banner_color?: string; banner_bg?: string };
 type Member = { id: string; name: string; level: number };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
 type ActiveExpedition = { id: string; status: string; participant_count: number } | null;
@@ -57,7 +56,7 @@ function Index() {
     setCharacter(char ?? null);
 
     if (char?.guild_id) {
-      const { data: g } = await supabase.from("guilds").select("id, name, gold").eq("id", char.guild_id).maybeSingle();
+      const { data: g } = await supabase.from("guilds").select("id, name, gold, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle();
       setGuild(g ?? null);
 
       const { data: m } = await supabase.from("characters").select("id, name, level").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
@@ -151,11 +150,6 @@ function Index() {
   return (
     <LedgerPage>
       <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""}`}>
-        {guild && (
-          <div className="flex items-center gap-3 mb-4">
-            <GuildBanner symbol={(guild as any).banner_symbol} symbolColor={(guild as any).banner_color} bgColor={(guild as any).banner_bg} size={48} />
-          </div>
-        )}
 
         {/* Bandeau expédition en cours */}
         {activeExpedition && (
@@ -233,7 +227,6 @@ function Index() {
         )}
 
         <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
-          <BannerConfigButton guild={guild} character={character} onDone={refresh} />
           <button onClick={() => navigate({ to: "/profil" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Mon profil
@@ -297,57 +290,6 @@ function LeaveGuildButton({ character, onDone }: { character: Character; onDone:
     </div>
   );
 }
-
-function BannerConfigButton({ guild, character, onDone }: { guild: Guild | null; character: Character; onDone: () => Promise<void> }) {
-  const [open, setOpen] = useState(false);
-  const [symbol, setSymbol] = useState((guild as any)?.banner_symbol ?? "shield");
-  const [symbolColor, setSymbolColor] = useState((guild as any)?.banner_color ?? "#B8944D");
-  const [bgColor, setBgColor] = useState((guild as any)?.banner_bg ?? "#1a1915");
-  const [busy, setBusy] = useState(false);
-
-  // Vérifier si ce joueur est le fondateur
-  const { data: session } = { data: null }; // sera évalué dynamiquement
-
-  async function save() {
-    if (!guild) return;
-    setBusy(true);
-    await supabase.from("guilds").update({
-      banner_symbol: symbol,
-      banner_color: symbolColor,
-      banner_bg: bgColor,
-    }).eq("id", guild.id);
-    await onDone();
-    setOpen(false);
-    setBusy(false);
-  }
-
-  if (!open) return (
-    <button onClick={() => setOpen(true)}
-      className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
-      Configurer la bannière
-    </button>
-  );
-
-  return (
-    <div className="border border-border/30 px-3 py-4 mt-2">
-      <BannerPicker
-        symbol={symbol} symbolColor={symbolColor} bgColor={bgColor}
-        onChange={(s, sc, bg) => { setSymbol(s); setSymbolColor(sc); setBgColor(bg); }}
-      />
-      <div className="flex gap-2 mt-4">
-        <button onClick={save} disabled={busy}
-          className="flex-1 text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary py-2 hover:bg-primary/10 disabled:opacity-30">
-          {busy ? "Sauvegarde…" : "Sauvegarder"}
-        </button>
-        <button onClick={() => setOpen(false)}
-          className="flex-1 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground py-2 hover:bg-border/10">
-          Annuler
-        </button>
-      </div>
-    </div>
-  );
-}
-
 
 function GuildScreen({ character, onDone }: { character: Character; onDone: () => Promise<void> }) {
   const [guilds, setGuilds] = useState<(Guild & { member_count: number })[]>([]);
