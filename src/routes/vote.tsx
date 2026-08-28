@@ -52,7 +52,7 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
 };
 
 function getCinematic(eventType: string, hasDeath: boolean): string {
-  const options = CINEMATICS[eventType] ?? CINEMATICS.passage;
+  const options = CINEMATICS[eventType] ?? CINEMATICS['passage'];
   if (!options) return "";
   const pool = hasDeath ? options.die : options.survive;
   return pool[Math.floor(Math.random() * pool.length)] ?? "";
