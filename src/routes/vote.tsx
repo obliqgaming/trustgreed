@@ -28,7 +28,6 @@ const EVENT_IMAGES: Record<string, string> = {
   passage: "/event_passage.png",
   porte: "/event_porte.png",
 };
-
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
@@ -276,10 +275,8 @@ function VotePage() {
 
   // Cinématique
   if (cinematic && !result) {
-    const isDeathCinematic = result === null;
     return (
       <LedgerPage>
-        <div style={{position:"fixed",inset:0,backgroundImage:`url(/guild_hall_bg.png)`,backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.3}} />
         <LedgerCard title="" subtitle="">
           <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">{cinematic}</p>
         </LedgerCard>
@@ -310,7 +307,6 @@ function VotePage() {
 
   // Résultat normal
   if (result) {
-    const resultBg = result.ended && result.loot > 0 ? "/return_success.png" : result.ended ? "/return_wipe.png" : null;
     const title = result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
     const subtitle = result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
@@ -318,7 +314,7 @@ function VotePage() {
       : "Le groupe avance.";
     return (
       <LedgerPage>
-        {resultBg && <div style={{position:"fixed",inset:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.25}} />}
+        <div style={{position:"fixed",inset:0,backgroundImage:result.deaths > 0 ? "url(/cinematic_death.png)" : result.ended && result.loot > 0 ? "url(/return_success.png)" : result.ended ? "url(/return_wipe.png)" : "none",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.28}} />
         <LedgerCard title={title} subtitle={subtitle}>
           {result.deadNames.length > 0 && (
             <div className="mb-4 px-3 py-2 border border-red-400/20">
@@ -349,19 +345,17 @@ function VotePage() {
       >
         {step && !step.resolved && (
           <>
-            {/* Image de l'événement */}
-            {EVENT_IMAGES[step.event_type] && (
-              <div className="w-full mb-4 rounded-sm overflow-hidden" style={{height: 180, position:"relative"}}>
+            {EVENT_IMAGES[step.event_type] ? (
+              <div className="w-full mb-4 rounded-sm overflow-hidden" style={{height:"280px",position:"relative"}}>
                 <img src={EVENT_IMAGES[step.event_type]} alt={step.event_type}
                   className="w-full h-full object-cover"
-                  style={{filter: step.risk_level === "eleve" ? "sepia(0.4) hue-rotate(-20deg)" : step.risk_level === "moyen" ? "sepia(0.2)" : "none"}} />
-                <div className="absolute inset-0" style={{background:"linear-gradient(to bottom, transparent 40%, rgba(18,17,15,0.9) 100%)"}} />
+                  style={{filter: step.risk_level==="eleve" ? "sepia(0.5) hue-rotate(-15deg) brightness(0.8)" : step.risk_level==="moyen" ? "sepia(0.25) brightness(0.85)" : "brightness(0.9)"}} />
+                <div className="absolute inset-0" style={{background:"linear-gradient(to bottom,rgba(18,17,15,0.1) 0%,transparent 25%,rgba(18,17,15,0.95) 100%)"}} />
                 {step.description && (
-                  <p className="absolute bottom-0 left-0 right-0 text-xs text-muted-foreground italic px-3 pb-2 leading-relaxed">{step.description}</p>
+                  <p className="absolute bottom-0 left-0 right-0 text-sm text-foreground/90 italic px-4 pb-3 leading-relaxed">{step.description}</p>
                 )}
               </div>
-            )}
-            {!EVENT_IMAGES[step.event_type] && step.description && (
+            ) : step.description && (
               <p className="text-sm text-muted-foreground italic mb-4 px-1 leading-relaxed">{step.description}</p>
             )}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
