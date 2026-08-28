@@ -370,7 +370,9 @@ export type Database = {
       guilds: {
         Row: {
           banner: string | null
+          banner_bg: string | null
           banner_color: string | null
+          banner_symbol: string | null
           created_at: string
           founder_profile_id: string
           gold: number
@@ -379,7 +381,9 @@ export type Database = {
         }
         Insert: {
           banner?: string | null
+          banner_bg?: string | null
           banner_color?: string | null
+          banner_symbol?: string | null
           created_at?: string
           founder_profile_id: string
           gold?: number
@@ -388,7 +392,9 @@ export type Database = {
         }
         Update: {
           banner?: string | null
+          banner_bg?: string | null
           banner_color?: string | null
+          banner_symbol?: string | null
           created_at?: string
           founder_profile_id?: string
           gold?: number
@@ -602,7 +608,9 @@ export type Database = {
         Args: { p_character_id: string; p_guild_name: string }
         Returns: {
           banner: string | null
+          banner_bg: string | null
           banner_color: string | null
+          banner_symbol: string | null
           created_at: string
           founder_profile_id: string
           gold: number
@@ -731,7 +739,9 @@ export type Database = {
         Args: { p_character_id: string; p_code: string; p_username?: string }
         Returns: {
           banner: string | null
+          banner_bg: string | null
           banner_color: string | null
+          banner_symbol: string | null
           created_at: string
           founder_profile_id: string
           gold: number
