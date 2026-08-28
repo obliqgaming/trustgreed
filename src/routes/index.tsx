@@ -563,22 +563,3 @@ function DeadScreen({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
-function CreateCharacterScreen({ onDone }: { onDone: () => Promise<void> }) {
-  const [name, setName] = useState(""); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); setBusy(true);
-    const { error: rpcError } = await supabase.rpc("create_character", { p_name: name });
-    if (rpcError) setError(rpcError.message); else await onDone();
-    setBusy(false);
-  }
-  return (
-    <LedgerCard title="Créer un personnage" subtitle="Un seul nom, inscrit à l'encre.">
-      <form onSubmit={submit} noValidate>
-        <Field label="Nom du personnage" required value={name} onChange={(e) => setName(e.target.value)} />
-        <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>{busy ? "Inscription…" : "Inscrire au registre"}</SealButton>
-      </form>
-      <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
-    </LedgerCard>
-  );
-}
