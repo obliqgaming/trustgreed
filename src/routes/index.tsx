@@ -11,7 +11,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
-type Guild = { id: string; name: string; gold: number; banner_symbol?: string; banner_color?: string; banner_bg?: string };
+type Guild = { id: string; name: string; gold: number; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
 type Member = { id: string; name: string; level: number };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
 type ActiveExpedition = { id: string; status: string; participant_count: number } | null;

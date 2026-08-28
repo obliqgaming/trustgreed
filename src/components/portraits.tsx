@@ -13,8 +13,8 @@ export function PortraitDisplay({ portraitId, size = 64 }: { portraitId: string;
     <div style={{ width: size, height: size }}
       className="rounded-sm border border-border/40 overflow-hidden flex-shrink-0 bg-black">
       <img
-        src={portrait.src}
-        alt={portrait.label}
+        src={portrait?.src ?? ""}
+        alt={portrait?.label ?? ""}
         style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }}
       />
     </div>
