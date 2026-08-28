@@ -18,61 +18,28 @@ type Step = {
   loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null;
 };
-type Participant = { character_id: string; character: { name: string; portrait: string } };
+type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
-// Textes de cinématique selon le type d'événement et le résultat
 const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
   coffre: {
-    survive: [
-      "Le couvercle cède dans un grincement sourd. Ce qui brille à l'intérieur vaut le risque pris.",
-      "Vos mains tremblent en fouillant le contenu. Vous repartez plus riches.",
-      "Le coffre s'ouvre. Personne ne parle. On compte, on prend, on avance.",
-    ],
-    die: [
-      "Le piège se déclenche avant que quiconque ait pu réagir.",
-      "Le coffre était pris. Quelqu'un l'a appris trop tard.",
-      "Un mécanisme invisible. Une fraction de seconde. Trop tard.",
-    ],
+    survive: ["Le couvercle cède dans un grincement sourd. Ce qui brille à l'intérieur vaut le risque pris.", "Vos mains tremblent en fouillant le contenu. Vous repartez plus riches.", "Le coffre s'ouvre. Personne ne parle. On compte, on prend, on avance."],
+    die: ["Le piège se déclenche avant que quiconque ait pu réagir.", "Le coffre était piégé. Quelqu'un l'a appris trop tard.", "Un mécanisme invisible. Une fraction de seconde. Trop tard."],
   },
   gardien: {
-    survive: [
-      "Le combat est court. Brutal. Le groupe continue, essoufflé.",
-      "Il tombe. Vous passez. On ne regarde pas en arrière.",
-      "Il n'était pas seul. Mais vous, si. Vous repartez quand même.",
-    ],
-    die: [
-      "Le gardien était plus rapide qu'il n'en avait l'air.",
-      "La formation s'effondre. L'un d'eux ne se relève pas.",
-      "Il n'a fallu qu'une ouverture. Une seule.",
-    ],
+    survive: ["Le combat est court. Brutal. Le groupe continue, essoufflé.", "Il tombe. Vous passez. On ne regarde pas en arrière.", "Il n'était pas seul. Mais vous, si. Vous repartez quand même."],
+    die: ["Le gardien était plus rapide qu'il n'en avait l'air.", "La formation s'effondre. L'un d'eux ne se relève pas.", "Il n'a fallu qu'une ouverture. Une seule."],
   },
   passage: {
-    survive: [
-      "Le passage est étroit, instable. Vous traversez. Tous.",
-      "Le vide en dessous. Les mains qui s'agrippent. Ça tient.",
-      "De l'autre côté, enfin. Le groupe reprend son souffle.",
-    ],
-    die: [
-      "Une planche cède. Un cri. Puis le silence.",
-      "Le passage ne tenait qu'à un fil. Ce fil a rompu.",
-      "On n'entend rien après la chute. On continue.",
-    ],
+    survive: ["Le passage est étroit, instable. Vous traversez. Tous.", "Le vide en dessous. Les mains qui s'agrippent. Ça tient.", "De l'autre côté, enfin. Le groupe reprend son souffle."],
+    die: ["Une planche cède. Un cri. Puis le silence.", "Le passage ne tenait qu'à un fil. Ce fil a rompu.", "On n'entend rien après la chute. On continue."],
   },
   porte: {
-    survive: [
-      "La porte s'ouvre. Ce qu'il y a derrière valait le détour.",
-      "Le verrou saute. La pièce est vide, sauf pour ce qu'on cherchait.",
-      "On passe. La porte se referme derrière. On ne reviendra pas.",
-    ],
-    die: [
-      "Ce qui était derrière la porte n'attendait que ça.",
-      "La porte s'est ouverte. Elle n'aurait pas dû.",
-      "On pensait savoir. On avait tort.",
-    ],
+    survive: ["La porte s'ouvre. Ce qu'il y a derrière valait le détour.", "Le verrou saute. La pièce est vide, sauf pour ce qu'on cherchait.", "On passe. La porte se referme derrière. On ne reviendra pas."],
+    die: ["Ce qui était derrière la porte n'attendait que ça.", "La porte s'est ouverte. Elle n'aurait pas dû.", "On pensait savoir. On avait tort."],
   },
 };
 
@@ -97,36 +64,45 @@ function VotePage() {
   const [ready, setReady] = useState(false);
   const [cinematic, setCinematic] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [iDied, setIDied] = useState(false);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const characterIdRef = useRef<string | null>(null);
+  const stepIdRef = useRef<string | null>(null);
+
+  // Charge participants avec leur statut vivant/mort en temps réel
+  const fetchParticipants = useCallback(async () => {
+    const { data: parts } = await supabase
+      .from("expedition_participants")
+      .select("character_id")
+      .eq("expedition_id", expeditionId);
+    if (!parts) return [];
+
+    const ids = parts.map((p: any) => p.character_id);
+    const { data: chars } = await supabase
+      .from("characters")
+      .select("id, name, portrait, is_alive")
+      .in("id", ids);
+
+    const enriched = (chars ?? []).map((c: any) => ({
+      character_id: c.id,
+      is_alive: c.is_alive,
+      character: { name: c.name, portrait: c.portrait ?? "ombre" },
+    }));
+    setParticipants(enriched);
+    return enriched;
+  }, [expeditionId]);
 
   const fetchVotes = useCallback(async (stepId: string) => {
     const { data } = await supabase.from("step_votes").select("character_id").eq("step_id", stepId);
     const ids = (data ?? []).map((v: any) => v.character_id);
     setVotedIds(ids);
+    // Restaurer myVote au F5
     if (characterIdRef.current && ids.includes(characterIdRef.current)) {
       setMyVote(prev => prev ?? "voté");
     }
     return ids;
   }, []);
-
-  // Recharge les participants VIVANTS (crucial après une mort)
-  const fetchParticipants = useCallback(async () => {
-    const { data } = await supabase
-      .from("expedition_participants")
-      .select("character_id, character:characters(name, portrait)")
-      .eq("expedition_id", expeditionId);
-    // Filtrer uniquement les vivants pour le comptage des votes
-    const { data: aliveChars } = await supabase
-      .from("characters")
-      .select("id")
-      .eq("is_alive", true)
-      .in("id", (data ?? []).map((p: any) => p.character_id));
-    const aliveIds = new Set((aliveChars ?? []).map((c: any) => c.id));
-    // Garder tous les participants pour l'affichage, mais marquer les morts
-    setParticipants((data as any) ?? []);
-    return aliveIds;
-  }, [expeditionId]);
 
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
@@ -136,29 +112,50 @@ function VotePage() {
       .order("step_number", { ascending: false })
       .limit(1)
       .maybeSingle();
+
     if (data) {
-      setStep(prev => {
-        if (prev?.id !== data.id) { setMyVote(null); setVotedIds([]); }
-        return data;
-      });
+      const isNewStep = stepIdRef.current !== data.id;
+      if (isNewStep) {
+        stepIdRef.current = data.id;
+        setMyVote(null);
+        setVotedIds([]);
+        setCinematic(null);
+        setResult(null);
+      }
+      setStep(data);
       await fetchVotes(data.id);
+
+      // Vérifier si expédition terminée
+      if (data.resolved) {
+        const { data: exp } = await supabase
+          .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
+        if (exp?.status === "completed") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setResult({ deaths: data.deaths_count, loot: Math.round(exp.total_loot_kept ?? 0), ended: true, deadNames: [] });
+        }
+      }
     }
     return data;
   }, [expeditionId, fetchVotes]);
 
+  // Poll central — vérifie mort + participants + votes + étape
   const startPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
+      // 1. Suis-je encore vivant ?
       if (characterIdRef.current) {
         const { data: charData } = await supabase
           .from("characters").select("is_alive").eq("id", characterIdRef.current).maybeSingle();
         if (charData && !charData.is_alive) {
           clearInterval(pollRef.current!);
+          setIDied(true);
           setResult({ deaths: -1, loot: 0, ended: true, deadNames: [] });
           return;
         }
       }
+      // 2. Participants (avec statut vivant/mort)
       await fetchParticipants();
+      // 3. Étape + votes
       void fetchStep();
     }, 5000);
   }, [fetchStep, fetchParticipants]);
@@ -175,16 +172,15 @@ function VotePage() {
       setCharacter(char);
       characterIdRef.current = char.id;
 
-      await fetchParticipants();
-      const partCheck = await supabase
+      // Vérifier participation
+      const { data: partCheck } = await supabase
         .from("expedition_participants")
-        .select("character_id")
-        .eq("expedition_id", expeditionId)
-        .eq("character_id", char.id)
-        .maybeSingle();
-      if (!partCheck.data) { navigate({ to: "/" }); return; }
+        .select("character_id").eq("expedition_id", expeditionId).eq("character_id", char.id).maybeSingle();
+      if (!partCheck) { navigate({ to: "/" }); return; }
 
-      await fetchStep();
+      await fetchParticipants();
+      const currentStep = await fetchStep();
+      if (currentStep) stepIdRef.current = currentStep.id;
       setReady(true);
       startPoll();
     })();
@@ -225,25 +221,22 @@ function VotePage() {
       .from("expedition_steps").select("deaths_count").eq("id", step.id).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? 0;
 
-    // Récupérer les noms des morts
     const { data: deadChars } = await supabase
       .from("characters").select("name")
-      .eq("died_in_expedition_id", expeditionId)
-      .eq("is_alive", false);
+      .eq("died_in_expedition_id", expeditionId).eq("is_alive", false);
     const deadNames = (deadChars ?? []).map((c: any) => c.name);
 
-    // Cinématique
-    setCinematic(getCinematic(step.event_type, deaths > 0));
+    const cinematicText = getCinematic(step.event_type, deaths > 0);
+    setCinematic(cinematicText);
 
-    // Vérifier si CE joueur est mort
+    // Suis-je mort ?
     if (character) {
       const { data: charData } = await supabase
         .from("characters").select("is_alive").eq("id", character.id).maybeSingle();
       if (charData && !charData.is_alive) {
         if (pollRef.current) clearInterval(pollRef.current);
         setBusy(false);
-        // Afficher la cinématique puis l'écran de mort
-        setTimeout(() => setResult({ deaths: -1, loot: 0, ended: true, deadNames }), 2500);
+        setTimeout(() => { setIDied(true); setResult({ deaths: -1, loot: 0, ended: true, deadNames }); }, 2500);
         return;
       }
     }
@@ -255,7 +248,7 @@ function VotePage() {
       setCinematic(null);
       if (exp?.status === "completed") {
         if (pollRef.current) clearInterval(pollRef.current);
-        setResult({ deaths, loot: Math.round(exp.total_loot_kept ?? 0), ended: true, deadNames });
+        setResult({ deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, deadNames });
       } else {
         setResult({ deaths, loot: 0, ended: false, deadNames });
       }
@@ -264,34 +257,28 @@ function VotePage() {
     setBusy(false);
   }
 
-  // Participants vivants pour le comptage
-  const aliveParticipantIds = participants
-    .filter(p => !result) // simplification : on considère tous vivants pendant le vote
-    .map(p => p.character_id);
-
-  // Pour le vrai comptage, utiliser les votedIds vs participants total
-  const allVoted = participants.length > 0 && votedIds.length >= participants.filter(p => true).length;
+  // Participants vivants = ceux qui comptent pour le vote
+  const aliveParticipants = participants.filter(p => p.is_alive);
+  const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !cinematic;
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
-  // Écran de cinématique
+  // Cinématique
   if (cinematic && !result) {
     return (
       <LedgerPage>
         <LedgerCard title="" subtitle="">
-          <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">
-            {cinematic}
-          </p>
+          <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">{cinematic}</p>
         </LedgerCard>
       </LedgerPage>
     );
   }
 
-  // Écran mort personnelle
-  if (result?.deaths === -1) {
+  // Mort personnelle
+  if (result && iDied) {
     return (
       <LedgerPage>
         <LedgerCard title="Tu es mort." subtitle="Ton personnage ne reviendra pas.">
@@ -310,7 +297,7 @@ function VotePage() {
     );
   }
 
-  // Écran résultat normal
+  // Résultat normal
   if (result) {
     const title = result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
@@ -322,9 +309,7 @@ function VotePage() {
         <LedgerCard title={title} subtitle={subtitle}>
           {result.deadNames.length > 0 && (
             <div className="mb-4 px-3 py-2 border border-red-400/20">
-              {result.deadNames.map(n => (
-                <p key={n} className="text-xs text-red-400/70">✝ {n}</p>
-              ))}
+              {result.deadNames.map(n => <p key={n} className="text-xs text-red-400/70">✝ {n}</p>)}
             </div>
           )}
           {result.ended ? (
@@ -360,9 +345,7 @@ function VotePage() {
                 {timeLeft !== null ? fmt(timeLeft) : "—"}
               </span>
             </div>
-            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
-              ⚠ Risque {RISK_LABEL[step.risk_level]}
-            </p>
+            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</p>
             {!myVote ? (
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button onClick={() => castVote("continuer")} disabled={busy}
@@ -381,10 +364,10 @@ function VotePage() {
             )}
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
-                Votes reçus : {votedIds.length} / {participants.length}
+                Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}
               </p>
               <div className="flex gap-1">
-                {participants.map((p) => (
+                {aliveParticipants.map((p) => (
                   <div key={p.character_id}
                     className={`h-2 flex-1 rounded-sm transition-colors duration-300 ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/30"}`} />
                 ))}
@@ -397,20 +380,22 @@ function VotePage() {
                 {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
-            {/* Portraits + liste groupe */}
             <div className="mt-4 border-t border-border/20 pt-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <ul className="space-y-1.5">
                 {participants.map((p) => (
                   <li key={p.character_id}
-                    className={`flex items-center gap-2 px-2 py-1.5 border ${p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
+                    className={`flex items-center gap-2 px-2 py-1.5 border ${!p.is_alive ? "opacity-30 border-red-400/20" : p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
                     <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={28} />
-                    <span className={`text-xs flex-1 ${p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
+                    <span className={`text-xs flex-1 ${!p.is_alive ? "line-through text-red-400/50" : p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
                       {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
+                      {!p.is_alive ? " ✝" : ""}
                     </span>
-                    <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
-                      {votedIds.includes(p.character_id) ? "✓" : "…"}
-                    </span>
+                    {p.is_alive && (
+                      <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
+                        {votedIds.includes(p.character_id) ? "✓" : "…"}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -448,9 +433,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchMessages]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -460,7 +443,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
       expedition_id: expeditionId, character_id: character.id, message: text.trim(),
     });
     setText("");
-    await fetchMessages(); // refetch immédiat après envoi
+    await fetchMessages();
     setBusy(false);
   }
 
