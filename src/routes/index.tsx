@@ -368,15 +368,13 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
 }
 
 function SignUpScreen({ onSwitch, onNotice, notice }: { onSwitch: () => void; onNotice: (v: string | null) => void; notice: string | null }) {
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [username, setUsername] = useState("");
+  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(null); onNotice(null); setBusy(true);
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+    const { error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
     if (signUpError) { setError(signUpError.message); setBusy(false); return; }
-    if (!data.session) { onNotice("Compte créé. Connecte-toi pour choisir ton pseudo."); setBusy(false); return; }
-    const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
-    if (rpcError) setError(rpcError.message);
+    onNotice("Compte créé. Connecte-toi pour continuer.");
     setBusy(false);
   }
   return (
@@ -384,7 +382,6 @@ function SignUpScreen({ onSwitch, onNotice, notice }: { onSwitch: () => void; on
       <form onSubmit={submit} noValidate>
         <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Field label="Mot de passe" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
-        <Field label="Pseudo" required value={username} onChange={(e) => setUsername(e.target.value)} />
         <LedgerError message={error} />
         {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
         <SealButton type="submit" disabled={busy}>{busy ? "Scellement…" : "Sceller l'inscription"}</SealButton>
@@ -421,7 +418,15 @@ function CreateProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(null); setBusy(true);
     const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
-    if (rpcError) setError(rpcError.message); else await onDone();
+    if (rpcError) {
+      if (rpcError.message.includes("déjà existant") || rpcError.message.includes("already exists")) {
+        await onDone(); // profil déjà là, on avance
+      } else {
+        setError(rpcError.message);
+      }
+    } else {
+      await onDone();
+    }
     setBusy(false);
   }
   return (
