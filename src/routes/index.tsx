@@ -313,7 +313,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
           const { count } = await supabase.from("characters").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("is_alive", true);
           return { ...g, member_count: count ?? 0 };
         }));
-        setGuilds(withCounts);
+        setGuilds(withCounts.filter((g) => g.member_count > 0));
       }
     })();
   }, []);
