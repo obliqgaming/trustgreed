@@ -296,8 +296,10 @@ function VotePage() {
   // Cinématique
   // Écran intermédiaire : l'étape est résolue, chaque joueur confirme individuellement
   if (pendingReveal && !cinematic) {
+    const resultBg = result && result.deaths > 0 ? STEP_RESULT_FAIL : STEP_RESULT_SUCCESS;
     return (
       <LedgerPage>
+        <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title="Résultat disponible" subtitle="L'étape a été résolue.">
           <p className="text-sm text-muted-foreground mb-6 text-center">
             Prêt à voir ce qui s'est passé ?
@@ -380,8 +382,24 @@ function VotePage() {
     );
   }
 
+  const eventBg = step ? EVENT_IMAGES[step.event_type] : null;
+  const bgFilter = step?.risk_level === "eleve"
+    ? "brightness(0.18) sepia(0.4)"
+    : step?.risk_level === "moyen"
+    ? "brightness(0.22) sepia(0.15)"
+    : "brightness(0.25)";
+
   return (
     <LedgerPage>
+      {eventBg && (
+        <div style={{
+          position:"fixed", inset:0, zIndex:0,
+          backgroundImage:`url(${eventBg})`,
+          backgroundSize:"cover", backgroundPosition:"center",
+          filter: bgFilter,
+          transition:"filter 1s ease"
+        }} />
+      )}
       <LedgerCard
         title={step ? `Étape ${step.step_number} — ${step.event_type}` : "Expédition"}
         subtitle={step ? `Risque : ${RISK_LABEL[step.risk_level] ?? step.risk_level} · Butin : ${step.loot_min}–${step.loot_max} or` : ""}
@@ -399,7 +417,7 @@ function VotePage() {
             </div>
             <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</p>
             {!myVote ? (
-              <div className="grid grid-cols-2 gap-3 mb-2">
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <button onClick={() => castVote("continuer")} disabled={busy}
                   className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
                   Continuer
@@ -409,9 +427,6 @@ function VotePage() {
                   Rentrer
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground/50 text-center mb-4">
-                Vote secret — personne ne saura ce que tu as choisi. Un seul "Continuer" suffit à entraîner tout le groupe.
-              </p>
             ) : (
               <div className="mb-4 px-3 py-3 border border-border/40 text-sm text-muted-foreground text-center">
                 Vote enregistré — en attente des autres…
@@ -432,7 +447,7 @@ function VotePage() {
             {canResolve && (
               <button onClick={resolveStep} disabled={busy}
                 className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
-                {busy ? "Résolution…" : "Révéler le résultat — tout le monde verra ce qui s'est passé"}
+                {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
             <div className="mt-4 border-t border-border/20 pt-4">
