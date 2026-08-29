@@ -399,19 +399,21 @@ function VotePage() {
             </div>
             <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</p>
             {!myVote ? (
-              <div className="grid grid-cols-2 gap-3 mb-2">
-                <button onClick={() => castVote("continuer")} disabled={busy}
-                  className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
-                  Continuer
-                </button>
-                <button onClick={() => castVote("rentrer")} disabled={busy}
-                  className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30">
-                  Rentrer
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground/50 text-center mb-4">
-                Vote secret — personne ne saura ce que tu as choisi. Un seul "Continuer" suffit à entraîner tout le groupe.
-              </p>
+              <>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <button onClick={() => castVote("continuer")} disabled={busy}
+                    className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
+                    Continuer
+                  </button>
+                  <button onClick={() => castVote("rentrer")} disabled={busy}
+                    className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30">
+                    Rentrer
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground/50 text-center mb-4">
+                  Vote secret — personne ne saura ce que tu as choisi. Un seul "Continuer" suffit à entraîner tout le groupe.
+                </p>
+              </>
             ) : (
               <div className="mb-4 px-3 py-3 border border-border/40 text-sm text-muted-foreground text-center">
                 Vote enregistré — en attente des autres…
