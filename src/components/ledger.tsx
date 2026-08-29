@@ -8,7 +8,7 @@ export function LedgerPage({ children, bg }: { children: ReactNode; bg?: string 
       className="min-h-screen w-full bg-background px-4 py-10 sm:py-16"
       style={{
         backgroundImage: bg
-          ? `linear-gradient(rgba(18,17,15,0.88), rgba(18,17,15,0.94)), url(${bg})`
+          ? `linear-gradient(rgba(18,17,15,0.25), rgba(18,17,15,0.35)), url(${bg})`
           : `linear-gradient(rgba(18,17,15,0.88), rgba(18,17,15,0.94)), url(${fondwild.url})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
@@ -30,7 +30,7 @@ export function LedgerCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-sm border border-border bg-card/80 p-6 shadow-[0_0_0_1px_rgba(184,148,77,0.12)] backdrop-blur-sm sm:p-8">
+    <section className="rounded-sm border border-border bg-card/85 p-6 shadow-[0_0_0_1px_rgba(184,148,77,0.12)] backdrop-blur-md sm:p-8">
       <h1 className="font-serif text-2xl tracking-[0.12em] text-primary uppercase">{title}</h1>
       {subtitle ? <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p> : null}
       <div className="mt-6">{children}</div>
