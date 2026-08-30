@@ -239,9 +239,12 @@ function Index() {
           </div>
         )}
 
-        <JoinRequestsPanel guildId={guild!.id} character={character} onResolved={refresh} />
-
-        <GuildChatBox guildId={guild!.id} character={character} />
+        {guild && (
+          <>
+            <JoinRequestsPanel guildId={guild.id} character={character} onResolved={refresh} />
+            <GuildChatBox guildId={guild.id} character={character} />
+          </>
+        )}
 
         <OnlinePlayersPanel guildName={guild?.name} />
 
