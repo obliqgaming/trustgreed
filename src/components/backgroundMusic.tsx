@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "tg-music-muted";
-const TRACK_SRC = "/trustandgreed.opus";
+const TRACK_OPUS = "/trustandgreed.opus";
+const TRACK_MP3 = "/trustandgreed.mp3";
 const VOLUME = 0.35;
+
+function pickTrackSrc(): string {
+  const probe = document.createElement("audio");
+  const supportsOpus = probe.canPlayType('audio/ogg; codecs="opus"') || probe.canPlayType("audio/opus");
+  return supportsOpus ? TRACK_OPUS : TRACK_MP3;
+}
 
 function getStoredMuted(): boolean {
   if (typeof window === "undefined") return true;
@@ -22,11 +29,22 @@ export function BackgroundMusic() {
   const [muted, setMuted] = useState<boolean>(getStoredMuted);
 
   useEffect(() => {
-    const audio = new Audio(TRACK_SRC);
+    const audio = new Audio(pickTrackSrc());
     audio.loop = true;
     audio.volume = VOLUME;
     audio.muted = muted;
     audioRef.current = audio;
+
+    // Si la source choisie échoue au chargement (ex: mauvaise détection de support),
+    // on retente une fois avec l'autre format avant d'abandonner silencieusement.
+    let fallenBack = false;
+    const onError = () => {
+      if (fallenBack) return;
+      fallenBack = true;
+      audio.src = audio.src.endsWith(".opus") ? TRACK_MP3 : TRACK_OPUS;
+      void audio.play().catch(() => {});
+    };
+    audio.addEventListener("error", onError);
 
     void audio.play().catch(() => {
       // Bloqué par la politique autoplay tant qu'il n'y a pas eu d'interaction :
@@ -39,6 +57,7 @@ export function BackgroundMusic() {
     });
 
     return () => {
+      audio.removeEventListener("error", onError);
       audio.pause();
       audioRef.current = null;
     };
