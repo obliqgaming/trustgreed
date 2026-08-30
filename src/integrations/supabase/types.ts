@@ -91,6 +91,51 @@ export type Database = {
           },
         ]
       }
+      direct_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          invitation_code: string | null
+          read_at: string | null
+          recipient_profile_id: string
+          sender_profile_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          invitation_code?: string | null
+          read_at?: string | null
+          recipient_profile_id: string
+          sender_profile_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          invitation_code?: string | null
+          read_at?: string | null
+          recipient_profile_id?: string
+          sender_profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "direct_messages_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "direct_messages_sender_profile_id_fkey"
+            columns: ["sender_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_templates: {
         Row: {
           death_percentage: number
@@ -315,6 +360,45 @@ export type Database = {
           },
         ]
       }
+      guild_chat_messages: {
+        Row: {
+          character_id: string
+          created_at: string
+          guild_id: string
+          id: string
+          message: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string
+          guild_id: string
+          id?: string
+          message: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string
+          guild_id?: string
+          id?: string
+          message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guild_chat_messages_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guild_chat_messages_guild_id_fkey"
+            columns: ["guild_id"]
+            isOneToOne: false
+            referencedRelation: "guilds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guild_history_events: {
         Row: {
           character_id: string | null
@@ -458,18 +542,21 @@ export type Database = {
           created_at: string
           id: string
           invited_by_profile_id: string | null
+          last_seen_at: string | null
           username: string
         }
         Insert: {
           created_at?: string
           id: string
           invited_by_profile_id?: string | null
+          last_seen_at?: string | null
           username: string
         }
         Update: {
           created_at?: string
           id?: string
           invited_by_profile_id?: string | null
+          last_seen_at?: string | null
           username?: string
         }
         Relationships: [
@@ -655,6 +742,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      heartbeat: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       generate_next_step:
         | {
