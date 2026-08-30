@@ -310,6 +310,7 @@ function LeaveGuildButton({ character, onDone }: { character: Character; onDone:
 }
 
 function GuildScreen({ character, onDone }: { character: Character; onDone: () => Promise<void> }) {
+  const navigate = useNavigate();
   const [guilds, setGuilds] = useState<(Guild & { member_count: number })[]>([]);
   const [tab, setTab] = useState<"create" | "join">("create");
   const [guildName, setGuildName] = useState("");
@@ -380,6 +381,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
           )}
         </form>
       )}
+      <TextLink onClick={() => navigate({ to: "/joueurs" })}>Voir les joueurs en ligne</TextLink>
       <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
     </LedgerCard>
   );
