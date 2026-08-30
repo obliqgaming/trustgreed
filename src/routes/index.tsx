@@ -322,7 +322,9 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingGuildId, setPendingGuildId] = useState<string | null>(null);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [requestBusy, setRequestBusy] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -337,8 +339,9 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
     })();
 
     void (async () => {
-      const { data } = await supabase.from("guild_join_requests").select("guild_id").eq("character_id", character.id).eq("status", "pending").maybeSingle();
+      const { data } = await supabase.from("guild_join_requests").select("id, guild_id").eq("character_id", character.id).eq("status", "pending").maybeSingle();
       setPendingGuildId(data?.guild_id ?? null);
+      setPendingRequestId(data?.id ?? null);
     })();
   }, [character.id]);
 
@@ -351,10 +354,19 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   async function requestToJoin(guildId: string) {
     if (pendingGuildId) return;
     setError(null); setRequestBusy(guildId);
-    const { error: rpcError } = await supabase.rpc("create_join_request", { p_guild_id: guildId, p_character_id: character.id });
+    const { data, error: rpcError } = await supabase.rpc("create_join_request", { p_guild_id: guildId, p_character_id: character.id });
     if (rpcError) setError(rpcError.message);
-    else setPendingGuildId(guildId);
+    else { setPendingGuildId(guildId); setPendingRequestId((data as { id: string } | null)?.id ?? null); }
     setRequestBusy(null);
+  }
+
+  async function cancelRequest() {
+    if (!pendingRequestId) return;
+    setError(null); setCancelBusy(true);
+    const { error: rpcError } = await supabase.rpc("cancel_join_request", { p_request_id: pendingRequestId, p_character_id: character.id });
+    if (rpcError) setError(rpcError.message);
+    else { setPendingGuildId(null); setPendingRequestId(null); }
+    setCancelBusy(false);
   }
 
   async function createGuild(e: React.FormEvent) {
@@ -398,7 +410,17 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
             <div className="mt-6">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-3">Guildes actives</p>
               {pendingGuildId && (
-                <p className="text-xs text-muted-foreground/70 italic mb-3">Demande en attente — un seul dossier à la fois.</p>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground/70 italic">Demande en attente — un seul dossier à la fois.</p>
+                  <button
+                    type="button"
+                    onClick={cancelRequest}
+                    disabled={cancelBusy}
+                    className="shrink-0 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-border/10 disabled:opacity-40"
+                  >
+                    {cancelBusy ? "…" : "Annuler"}
+                  </button>
+                </div>
               )}
               <ul className="space-y-2">
                 {guilds.map((g) => (
