@@ -399,6 +399,58 @@ export type Database = {
           },
         ]
       }
+      guild_join_requests: {
+        Row: {
+          character_id: string
+          created_at: string
+          guild_id: string
+          id: string
+          resolved_at: string | null
+          resolved_by_character_id: string | null
+          status: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string
+          guild_id: string
+          id?: string
+          resolved_at?: string | null
+          resolved_by_character_id?: string | null
+          status?: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string
+          guild_id?: string
+          id?: string
+          resolved_at?: string | null
+          resolved_by_character_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guild_join_requests_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guild_join_requests_guild_id_fkey"
+            columns: ["guild_id"]
+            isOneToOne: false
+            referencedRelation: "guilds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guild_join_requests_resolved_by_character_id_fkey"
+            columns: ["resolved_by_character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guild_history_events: {
         Row: {
           character_id: string | null
@@ -741,6 +793,30 @@ export type Database = {
           to: "profiles"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      create_join_request: {
+        Args: { p_character_id: string; p_guild_id: string }
+        Returns: {
+          character_id: string
+          created_at: string
+          guild_id: string
+          id: string
+          resolved_at: string | null
+          resolved_by_character_id: string | null
+          status: string
+        }
+      }
+      respond_to_join_request: {
+        Args: { p_accept: boolean; p_request_id: string; p_responder_character_id: string }
+        Returns: {
+          character_id: string
+          created_at: string
+          guild_id: string
+          id: string
+          resolved_at: string | null
+          resolved_by_character_id: string | null
+          status: string
         }
       }
       heartbeat: {
