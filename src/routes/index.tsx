@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
+import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/")({
 
 type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
 type Guild = { id: string; name: string; gold: number; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
-type Member = { id: string; name: string; level: number };
+type Member = { id: string; name: string; level: number; last_seen_at?: string | null };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
 type ActiveExpedition = { id: string; status: string; participant_count: number } | null;
 
@@ -59,8 +60,8 @@ function Index() {
       const { data: g } = await supabase.from("guilds").select("id, name, gold, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle();
       setGuild(g ?? null);
 
-      const { data: m } = await supabase.from("characters").select("id, name, level").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
-      setMembers(m ?? []);
+      const { data: m } = await supabase.from("characters").select("id, name, level, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
+      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, last_seen_at: row.profiles?.last_seen_at ?? null })));
 
       const { data: h } = await supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10);
       setHistory(h ?? []);
@@ -104,6 +105,8 @@ function Index() {
   }, [guild?.id, refresh]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  usePresenceHeartbeat(!!session);
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
   if (!session) return (
@@ -188,7 +191,10 @@ function Index() {
           <ul className="space-y-1">
             {members.map((m) => (
               <li key={m.id} className={`flex justify-between px-3 py-2 text-sm border ${m.id === character.id ? "border-primary/60 text-primary" : "border-border/30 text-foreground"}`}>
-                <span>{m.name}{m.id === character.id ? " (toi)" : ""}</span>
+                <span className="flex items-center gap-2">
+                  <span className={`h-1.5 w-1.5 rounded-full ${isOnline(m.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
+                  {m.name}{m.id === character.id ? " (toi)" : ""}
+                </span>
                 <span className="font-mono text-xs text-muted-foreground">niv. {m.level}</span>
               </li>
             ))}
@@ -232,10 +238,16 @@ function Index() {
           </div>
         )}
 
+        <GuildChatBox guildId={guild!.id} character={character} />
+
         <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
           <button onClick={() => navigate({ to: "/profil" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Mon profil
+          </button>
+          <button onClick={() => navigate({ to: "/joueurs" })}
+            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+            Joueurs en ligne
           </button>
           <button onClick={() => navigate({ to: "/monde" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
@@ -334,7 +346,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
 
   return (
     <LedgerCard title={character.name} subtitle="Pour rejoindre une guilde, tu as besoin d'un code d'invitation donné par un membre existant.">
-      <div className="flex gap-2 mb-6">
+      <InvitationInbox onUseCode={setInviteCode} onGoJoinTab={() => setTab("join")} />      <div className="flex gap-2 mb-6">
         {(["create", "join"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex-1 py-2 text-xs tracking-[0.14em] uppercase border rounded-sm ${tab === t ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
@@ -523,3 +535,130 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
 }
 
 
+type GuildChatMessage = { id: string; character_id: string; message: string; created_at: string; character: { name: string } };
+
+function GuildChatBox({ guildId, character }: { guildId: string; character: Character }) {
+  const [messages, setMessages] = useState<GuildChatMessage[]>([]);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchMessages = useCallback(async () => {
+    const { data } = await supabase
+      .from("guild_chat_messages")
+      .select("id, character_id, message, created_at, character:characters(name)")
+      .eq("guild_id", guildId)
+      .order("created_at", { ascending: true })
+      .limit(50);
+    setMessages((data as any) ?? []);
+  }, [guildId]);
+
+  useEffect(() => {
+    void fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 8000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [fetchMessages]);
+
+  const prevMsgCount = useRef(0);
+  useEffect(() => {
+    if (messages.length > prevMsgCount.current) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    prevMsgCount.current = messages.length;
+  }, [messages]);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    await supabase.from("guild_chat_messages").insert({ guild_id: guildId, character_id: character.id, message: text.trim() });
+    setText("");
+    await fetchMessages();
+    setBusy(false);
+  }
+
+  return (
+    <div className="mt-4 border-t border-border/20 pt-4">
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat de guilde</p>
+      <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
+        {messages.length === 0
+          ? <p className="text-xs text-muted-foreground/40 italic">Silence dans la guilde.</p>
+          : messages.map((m) => (
+            <div key={m.id} className={`text-xs ${m.character_id === character.id ? "text-primary" : "text-muted-foreground"}`}>
+              <span className="font-semibold">{(m.character as any)?.name ?? "?"}</span>
+              <span className="mx-1 opacity-40">·</span>
+              <span>{m.message}</span>
+            </div>
+          ))}
+        <div ref={bottomRef} />
+      </div>
+      <form onSubmit={send} className="flex gap-2">
+        <input value={text} onChange={e => setText(e.target.value)} maxLength={200}
+          placeholder="Écris à ta guilde…"
+          className="flex-1 bg-transparent border border-border/40 px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40" />
+        <button type="submit" disabled={busy || !text.trim()}
+          className="px-3 py-1.5 text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-30">
+          Envoyer
+        </button>
+      </form>
+    </div>
+  );
+}
+type InboxMessage = { id: string; body: string; invitation_code: string | null; created_at: string; sender: { username: string } };
+
+function InvitationInbox({ onUseCode, onGoJoinTab }: { onUseCode: (code: string) => void; onGoJoinTab: () => void }) {
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+
+  const fetchInbox = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data } = await supabase
+      .from("direct_messages")
+      .select("id, body, invitation_code, created_at, sender:profiles!direct_messages_sender_profile_id_fkey(username)")
+      .eq("recipient_profile_id", session.user.id)
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    setMessages((data as any) ?? []);
+  }, []);
+
+  useEffect(() => { void fetchInbox(); const t = setInterval(() => void fetchInbox(), 15000); return () => clearInterval(t); }, [fetchInbox]);
+
+  async function dismiss(id: string) {
+    await supabase.from("direct_messages").update({ read_at: new Date().toISOString() }).eq("id", id);
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  if (messages.length === 0) return null;
+
+  return (
+    <div className="mb-6 space-y-2">
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Messages reçus</p>
+      {messages.map((m) => (
+        <div key={m.id} className="border border-primary/40 bg-primary/5 px-3 py-2.5 text-sm">
+          <p className="text-xs text-muted-foreground mb-1">
+            <span className="font-semibold text-foreground">{m.sender?.username ?? "?"}</span> · {m.body}
+          </p>
+          {m.invitation_code && (
+            <p className="font-mono text-primary tracking-[0.15em] mb-2">{m.invitation_code}</p>
+          )}
+          <div className="flex gap-2">
+            {m.invitation_code && (
+              <button
+                onClick={() => { onUseCode(m.invitation_code!); onGoJoinTab(); void dismiss(m.id); }}
+                className="text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10"
+              >
+                Utiliser ce code
+              </button>
+            )}
+            <button
+              onClick={() => dismiss(m.id)}
+              className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-border/10"
+            >
+              Ignorer
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
