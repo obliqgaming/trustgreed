@@ -115,7 +115,7 @@ export function TextLink({
   return (
     <button
       {...props}
-      className="mt-4 text-sm text-muted-foreground underline underline-offset-4 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="mt-4 block text-sm text-muted-foreground underline underline-offset-4 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       {children}
     </button>

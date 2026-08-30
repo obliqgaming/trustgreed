@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
+import { OnlinePlayersPanel } from "@/components/onlinePlayers";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 
@@ -240,14 +241,12 @@ function Index() {
 
         <GuildChatBox guildId={guild!.id} character={character} />
 
+        <OnlinePlayersPanel guildName={guild?.name} />
+
         <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
           <button onClick={() => navigate({ to: "/profil" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
             Mon profil
-          </button>
-          <button onClick={() => navigate({ to: "/joueurs" })}
-            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
-            Joueurs en ligne
           </button>
           <button onClick={() => navigate({ to: "/monde" })}
             className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
@@ -347,7 +346,9 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
 
   return (
     <LedgerCard title={character.name} subtitle="Pour rejoindre une guilde, tu as besoin d'un code d'invitation donné par un membre existant.">
-      <InvitationInbox onUseCode={setInviteCode} onGoJoinTab={() => setTab("join")} />      <div className="flex gap-2 mb-6">
+      <InvitationInbox onUseCode={setInviteCode} onGoJoinTab={() => setTab("join")} />
+      <OnlinePlayersPanel />
+      <div className="flex gap-2 mb-6">
         {(["create", "join"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex-1 py-2 text-xs tracking-[0.14em] uppercase border rounded-sm ${tab === t ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
@@ -381,7 +382,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
           )}
         </form>
       )}
-      <TextLink onClick={() => navigate({ to: "/joueurs" })}>Voir les joueurs en ligne</TextLink>
+      <TextLink onClick={() => navigate({ to: "/joueurs" })}>Voir tous les joueurs →</TextLink>
       <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
     </LedgerCard>
   );
