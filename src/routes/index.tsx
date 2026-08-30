@@ -117,15 +117,13 @@ function Index() {
           <div className="flex justify-center mb-4">
             <img src="/logo_web.webp" alt="Trust & Greed" className="w-28 h-28 rounded-full border border-border/40" />
           </div>
-          <LedgerCard title="Trust & Greed" subtitle="Un monde de guildes. Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
-            <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-              Forme une guilde. Pars en expédition. À chaque étape, vote en secret : rentrer avec ce que tu as, ou continuer vers plus — au risque de tout perdre. La mort est définitive.
-          </p>
+          <LedgerCard subtitle="Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
           <div className="mb-6 space-y-1.5 border border-border/20 px-3 py-3 text-xs text-muted-foreground/70">
             <p>① Crée un compte et choisis un personnage</p>
             <p>② Fonde ou rejoins une guilde (via code d'invitation)</p>
             <p>③ Lance une expédition avec au moins 3 membres</p>
             <p>④ Vote à chaque étape — personne ne sait ce que les autres ont voté</p>
+            <p>La mort est définitive.</p>
           </div>
           <div className="space-y-2">
             <button onClick={() => setMode("signup")}

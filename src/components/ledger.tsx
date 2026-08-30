@@ -25,14 +25,14 @@ export function LedgerCard({
   subtitle,
   children,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-sm border border-border bg-card/85 p-6 shadow-[0_0_0_1px_rgba(184,148,77,0.12)] backdrop-blur-md sm:p-8">
-      <h1 className="font-serif text-2xl tracking-[0.12em] text-primary uppercase">{title}</h1>
-      {subtitle ? <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p> : null}
+      {title ? <h1 className="font-serif text-2xl tracking-[0.12em] text-primary uppercase">{title}</h1> : null}
+      {subtitle ? <p className={`text-sm text-muted-foreground ${title ? "mt-2" : ""}`}>{subtitle}</p> : null}
       <div className="mt-6">{children}</div>
     </section>
   );
