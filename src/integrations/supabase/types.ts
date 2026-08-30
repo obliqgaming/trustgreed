@@ -795,6 +795,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_join_request: {
+        Args: { p_character_id: string; p_request_id: string }
+        Returns: {
+          character_id: string
+          created_at: string
+          guild_id: string
+          id: string
+          resolved_at: string | null
+          resolved_by_character_id: string | null
+          status: string
+        }
+      }
       create_join_request: {
         Args: { p_character_id: string; p_guild_id: string }
         Returns: {
