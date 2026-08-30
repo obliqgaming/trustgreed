@@ -339,9 +339,10 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
     })();
 
     void (async () => {
-      const { data } = await supabase.from("guild_join_requests").select("id, guild_id").eq("character_id", character.id).eq("status", "pending").maybeSingle();
-      setPendingGuildId(data?.guild_id ?? null);
-      setPendingRequestId(data?.id ?? null);
+      const { data } = await supabase.from("guild_join_requests").select("id, guild_id").eq("character_id", character.id).eq("status", "pending").order("created_at", { ascending: true }).limit(1);
+      const pending = data?.[0];
+      setPendingGuildId(pending?.guild_id ?? null);
+      setPendingRequestId(pending?.id ?? null);
     })();
   }, [character.id]);
 
