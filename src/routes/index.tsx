@@ -239,6 +239,8 @@ function Index() {
           </div>
         )}
 
+        <JoinRequestsPanel guildId={guild!.id} character={character} onResolved={refresh} />
+
         <GuildChatBox guildId={guild!.id} character={character} />
 
         <OnlinePlayersPanel guildName={guild?.name} />
@@ -316,6 +318,8 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [requestedGuilds, setRequestedGuilds] = useState<Set<string>>(new Set());
+  const [requestBusy, setRequestBusy] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -328,7 +332,26 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
         setGuilds(withCounts.filter((g) => g.member_count > 0));
       }
     })();
-  }, []);
+
+    void (async () => {
+      const { data } = await supabase.from("guild_join_requests").select("guild_id").eq("character_id", character.id).eq("status", "pending");
+      setRequestedGuilds(new Set((data ?? []).map((r) => r.guild_id)));
+    })();
+  }, [character.id]);
+
+  // Poll léger : si une demande est acceptée ailleurs, on quitte cet écran automatiquement.
+  useEffect(() => {
+    const t = setInterval(() => void onDone(), 5000);
+    return () => clearInterval(t);
+  }, [onDone]);
+
+  async function requestToJoin(guildId: string) {
+    setError(null); setRequestBusy(guildId);
+    const { error: rpcError } = await supabase.rpc("create_join_request", { p_guild_id: guildId, p_character_id: character.id });
+    if (rpcError) setError(rpcError.message);
+    else setRequestedGuilds((prev) => new Set(prev).add(guildId));
+    setRequestBusy(null);
+  }
 
   async function createGuild(e: React.FormEvent) {
     e.preventDefault(); setError(null); setBusy(true);
@@ -372,9 +395,19 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-3">Guildes actives</p>
               <ul className="space-y-2">
                 {guilds.map((g) => (
-                  <li key={g.id} className="flex justify-between border border-border/40 px-3 py-2 text-sm">
-                    <span>{g.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{g.member_count} membre{g.member_count > 1 ? "s" : ""} · {Math.round(g.gold)} or</span>
+                  <li key={g.id} className="border border-border/40 px-3 py-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>{g.name}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{g.member_count} membre{g.member_count > 1 ? "s" : ""} · {Math.round(g.gold)} or</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => requestToJoin(g.id)}
+                      disabled={requestedGuilds.has(g.id) || requestBusy === g.id}
+                      className="mt-2 text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {requestedGuilds.has(g.id) ? "Demande envoyée ✓" : requestBusy === g.id ? "…" : "Demander à rejoindre"}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -662,6 +695,65 @@ function InvitationInbox({ onUseCode, onGoJoinTab }: { onUseCode: (code: string)
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+type JoinRequest = { id: string; character_id: string; created_at: string; character: { name: string; level: number } };
+
+function JoinRequestsPanel({ guildId, character, onResolved }: { guildId: string; character: Character; onResolved: () => Promise<void> }) {
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRequests = useCallback(async () => {
+    const { data } = await supabase
+      .from("guild_join_requests")
+      .select("id, character_id, created_at, character:characters(name, level)")
+      .eq("guild_id", guildId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    setRequests((data as any) ?? []);
+  }, [guildId]);
+
+  useEffect(() => {
+    void fetchRequests();
+    const t = setInterval(fetchRequests, 8000);
+    return () => clearInterval(t);
+  }, [fetchRequests]);
+
+  async function respond(requestId: string, accept: boolean) {
+    setError(null); setBusyId(requestId);
+    const { error: rpcError } = await supabase.rpc("respond_to_join_request", {
+      p_request_id: requestId, p_accept: accept, p_responder_character_id: character.id,
+    });
+    if (rpcError) setError(rpcError.message);
+    else { await fetchRequests(); await onResolved(); }
+    setBusyId(null);
+  }
+
+  if (requests.length === 0) return null;
+
+  return (
+    <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
+      <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">Demandes pour rejoindre la guilde</p>
+      <LedgerError message={error} />
+      <ul className="space-y-2">
+        {requests.map((r) => (
+          <li key={r.id} className="flex items-center justify-between text-sm border border-border/30 px-3 py-2">
+            <span>{r.character?.name ?? "?"} <span className="text-xs text-muted-foreground font-mono">niv. {r.character?.level ?? "?"}</span></span>
+            <div className="flex gap-2">
+              <button onClick={() => respond(r.id, true)} disabled={busyId === r.id}
+                className="text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10 disabled:opacity-30">
+                Accepter
+              </button>
+              <button onClick={() => respond(r.id, false)} disabled={busyId === r.id}
+                className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-border/10 disabled:opacity-30">
+                Refuser
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
