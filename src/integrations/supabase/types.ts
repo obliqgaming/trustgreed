@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           carried_gold: number
           created_at: string
+          declared_vocation: string | null
           died_at: string | null
           died_in_expedition_id: string | null
           guild_id: string | null
@@ -25,14 +26,17 @@ export type Database = {
           invited_by_character_id: string | null
           is_alive: boolean
           level: number
+          miracle_used: boolean
           name: string
           portrait: string | null
           profile_id: string
+          vocation: string | null
           xp: number
         }
         Insert: {
           carried_gold?: number
           created_at?: string
+          declared_vocation?: string | null
           died_at?: string | null
           died_in_expedition_id?: string | null
           guild_id?: string | null
@@ -40,14 +44,17 @@ export type Database = {
           invited_by_character_id?: string | null
           is_alive?: boolean
           level?: number
+          miracle_used?: boolean
           name: string
           portrait?: string | null
           profile_id: string
+          vocation?: string | null
           xp?: number
         }
         Update: {
           carried_gold?: number
           created_at?: string
+          declared_vocation?: string | null
           died_at?: string | null
           died_in_expedition_id?: string | null
           guild_id?: string | null
@@ -55,9 +62,11 @@ export type Database = {
           invited_by_character_id?: string | null
           is_alive?: boolean
           level?: number
+          miracle_used?: boolean
           name?: string
           portrait?: string | null
           profile_id?: string
+          vocation?: string | null
           xp?: number
         }
         Relationships: [
@@ -255,6 +264,7 @@ export type Database = {
           resolved: boolean
           resolved_at: string | null
           risk_level: string
+          risk_revealed: boolean
           step_number: number
           vote_deadline: string | null
         }
@@ -271,6 +281,7 @@ export type Database = {
           resolved?: boolean
           resolved_at?: string | null
           risk_level: string
+          risk_revealed?: boolean
           step_number: number
           vote_deadline?: string | null
         }
@@ -287,6 +298,7 @@ export type Database = {
           resolved?: boolean
           resolved_at?: string | null
           risk_level?: string
+          risk_revealed?: boolean
           step_number?: number
           vote_deadline?: string | null
         }
@@ -621,6 +633,55 @@ export type Database = {
           },
         ]
       }
+      vocation_triggers: {
+        Row: {
+          ability: string
+          character_id: string
+          created_at: string
+          expedition_id: string
+          id: string
+          step_id: string | null
+        }
+        Insert: {
+          ability: string
+          character_id: string
+          created_at?: string
+          expedition_id: string
+          id?: string
+          step_id?: string | null
+        }
+        Update: {
+          ability?: string
+          character_id?: string
+          created_at?: string
+          expedition_id?: string
+          id?: string
+          step_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vocation_triggers_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vocation_triggers_expedition_id_fkey"
+            columns: ["expedition_id"]
+            isOneToOne: false
+            referencedRelation: "expeditions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vocation_triggers_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "expedition_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       step_votes: {
         Row: {
           character_id: string
@@ -829,6 +890,52 @@ export type Database = {
           resolved_at: string | null
           resolved_by_character_id: string | null
           status: string
+        }
+      }
+      choose_vocation: {
+        Args: { p_character_id: string; p_vocation: string }
+        Returns: undefined
+      }
+      declare_vocation: {
+        Args: { p_character_id: string; p_declared_vocation: string }
+        Returns: undefined
+      }
+      get_my_vocation: {
+        Args: { p_character_id: string }
+        Returns: string
+      }
+      get_visible_risk: {
+        Args: { p_step_id: string }
+        Returns: number
+      }
+      reveal_risk: {
+        Args: { p_step_id: string; p_character_id: string }
+        Returns: undefined
+      }
+      trigger_martyr: {
+        Args: { p_step_id: string; p_character_id: string }
+        Returns: undefined
+      }
+      trigger_traitre_gambit: {
+        Args: { p_step_id: string; p_character_id: string }
+        Returns: undefined
+      }
+      inspect_vocation: {
+        Args: { p_caller_character_id: string; p_target_character_id: string }
+        Returns: boolean
+      }
+      set_guild_banner: {
+        Args: { p_guild_id: string; p_character_id: string; p_symbol: string; p_color: string }
+        Returns: {
+          banner: string | null
+          banner_bg: string | null
+          banner_color: string | null
+          banner_symbol: string | null
+          created_at: string
+          founder_profile_id: string
+          gold: number
+          id: string
+          name: string
         }
       }
       heartbeat: {
