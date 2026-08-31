@@ -31,17 +31,20 @@ export function Frame({
   return (
     <div className={`relative w-full ${className}`} style={wrapperStyle}>
       <img src={cfg.src} alt="" aria-hidden className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
-      <div className={`absolute overflow-auto flex items-center justify-center ${contentClassName}`} style={{ inset: cfg.inset }}>
+      <div
+        className={`absolute overflow-auto flex items-center justify-center text-[#f2e4c8] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] ${contentClassName}`}
+        style={{ inset: cfg.inset }}
+      >
         {children}
       </div>
     </div>
   );
 }
 
-const MEMBER_CARD_RATIO = 1685 / 666;
-// Zones mesurées sur l'asset card_member.png (top right bottom left en %)
-const MEMBER_PORTRAIT_BOX = { top: "18%", left: "13%", width: "22%", height: "63%" };
-const MEMBER_TEXT_INSET = "18% 6% 20% 34%";
+const MEMBER_CARD_RATIO = 1805 / 871;
+// Zone mesurée précisément (composantes connexes, pixel-perfect) sur card_member.png
+const MEMBER_PORTRAIT_BOX = { top: "33%", left: "16%", width: "20%", height: "39%" };
+const MEMBER_TEXT_INSET = "20% 6% 20% 40%";
 
 /** Carte de membre avec fente portrait dédiée + zone de texte (nom, niveau, vocation). */
 export function MemberFrame({
@@ -59,9 +62,35 @@ export function MemberFrame({
       <div className="absolute overflow-hidden rounded-sm" style={MEMBER_PORTRAIT_BOX}>
         {portrait}
       </div>
-      <div className="absolute overflow-auto flex flex-col justify-center" style={{ inset: MEMBER_TEXT_INSET }}>
+      <div
+        className="absolute overflow-auto flex flex-col justify-center text-[#f2e4c8] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]"
+        style={{ inset: MEMBER_TEXT_INSET }}
+      >
         {children}
       </div>
     </div>
+  );
+}
+
+const BORDER_CONFIG = {
+  wide: "/frames/border_wide.png",
+  square: "/frames/border_square.png",
+} as const;
+
+/**
+ * Bordure ornée superposée sur un contenu existant, sans imposer de fond ni de
+ * ratio — s'applique par-dessus n'importe quelle boîte déjà stylée (fond,
+ * flou, padding gérés par l'appelant). Le parent doit être `position: relative`.
+ * Usage : enrober une carte, une liste, un panneau, etc. sans reconstruire sa
+ * mise en page.
+ */
+export function DecorativeBorder({ variant = "wide", className = "" }: { variant?: keyof typeof BORDER_CONFIG; className?: string }) {
+  return (
+    <img
+      src={BORDER_CONFIG[variant]}
+      alt=""
+      aria-hidden
+      className={`absolute inset-0 w-full h-full object-fill pointer-events-none select-none ${className}`}
+    />
   );
 }

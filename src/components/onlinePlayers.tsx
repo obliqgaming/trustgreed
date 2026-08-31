@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerError } from "@/components/ledger";
+import { DecorativeBorder } from "@/components/frame";
 import { isOnline, usePresenceHeartbeat, ONLINE_THRESHOLD_MS } from "@/hooks/usePresence";
 
 type PlayerRow = { id: string; username: string; last_seen_at: string | null };
@@ -59,7 +60,8 @@ export function OnlinePlayersPanel({ guildName }: { guildName?: string | null })
   }
 
   return (
-    <div className="mb-6">
+    <div className="relative mb-6 bg-card/40 px-4 py-4">
+      <DecorativeBorder variant="wide" />
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
         Joueurs en ligne {players.length > 0 ? `(${players.length})` : ""}
       </p>

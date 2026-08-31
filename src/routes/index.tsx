@@ -6,7 +6,7 @@ import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from
 import { OnlinePlayersPanel } from "@/components/onlinePlayers";
 import { VocationPicker, VocationBadge, VOCATIONS, vocationLabel, type VocationId } from "@/components/vocations";
 import { GuildBanner, BannerPicker } from "@/components/banners";
-import { Frame, MemberFrame } from "@/components/frame";
+import { Frame, MemberFrame, DecorativeBorder } from "@/components/frame";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 
@@ -170,7 +170,7 @@ function Index() {
   const isInExpedition = activeExpedition && members.some(m => m.id === character.id);
 
   return (
-    <LedgerPage bg="/guild_hall_bg.png">
+    <LedgerPage bg="/guild_hall_bg.png" wide>
       <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""} · il faut 3 membres pour partir en expédition`}>
 
         {guild && (
@@ -187,128 +187,136 @@ function Index() {
           <RetroVocationPicker characterId={character.id} onDone={refresh} />
         )}
 
-        {/* Bandeau expédition en cours */}
-        {activeExpedition && (
-          <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
-            <p className="text-xs tracking-[0.14em] uppercase text-primary mb-1">
-              {activeExpedition.status === "waiting" ? "Salle d'attente ouverte" : "Expédition en cours"}
-            </p>
-            <p className="text-sm text-muted-foreground mb-2">
-              {activeExpedition.participant_count} participant{activeExpedition.participant_count > 1 ? "s" : ""}
-              {activeExpedition.status === "waiting" ? " — en attente du lancement" : " — en route"}
-            </p>
-            <button
-              onClick={() => {
-                if (activeExpedition.status === "active") {
-                  navigate({ to: "/vote", search: { expedition: activeExpedition.id } });
-                } else {
-                  navigate({ to: "/expedition" });
-                }
-              }}
-              className="w-full text-xs tracking-[0.12em] uppercase border border-primary/40 text-primary py-1.5 hover:bg-primary/10"
-            >
-              {activeExpedition.status === "active" ? "Rejoindre l'expédition →" : "Voir la salle d'attente →"}
-            </button>
-          </div>
-        )}
+        <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-6 lg:items-start">
+          {/* Colonne principale */}
+          <div className="min-w-0">
+            {/* Bandeau expédition en cours */}
+            {activeExpedition && (
+              <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
+                <p className="text-xs tracking-[0.14em] uppercase text-primary mb-1">
+                  {activeExpedition.status === "waiting" ? "Salle d'attente ouverte" : "Expédition en cours"}
+                </p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {activeExpedition.participant_count} participant{activeExpedition.participant_count > 1 ? "s" : ""}
+                  {activeExpedition.status === "waiting" ? " — en attente du lancement" : " — en route"}
+                </p>
+                <button
+                  onClick={() => {
+                    if (activeExpedition.status === "active") {
+                      navigate({ to: "/vote", search: { expedition: activeExpedition.id } });
+                    } else {
+                      navigate({ to: "/expedition" });
+                    }
+                  }}
+                  className="w-full text-xs tracking-[0.12em] uppercase border border-primary/40 text-primary py-1.5 hover:bg-primary/10"
+                >
+                  {activeExpedition.status === "active" ? "Rejoindre l'expédition →" : "Voir la salle d'attente →"}
+                </button>
+              </div>
+            )}
 
-        {/* Membres */}
-        <div className="mb-5">
-          <Frame variant="bar" className="mb-3 max-w-xs mx-auto sm:mx-0">
-            <span className="text-xs tracking-[0.16em] uppercase text-[#3a2818] font-serif">Membres</span>
-          </Frame>
-          <div className="space-y-2">
-            {members.map((m) => (
-              <MemberFrame
-                key={m.id}
-                portrait={<PortraitDisplay portraitId={m.portrait ?? "ombre"} size={64} />}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 rounded-full ${isOnline(m.last_seen_at) ? "bg-green-600" : "bg-black/20"}`} aria-hidden />
-                  <span className={`text-sm font-serif truncate ${m.id === character.id ? "text-primary font-semibold" : "text-[#2a1c10]"}`}>
-                    {m.name}{m.id === character.id ? " (toi)" : ""}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] font-mono text-[#5a4530]">niv. {m.level}</span>
-                  <VocationBadge vocationId={m.declared_vocation} className="!border-[#5a4530]/40 !text-[#5a4530]" />
-                </div>
-              </MemberFrame>
-            ))}
+            {/* Stats perso */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="border border-border/60 p-3">
+                <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Niveau</dt>
+                <dd className="mt-1 font-mono text-xl text-primary">{character.level}</dd>
+              </div>
+              <div className="border border-border/60 p-3">
+                <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">XP</dt>
+                <dd className="mt-1 font-mono text-xl text-primary">{character.xp}</dd>
+              </div>
+            </div>
+
+            {/* Vocation */}
+            {myVocation && (
+              <VocationPanel vocationId={myVocation} characterId={character.id} />
+            )}
+
+            {/* Bouton expédition */}
+            {!activeExpedition && (
+              <button onClick={() => navigate({ to: "/expedition" })}
+                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 mb-3">
+                Partir en expédition
+              </button>
+            )}
+
+            {/* Historique */}
+            {history.length > 0 && (
+              <div className="mt-4 border-t border-border/20 pt-4">
+                <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Historique</p>
+                <ul className="space-y-1">
+                  {history.map((e) => (
+                    <li key={e.id} className="px-3 py-2 border border-border/20 text-xs text-muted-foreground">
+                      <span className={`inline-block mr-2 ${e.event_type === "member_died" ? "text-red-400" : e.event_type === "expedition_completed" ? "text-primary" : "text-muted-foreground"}`}>
+                        {e.event_type === "member_died" ? "✝" : e.event_type === "expedition_completed" ? "⚔" : "·"}
+                      </span>
+                      {e.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Colonne latérale : membres, demandes, chat, joueurs en ligne, navigation */}
+          <div className="min-w-0 mt-6 lg:mt-0">
+            {/* Membres */}
+            <div className="mb-5">
+              <Frame variant="bar" className="mb-3 max-w-xs mx-auto lg:mx-0 lg:max-w-none">
+                <span className="text-xs tracking-[0.16em] uppercase font-serif">Membres</span>
+              </Frame>
+              <div className="space-y-2">
+                {members.map((m) => (
+                  <MemberFrame
+                    key={m.id}
+                    portrait={<PortraitDisplay portraitId={m.portrait ?? "ombre"} size={64} />}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`h-1.5 w-1.5 rounded-full ${isOnline(m.last_seen_at) ? "bg-green-600" : "bg-black/20"}`} aria-hidden />
+                      <span className={`text-sm font-serif truncate ${m.id === character.id ? "text-primary font-semibold" : ""}`}>
+                        {m.name}{m.id === character.id ? " (toi)" : ""}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[11px] font-mono opacity-90">niv. {m.level}</span>
+                      <VocationBadge vocationId={m.declared_vocation} className="!border-[#f2e4c8]/40 !text-[#f2e4c8]" />
+                    </div>
+                  </MemberFrame>
+                ))}
+              </div>
+            </div>
+
+            {guild && (
+              <>
+                <JoinRequestsPanel guildId={guild.id} character={character} onResolved={refresh} />
+                <GuildChatBox guildId={guild.id} character={character} />
+              </>
+            )}
+
+            <OnlinePlayersPanel guildName={guild?.name} />
+
+            <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
+              <button onClick={() => navigate({ to: "/profil" })}
+                className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+                Mon profil
+              </button>
+              <button onClick={() => navigate({ to: "/monde" })}
+                className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+                Le monde
+              </button>
+              <button onClick={() => navigate({ to: "/carte" })}
+                className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+                Carte des guildes
+              </button>
+              <button onClick={() => navigate({ to: "/inviter" })}
+                className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
+                Inviter quelqu'un dans la guilde
+              </button>
+              <LeaveGuildButton character={character} onDone={refresh} />
+            </div>
+            <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
           </div>
         </div>
-
-        {/* Stats perso */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="border border-border/60 p-3">
-            <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Niveau</dt>
-            <dd className="mt-1 font-mono text-xl text-primary">{character.level}</dd>
-          </div>
-          <div className="border border-border/60 p-3">
-            <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">XP</dt>
-            <dd className="mt-1 font-mono text-xl text-primary">{character.xp}</dd>
-          </div>
-        </div>
-
-        {/* Vocation */}
-        {myVocation && (
-          <VocationPanel vocationId={myVocation} characterId={character.id} />
-        )}
-
-        {/* Bouton expédition */}
-        {!activeExpedition && (
-          <button onClick={() => navigate({ to: "/expedition" })}
-            className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 mb-3">
-            Partir en expédition
-          </button>
-        )}
-
-        {/* Historique */}
-        {history.length > 0 && (
-          <div className="mt-4 border-t border-border/20 pt-4">
-            <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Historique</p>
-            <ul className="space-y-1">
-              {history.map((e) => (
-                <li key={e.id} className="px-3 py-2 border border-border/20 text-xs text-muted-foreground">
-                  <span className={`inline-block mr-2 ${e.event_type === "member_died" ? "text-red-400" : e.event_type === "expedition_completed" ? "text-primary" : "text-muted-foreground"}`}>
-                    {e.event_type === "member_died" ? "✝" : e.event_type === "expedition_completed" ? "⚔" : "·"}
-                  </span>
-                  {e.description}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {guild && (
-          <>
-            <JoinRequestsPanel guildId={guild.id} character={character} onResolved={refresh} />
-            <GuildChatBox guildId={guild.id} character={character} />
-          </>
-        )}
-
-        <OnlinePlayersPanel guildName={guild?.name} />
-
-        <div className="mt-3 border-t border-border/20 pt-3 space-y-1">
-          <button onClick={() => navigate({ to: "/profil" })}
-            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
-            Mon profil
-          </button>
-          <button onClick={() => navigate({ to: "/monde" })}
-            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
-            Le monde
-          </button>
-          <button onClick={() => navigate({ to: "/carte" })}
-            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
-            Carte des guildes
-          </button>
-          <button onClick={() => navigate({ to: "/inviter" })}
-            className="w-full text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors py-1">
-            Inviter quelqu'un dans la guilde
-          </button>
-          <LeaveGuildButton character={character} onDone={refresh} />
-        </div>
-        <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
       </LedgerCard>
     </LedgerPage>
   );
@@ -816,7 +824,8 @@ function JoinRequestsPanel({ guildId, character, onResolved }: { guildId: string
   if (requests.length === 0) return null;
 
   return (
-    <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
+    <div className="relative mb-4 bg-primary/5 px-4 py-4">
+      <DecorativeBorder variant="wide" />
       <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">Demandes pour rejoindre la guilde</p>
       <LedgerError message={error} />
       <ul className="space-y-2">
@@ -892,24 +901,24 @@ function VocationPanel({ vocationId, characterId }: { vocationId: VocationId; ch
 
   return (
     <div className="mb-4">
-      <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left">
-        <p className="text-xs tracking-[0.14em] uppercase text-[#5a4530] mb-1">Ta vocation</p>
-        <p className="text-sm font-serif text-[#7a1f1f]">{vocationLabel(vocationId)}</p>
-        <p className="text-xs text-[#3a2818] mt-1">{VOCATIONS.find(v => v.id === vocationId)?.description}</p>
+      <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left !inset-[16%_12%_11%_14%]">
+        <p className="text-xs tracking-[0.14em] uppercase opacity-90 mb-1">Ta vocation</p>
+        <p className="text-sm font-serif text-primary">{vocationLabel(vocationId)}</p>
+        <p className="text-xs mt-1">{VOCATIONS.find(v => v.id === vocationId)?.description}</p>
 
         {vocationId === "Traitre" && (
-          <div className="mt-3 pt-3 border-t border-black/15">
+          <div className="mt-3 pt-3 border-t border-[#f2e4c8]/20">
             {!declaring ? (
-              <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-black/30 text-[#3a2818] px-2.5 py-1 hover:bg-black/5">
+              <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-[#f2e4c8]/40 px-2.5 py-1 hover:bg-white/5">
                 Mentir sur ma vocation déclarée
               </button>
             ) : (
               <>
                 <VocationPicker value={lie} onChange={setLie} title="Vocation à déclarer publiquement (modifiable à volonté)" />
                 <LedgerError message={error} />
-                {notice && <p className="text-xs text-emerald-700 mt-2">{notice}</p>}
+                {notice && <p className="text-xs text-emerald-300 mt-2">{notice}</p>}
                 <button onClick={submitLie} disabled={!lie || busy}
-                  className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-[#7a1f1f]/50 text-[#7a1f1f] px-3 py-1.5 hover:bg-[#7a1f1f]/10 disabled:opacity-30">
+                  className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-primary/50 text-primary px-3 py-1.5 hover:bg-primary/10 disabled:opacity-30">
                   {busy ? "…" : "Valider ce mensonge"}
               </button>
             </>
