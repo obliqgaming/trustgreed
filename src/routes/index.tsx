@@ -6,6 +6,7 @@ import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from
 import { OnlinePlayersPanel } from "@/components/onlinePlayers";
 import { VocationPicker, VocationBadge, VOCATIONS, vocationLabel, type VocationId } from "@/components/vocations";
 import { GuildBanner, BannerPicker } from "@/components/banners";
+import { Frame, MemberFrame } from "@/components/frame";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/")({
 
 type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
 type Guild = { id: string; name: string; gold: number; founder_profile_id?: string; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
-type Member = { id: string; name: string; level: number; last_seen_at?: string | null; declared_vocation?: string | null };
+type Member = { id: string; name: string; level: number; portrait?: string | null; last_seen_at?: string | null; declared_vocation?: string | null };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
 type ActiveExpedition = { id: string; status: string; participant_count: number } | null;
 
@@ -69,8 +70,8 @@ function Index() {
       const { data: g } = await supabase.from("guilds").select("id, name, gold, founder_profile_id, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle();
       setGuild(g ?? null);
 
-      const { data: m } = await supabase.from("characters").select("id, name, level, declared_vocation, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
-      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
+      const { data: m } = await supabase.from("characters").select("id, name, level, portrait, declared_vocation, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
+      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, portrait: row.portrait, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
 
       const { data: h } = await supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10);
       setHistory(h ?? []);
@@ -212,20 +213,29 @@ function Index() {
         )}
 
         {/* Membres */}
-        <div className="mb-4">
-          <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Membres</p>
-          <ul className="space-y-1">
+        <div className="mb-5">
+          <Frame variant="bar" className="mb-3 max-w-xs mx-auto sm:mx-0">
+            <span className="text-xs tracking-[0.16em] uppercase text-[#3a2818] font-serif">Membres</span>
+          </Frame>
+          <div className="space-y-2">
             {members.map((m) => (
-              <li key={m.id} className={`flex justify-between px-3 py-2 text-sm border ${m.id === character.id ? "border-primary/60 text-primary" : "border-border/30 text-foreground"}`}>
-                <span className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 rounded-full ${isOnline(m.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
-                  {m.name}{m.id === character.id ? " (toi)" : ""}
-                  <VocationBadge vocationId={m.declared_vocation} />
-                </span>
-                <span className="font-mono text-xs text-muted-foreground">niv. {m.level}</span>
-              </li>
+              <MemberFrame
+                key={m.id}
+                portrait={<PortraitDisplay portraitId={m.portrait ?? "ombre"} size={64} />}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`h-1.5 w-1.5 rounded-full ${isOnline(m.last_seen_at) ? "bg-green-600" : "bg-black/20"}`} aria-hidden />
+                  <span className={`text-sm font-serif truncate ${m.id === character.id ? "text-primary font-semibold" : "text-[#2a1c10]"}`}>
+                    {m.name}{m.id === character.id ? " (toi)" : ""}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[11px] font-mono text-[#5a4530]">niv. {m.level}</span>
+                  <VocationBadge vocationId={m.declared_vocation} className="!border-[#5a4530]/40 !text-[#5a4530]" />
+                </div>
+              </MemberFrame>
             ))}
-          </ul>
+          </div>
         </div>
 
         {/* Stats perso */}
@@ -881,30 +891,32 @@ function VocationPanel({ vocationId, characterId }: { vocationId: VocationId; ch
   }
 
   return (
-    <div className="mb-4 border border-border/30 px-3 py-3">
-      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-1">Ta vocation</p>
-      <p className="text-sm font-serif text-primary">{vocationLabel(vocationId)}</p>
-      <p className="text-xs text-muted-foreground mt-1">{VOCATIONS.find(v => v.id === vocationId)?.description}</p>
+    <div className="mb-4">
+      <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left">
+        <p className="text-xs tracking-[0.14em] uppercase text-[#5a4530] mb-1">Ta vocation</p>
+        <p className="text-sm font-serif text-[#7a1f1f]">{vocationLabel(vocationId)}</p>
+        <p className="text-xs text-[#3a2818] mt-1">{VOCATIONS.find(v => v.id === vocationId)?.description}</p>
 
-      {vocationId === "Traitre" && (
-        <div className="mt-3 pt-3 border-t border-border/20">
-          {!declaring ? (
-            <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-border/10">
-              Mentir sur ma vocation déclarée
-            </button>
-          ) : (
-            <>
-              <VocationPicker value={lie} onChange={setLie} title="Vocation à déclarer publiquement (modifiable à volonté)" />
-              <LedgerError message={error} />
-              {notice && <p className="text-xs text-emerald-400 mt-2">{notice}</p>}
-              <button onClick={submitLie} disabled={!lie || busy}
-                className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 disabled:opacity-30">
-                {busy ? "…" : "Valider ce mensonge"}
+        {vocationId === "Traitre" && (
+          <div className="mt-3 pt-3 border-t border-black/15">
+            {!declaring ? (
+              <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-black/30 text-[#3a2818] px-2.5 py-1 hover:bg-black/5">
+                Mentir sur ma vocation déclarée
+              </button>
+            ) : (
+              <>
+                <VocationPicker value={lie} onChange={setLie} title="Vocation à déclarer publiquement (modifiable à volonté)" />
+                <LedgerError message={error} />
+                {notice && <p className="text-xs text-emerald-700 mt-2">{notice}</p>}
+                <button onClick={submitLie} disabled={!lie || busy}
+                  className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-[#7a1f1f]/50 text-[#7a1f1f] px-3 py-1.5 hover:bg-[#7a1f1f]/10 disabled:opacity-30">
+                  {busy ? "…" : "Valider ce mensonge"}
               </button>
             </>
           )}
         </div>
       )}
+      </Frame>
     </div>
   );
 }
