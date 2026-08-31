@@ -116,6 +116,16 @@ function Index() {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Poll léger : garde le statut en ligne des membres à jour sans re-fetcher toute la page
+  useEffect(() => {
+    if (!character?.guild_id) return;
+    const t = setInterval(async () => {
+      const { data: m } = await supabase.from("characters").select("id, name, level, portrait, declared_vocation, profiles(last_seen_at)").eq("guild_id", character.guild_id).eq("is_alive", true).order("level", { ascending: false });
+      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, portrait: row.portrait, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
+    }, 20000);
+    return () => clearInterval(t);
+  }, [character?.guild_id]);
+
   usePresenceHeartbeat(!!session);
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
