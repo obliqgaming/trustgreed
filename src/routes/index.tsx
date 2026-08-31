@@ -4,6 +4,8 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, LedgerCard, LedgerError, LedgerPage, SealButton, TextLink } from "@/components/ledger";
 import { OnlinePlayersPanel } from "@/components/onlinePlayers";
+import { VocationPicker, VocationBadge, VOCATIONS, vocationLabel, type VocationId } from "@/components/vocations";
+import { GuildBanner, BannerPicker } from "@/components/banners";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 
@@ -13,8 +15,8 @@ export const Route = createFileRoute("/")({
 });
 
 type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
-type Guild = { id: string; name: string; gold: number; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
-type Member = { id: string; name: string; level: number; last_seen_at?: string | null };
+type Guild = { id: string; name: string; gold: number; founder_profile_id?: string; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
+type Member = { id: string; name: string; level: number; last_seen_at?: string | null; declared_vocation?: string | null };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
 type ActiveExpedition = { id: string; status: string; participant_count: number } | null;
 
@@ -27,6 +29,7 @@ function Index() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [guild, setGuild] = useState<Guild | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [myVocation, setMyVocation] = useState<VocationId | null | undefined>(undefined);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -57,12 +60,17 @@ function Index() {
     const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id").eq("profile_id", session.user.id).eq("is_alive", true).maybeSingle();
     setCharacter(char ?? null);
 
+    if (char) {
+      const { data: vocData } = await supabase.rpc("get_my_vocation", { p_character_id: char.id });
+      setMyVocation((vocData as VocationId | null) ?? null);
+    }
+
     if (char?.guild_id) {
-      const { data: g } = await supabase.from("guilds").select("id, name, gold, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle();
+      const { data: g } = await supabase.from("guilds").select("id, name, gold, founder_profile_id, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle();
       setGuild(g ?? null);
 
-      const { data: m } = await supabase.from("characters").select("id, name, level, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
-      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, last_seen_at: row.profiles?.last_seen_at ?? null })));
+      const { data: m } = await supabase.from("characters").select("id, name, level, declared_vocation, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
+      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
 
       const { data: h } = await supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10);
       setHistory(h ?? []);
@@ -164,6 +172,15 @@ function Index() {
     <LedgerPage bg="/guild_hall_bg.png">
       <LedgerCard title={guild?.name ?? "Guilde"} subtitle={`Trésor : ${Math.round(guild?.gold ?? 0)} or · ${members.length} membre${members.length > 1 ? "s" : ""} · il faut 3 membres pour partir en expédition`}>
 
+        {guild && (
+          <div className="flex items-center gap-2 mb-4">
+            <GuildBanner symbol={guild.banner_symbol} color={guild.banner_color} size={32} />
+            {session?.user?.id === guild.founder_profile_id && (
+              <GuildBannerEditor guildId={guild.id} characterId={character.id} currentSymbol={guild.banner_symbol ?? null} currentColor={guild.banner_color ?? null} onDone={refresh} />
+            )}
+          </div>
+        )}
+
         {/* Bandeau expédition en cours */}
         {activeExpedition && (
           <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
@@ -198,6 +215,7 @@ function Index() {
                 <span className="flex items-center gap-2">
                   <span className={`h-1.5 w-1.5 rounded-full ${isOnline(m.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
                   {m.name}{m.id === character.id ? " (toi)" : ""}
+                  <VocationBadge vocationId={m.declared_vocation} />
                 </span>
                 <span className="font-mono text-xs text-muted-foreground">niv. {m.level}</span>
               </li>
@@ -216,6 +234,13 @@ function Index() {
             <dd className="mt-1 font-mono text-xl text-primary">{character.xp}</dd>
           </div>
         </div>
+
+        {/* Vocation */}
+        {myVocation === null ? (
+          <RetroVocationPicker characterId={character.id} onDone={refresh} />
+        ) : myVocation ? (
+          <VocationPanel vocationId={myVocation} characterId={character.id} />
+        ) : null}
 
         {/* Bouton expédition */}
         {!activeExpedition && (
@@ -331,7 +356,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
 
   useEffect(() => {
     void (async () => {
-      const { data } = await supabase.from("guilds").select("id, name, gold").order("gold", { ascending: false }).limit(10);
+      const { data } = await supabase.from("guilds").select("id, name, gold, banner_symbol, banner_color").order("gold", { ascending: false }).limit(10);
       if (data) {
         const withCounts = await Promise.all(data.map(async (g) => {
           const { count } = await supabase.from("characters").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("is_alive", true);
@@ -430,7 +455,10 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
                 {guilds.map((g) => (
                   <li key={g.id} className="border border-border/40 px-3 py-2 text-sm">
                     <div className="flex justify-between">
-                      <span>{g.name}</span>
+                      <span className="flex items-center gap-2">
+                        <GuildBanner symbol={g.banner_symbol} color={g.banner_color} size={20} />
+                        {g.name}
+                      </span>
                       <span className="font-mono text-xs text-muted-foreground">{g.member_count} membre{g.member_count > 1 ? "s" : ""} · {Math.round(g.gold)} or</span>
                     </div>
                     <button
@@ -532,6 +560,7 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [hasDied, setHasDied] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [portrait, setPortrait] = useState("ombre");
+  const [vocation, setVocation] = useState<VocationId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showPortraitPicker, setShowPortraitPicker] = useState(false);
@@ -552,12 +581,15 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
   }, []);
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); setBusy(true);
+    e.preventDefault();
+    if (!vocation) { setError("Choisis une vocation."); return; }
+    setError(null); setBusy(true);
     const { data: char, error: rpcError } = await supabase.rpc("create_character", { p_name: name });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
-    // Sauvegarder le portrait choisi
     if (char) {
       await supabase.from("characters").update({ portrait }).eq("id", (char as any).id);
+      const { error: vocError } = await supabase.rpc("choose_vocation", { p_character_id: (char as any).id, p_vocation: vocation });
+      if (vocError) { setError(vocError.message); setBusy(false); return; }
     }
     await onDone();
     setBusy(false);
@@ -593,6 +625,10 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
               <PortraitPicker value={portrait} onChange={(id) => { setPortrait(id); setShowPortraitPicker(false); }} />
             </div>
           )}
+        </div>
+
+        <div className="mt-4">
+          <VocationPicker value={vocation} onChange={setVocation} />
         </div>
 
         <LedgerError message={error} />
@@ -787,6 +823,127 @@ function JoinRequestsPanel({ guildId, character, onResolved }: { guildId: string
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+function RetroVocationPicker({ characterId, onDone }: { characterId: string; onDone: () => Promise<void> }) {
+  const [vocation, setVocation] = useState<VocationId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function confirm() {
+    if (!vocation) return;
+    setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("choose_vocation", { p_character_id: characterId, p_vocation: vocation });
+    if (rpcError) setError(rpcError.message); else await onDone();
+    setBusy(false);
+  }
+
+  return (
+    <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
+      <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">Choisis ta vocation</p>
+      <p className="text-xs text-muted-foreground mb-3">Choix définitif, à faire une seule fois dans la vie de ton personnage.</p>
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10">
+          Choisir maintenant
+        </button>
+      ) : (
+        <>
+          <VocationPicker value={vocation} onChange={setVocation} />
+          <LedgerError message={error} />
+          <button onClick={confirm} disabled={!vocation || busy}
+            className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 disabled:opacity-30">
+            {busy ? "…" : "Confirmer (définitif)"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function VocationPanel({ vocationId, characterId }: { vocationId: VocationId; characterId: string }) {
+  const [declaring, setDeclaring] = useState(false);
+  const [lie, setLie] = useState<VocationId | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function submitLie() {
+    if (!lie) return;
+    setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("declare_vocation", { p_character_id: characterId, p_declared_vocation: lie });
+    if (rpcError) setError(rpcError.message); else { setNotice("Vocation déclarée mise à jour."); setDeclaring(false); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mb-4 border border-border/30 px-3 py-3">
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-1">Ta vocation</p>
+      <p className="text-sm font-serif text-primary">{vocationLabel(vocationId)}</p>
+      <p className="text-xs text-muted-foreground mt-1">{VOCATIONS.find(v => v.id === vocationId)?.description}</p>
+
+      {vocationId === "Traitre" && (
+        <div className="mt-3 pt-3 border-t border-border/20">
+          {!declaring ? (
+            <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-border/10">
+              Mentir sur ma vocation déclarée
+            </button>
+          ) : (
+            <>
+              <VocationPicker value={lie} onChange={setLie} />
+              <LedgerError message={error} />
+              {notice && <p className="text-xs text-emerald-400 mt-2">{notice}</p>}
+              <button onClick={submitLie} disabled={!lie || busy}
+                className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 disabled:opacity-30">
+                {busy ? "…" : "Valider ce mensonge"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+function GuildBannerEditor({ guildId, characterId, currentSymbol, currentColor, onDone }: {
+  guildId: string; characterId: string; currentSymbol: string | null; currentColor: string | null; onDone: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [symbol, setSymbol] = useState<string | null>(currentSymbol);
+  const [color, setColor] = useState<string | null>(currentColor);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("set_guild_banner", {
+      p_guild_id: guildId, p_character_id: characterId, p_symbol: symbol, p_color: color,
+    });
+    if (rpcError) setError(rpcError.message); else { await onDone(); setOpen(false); }
+    setBusy(false);
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-xs uppercase tracking-[0.1em] text-muted-foreground hover:text-primary underline underline-offset-4">
+        {currentSymbol ? "Modifier la bannière" : "Choisir une bannière"}
+      </button>
+    );
+  }
+
+  return (
+    <div className="border border-border/30 px-3 py-3 flex-1">
+      <BannerPicker symbol={symbol} color={color} onChangeSymbol={setSymbol} onChangeColor={setColor} />
+      <LedgerError message={error} />
+      <div className="flex gap-2 mt-3">
+        <button onClick={save} disabled={busy || !symbol || !color}
+          className="text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 disabled:opacity-30">
+          {busy ? "…" : "Enregistrer"}
+        </button>
+        <button onClick={() => setOpen(false)} className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:bg-border/10">
+          Annuler
+        </button>
+      </div>
     </div>
   );
 }
