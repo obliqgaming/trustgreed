@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
+import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -17,9 +18,9 @@ type Character = { id: string; name: string };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
   loot_min: number; loot_max: number; vote_deadline: string;
-  resolved: boolean; deaths_count: number; description: string | null;
+  resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
 };
-type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string } };
+type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
@@ -67,6 +68,13 @@ function VotePage() {
   const [result, setResult] = useState<Result | null>(null);
   const [iDied, setIDied] = useState(false);
   const [pendingReveal, setPendingReveal] = useState(false); // étape résolue, pas encore vue
+  const [myVocation, setMyVocation] = useState<VocationId | null>(null);
+  const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
+  const [visibleRisk, setVisibleRisk] = useState<number | null>(null);
+  const [vocationBusy, setVocationBusy] = useState<string | null>(null);
+  const [vocationError, setVocationError] = useState<string | null>(null);
+  const [inspectTarget, setInspectTarget] = useState<string | null>(null);
+  const [inspectResult, setInspectResult] = useState<{ id: string; honest: boolean } | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tensionRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,13 +94,13 @@ function VotePage() {
     const ids = parts.map((p: any) => p.character_id);
     const { data: chars } = await supabase
       .from("characters")
-      .select("id, name, portrait, is_alive")
+      .select("id, name, portrait, is_alive, declared_vocation")
       .in("id", ids);
 
     const enriched = (chars ?? []).map((c: any) => ({
       character_id: c.id,
       is_alive: c.is_alive,
-      character: { name: c.name, portrait: c.portrait ?? "ombre" },
+      character: { name: c.name, portrait: c.portrait ?? "ombre", declared_vocation: c.declared_vocation ?? null },
     }));
     setParticipants(enriched);
     return enriched;
@@ -112,7 +120,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -133,6 +141,13 @@ function VotePage() {
       }
       setStep(data);
       await fetchVotes(data.id);
+
+      if (data.risk_revealed) {
+        const { data: risk } = await supabase.rpc("get_visible_risk", { p_step_id: data.id });
+        setVisibleRisk(risk as number | null);
+      } else {
+        setVisibleRisk(null);
+      }
 
       // Si l'étape est résolue et qu'on n'a pas encore vu le résultat, signaler
       if (data.resolved && !result && !cinematic) {
@@ -186,6 +201,14 @@ function VotePage() {
       setCharacter(char);
       characterIdRef.current = char.id;
 
+      const { data: vocData } = await supabase.rpc("get_my_vocation", { p_character_id: char.id });
+      setMyVocation((vocData as VocationId | null) ?? null);
+
+      const { data: usedData } = await supabase
+        .from("vocation_triggers").select("ability")
+        .eq("expedition_id", expeditionId).eq("character_id", char.id);
+      setUsedAbilities(new Set((usedData ?? []).map((u: any) => u.ability)));
+
       // Vérifier participation
       const { data: partCheck } = await supabase
         .from("expedition_participants")
@@ -225,6 +248,44 @@ function VotePage() {
       setVotedIds(prev => prev.includes(character.id) ? prev : [...prev, character.id]);
     }
     setBusy(false);
+  }
+
+  async function useReveal() {
+    if (!step || !character) return;
+    setVocationError(null); setVocationBusy("reveal");
+    const { error: rpcError } = await supabase.rpc("reveal_risk", { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setVocationError(rpcError.message);
+    else { setUsedAbilities(prev => new Set(prev).add("eclaireur_reveal")); await fetchStep(); }
+    setVocationBusy(null);
+  }
+
+  async function useMartyr() {
+    if (!step || !character) return;
+    setVocationError(null); setVocationBusy("martyr");
+    const { error: rpcError } = await supabase.rpc("trigger_martyr", { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setVocationError(rpcError.message);
+    else setUsedAbilities(prev => new Set(prev).add("martyr"));
+    setVocationBusy(null);
+  }
+
+  async function useGambit() {
+    if (!step || !character) return;
+    setVocationError(null); setVocationBusy("gambit");
+    const { error: rpcError } = await supabase.rpc("trigger_traitre_gambit", { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setVocationError(rpcError.message);
+    else setUsedAbilities(prev => new Set(prev).add("traitre_gambit"));
+    setVocationBusy(null);
+  }
+
+  async function useInspect(targetId: string) {
+    if (!character) return;
+    setVocationError(null); setVocationBusy(`inspect-${targetId}`); setInspectResult(null);
+    const { data, error: rpcError } = await supabase.rpc("inspect_vocation", {
+      p_caller_character_id: character.id, p_target_character_id: targetId,
+    });
+    if (rpcError) setVocationError(rpcError.message);
+    else setInspectResult({ id: targetId, honest: !!data });
+    setVocationBusy(null);
   }
 
   async function resolveStep() {
@@ -415,7 +476,42 @@ function VotePage() {
                 {timeLeft !== null ? fmt(timeLeft) : "—"}
               </span>
             </div>
-            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</p>
+            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
+              ⚠ Risque {RISK_LABEL[step.risk_level]}
+              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact)</span>}
+            </p>
+
+            {/* Pouvoirs de vocation actifs pendant le vote */}
+            {myVocation && !myVote && (
+              <div className="mb-4 space-y-2">
+                {myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") && !step.risk_revealed && (
+                  <button onClick={useReveal} disabled={vocationBusy === "reveal"}
+                    className="w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-2 hover:bg-primary/10 disabled:opacity-30">
+                    {vocationBusy === "reveal" ? "…" : "Révéler le risque exact au groupe"}
+                  </button>
+                )}
+                {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
+                  <button onClick={useMartyr} disabled={vocationBusy === "martyr"}
+                    className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
+                    {vocationBusy === "martyr" ? "…" : "Me sacrifier en premier si mort il y a"}
+                  </button>
+                )}
+                {usedAbilities.has("martyr") && (
+                  <p className="text-xs text-red-400/70 italic">Ton sacrifice est promis pour cette étape.</p>
+                )}
+                {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
+                  <button onClick={useGambit} disabled={vocationBusy === "gambit"}
+                    className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
+                    {vocationBusy === "gambit" ? "…" : "Manigancer une mise trafiquée (+ butin, + risque du groupe)"}
+                  </button>
+                )}
+                {usedAbilities.has("traitre_gambit") && (
+                  <p className="text-xs text-amber-400/70 italic">La mise est lancée pour cette étape.</p>
+                )}
+                <LedgerError message={vocationError} />
+              </div>
+            )}
+
             {!myVote ? (
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button onClick={() => castVote("continuer")} disabled={busy}
@@ -461,6 +557,19 @@ function VotePage() {
                       {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
                       {!p.is_alive ? " ✝" : ""}
                     </span>
+                    <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
+                    {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
+                      inspectResult?.id === p.character_id ? (
+                        <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
+                          {inspectResult.honest ? "Honnête" : "Mensonge"}
+                        </span>
+                      ) : (
+                        <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
+                          className="text-[10px] uppercase tracking-[0.08em] border border-border/40 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
+                          {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
+                        </button>
+                      )
+                    )}
                     {p.is_alive && (
                       <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
                         {votedIds.includes(p.character_id) ? "✓" : "…"}
