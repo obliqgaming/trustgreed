@@ -23,10 +23,10 @@ export function VocationBadge({ vocationId, className = "" }: { vocationId: stri
   );
 }
 
-export function VocationPicker({ value, onChange }: { value: VocationId | null; onChange: (id: VocationId) => void }) {
+export function VocationPicker({ value, onChange, title = "Vocation (choix définitif)" }: { value: VocationId | null; onChange: (id: VocationId) => void; title?: string }) {
   return (
     <div>
-      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Vocation (choix définitif)</p>
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">{title}</p>
       <div className="space-y-2">
         {VOCATIONS.map((v) => (
           <button

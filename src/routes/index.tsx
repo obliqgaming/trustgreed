@@ -894,7 +894,7 @@ function VocationPanel({ vocationId, characterId }: { vocationId: VocationId; ch
             </button>
           ) : (
             <>
-              <VocationPicker value={lie} onChange={setLie} />
+              <VocationPicker value={lie} onChange={setLie} title="Vocation à déclarer publiquement (modifiable à volonté)" />
               <LedgerError message={error} />
               {notice && <p className="text-xs text-emerald-400 mt-2">{notice}</p>}
               <button onClick={submitLie} disabled={!lie || busy}
