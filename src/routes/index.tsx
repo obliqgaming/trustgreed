@@ -806,12 +806,14 @@ function JoinRequestsPanel({ guildId, character, onResolved }: { guildId: string
   const [error, setError] = useState<string | null>(null);
 
   const fetchRequests = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from("guild_join_requests")
-      .select("id, character_id, created_at, character:characters(name, level)")
+      .select("id, character_id, created_at, character:characters!guild_join_requests_character_id_fkey(name, level)")
       .eq("guild_id", guildId)
       .eq("status", "pending")
       .order("created_at", { ascending: true });
+    if (fetchError) { setError(fetchError.message); return; }
+    setError(null);
     setRequests((data as any) ?? []);
   }, [guildId]);
 
