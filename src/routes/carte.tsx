@@ -87,7 +87,7 @@ function CartePage() {
   return (
     <LedgerPage bg="/world_map_bg.png">
       <div className="w-full max-w-2xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 bg-card/85 backdrop-blur-md border border-border/40 px-4 py-3 rounded-sm">
           <div>
             <h1 className="font-serif text-2xl tracking-[0.16em] uppercase text-primary">Carte des guildes</h1>
             <p className="text-xs text-muted-foreground mt-1">{guilds.length} guilde{guilds.length > 1 ? "s" : ""} active{guilds.length > 1 ? "s" : ""}</p>
@@ -115,7 +115,7 @@ function CartePage() {
               const isMyGuild = g.id === myGuildId;
               return (
                 <li key={g.id}
-                  className={`border px-4 py-4 transition-colors ${isMyGuild ? "border-primary/60 bg-primary/5" : "border-border/30"}`}>
+                  className={`border px-4 py-4 transition-colors backdrop-blur-md rounded-sm ${isMyGuild ? "border-primary/60 bg-primary/10" : "border-border/40 bg-card/85"}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <div className="flex items-center gap-2">
