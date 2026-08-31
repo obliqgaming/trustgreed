@@ -18,6 +18,12 @@ type Character = { id: string; name: string; level: number; guild_id: string | n
 type Expedition = { id: string; status: string; target_size: number; created_by_character_id: string };
 type Participant = { character_id: string; character: { name: string; level: number } };
 
+const STAKES: { id: "forge" | "infirmerie" | "eclaireurs"; label: string; cost: number; description: string }[] = [
+  { id: "forge", label: "Forge", cost: 4000, description: "+25% de butin sur toute l'expédition." },
+  { id: "infirmerie", label: "Infirmerie", cost: 6000, description: "-25% de risque de mort sur toute l'expédition (jamais à zéro)." },
+  { id: "eclaireurs", label: "Éclaireurs engagés", cost: 1500, description: "Le risque exact de chaque étape est révélé automatiquement à tout le groupe." },
+];
+
 function ExpeditionPage() {
   const navigate = useNavigate();
   const [character, setCharacter] = useState<Character | null>(null);
@@ -28,6 +34,9 @@ function ExpeditionPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [guildGold, setGuildGold] = useState<number | null>(null);
+  const [stakes, setStakes] = useState<{ stake_type: string; cost: number }[]>([]);
+  const [stakeBusy, setStakeBusy] = useState<string | null>(null);
 
   const loadParticipants = useCallback(async (expeditionId: string) => {
     const { data } = await supabase
@@ -45,7 +54,14 @@ function ExpeditionPage() {
       .in("status", ["waiting", "active"])
       .maybeSingle();
     setExpedition(data ?? null);
-    if (data?.id) await loadParticipants(data.id);
+    if (data?.id) {
+      await loadParticipants(data.id);
+      const { data: stakeData } = await supabase
+        .from("expedition_stakes").select("stake_type, cost").eq("expedition_id", data.id);
+      setStakes(stakeData ?? []);
+    }
+    const { data: guild } = await supabase.from("guilds").select("gold").eq("id", guildId).maybeSingle();
+    setGuildGold(guild?.gold ?? null);
     return data;
   }, [loadParticipants]);
 
@@ -156,6 +172,17 @@ function ExpeditionPage() {
     navigate({ to: "/vote", search: { expedition: expedition.id } });
   }
 
+  async function chooseStake(stakeType: "forge" | "infirmerie" | "eclaireurs") {
+    if (!expedition || !character) return;
+    setError(null); setStakeBusy(stakeType);
+    const { error: rpcError } = await supabase.rpc("choose_expedition_stake", {
+      p_expedition_id: expedition.id, p_character_id: character.id, p_stake_type: stakeType,
+    });
+    if (rpcError) setError(rpcError.message);
+    else if (character.guild_id) await loadExpedition(character.guild_id);
+    setStakeBusy(null);
+  }
+
   const isLeader = expedition?.created_by_character_id === character?.id;
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const canStart = isLeader && participants.length >= 3;
@@ -224,6 +251,35 @@ function ExpeditionPage() {
 
           <LedgerError message={error} />
 
+          {isLeader && (
+            <div className="mb-4 border border-border/30 px-3 py-3">
+              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-1">Mises de guilde (cumulables, chacune définitive)</p>
+              <p className="text-xs text-muted-foreground/70 mb-3">Trésor disponible : {guildGold !== null ? Math.round(guildGold) : "…"} or</p>
+              <div className="space-y-2">
+                {STAKES.map((s) => {
+                  const taken = stakes.some(x => x.stake_type === s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => !taken && chooseStake(s.id)}
+                      disabled={taken || stakeBusy === s.id || (guildGold ?? 0) < s.cost}
+                      className={`w-full text-left border px-3 py-2 disabled:cursor-not-allowed ${taken ? "border-primary/50 bg-primary/5" : "border-border/30 hover:border-primary/40 disabled:opacity-30"}`}
+                    >
+                      <div className="flex justify-between">
+                        <span className={`text-sm font-serif ${taken ? "text-primary" : "text-foreground"}`}>{taken ? "✓ " : ""}{s.label}</span>
+                        <span className="font-mono text-xs text-primary">{s.cost} or</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {stakes.length > 0 && (
+                <p className="text-xs text-primary/80 mt-2">Total misé : {stakes.reduce((sum, s) => sum + s.cost, 0)} or</p>
+              )}
+            </div>
+          )}
+
           {!isParticipant && (
             <SealButton onClick={joinExpedition} disabled={busy}>{busy ? "Inscription…" : "Rejoindre l'expédition"}</SealButton>
           )}
@@ -233,6 +289,12 @@ function ExpeditionPage() {
               {canStart ? "Lancer l'expédition" : `En attente (${participants.length}/3 min.)`}
             </button>
           )}
+          {!isLeader && stakes.length > 0 && (
+            <p className="text-xs text-primary/80 mb-3 px-1">
+              Le chef a engagé : {stakes.map(s => STAKES.find(x => x.id === s.stake_type)?.label).join(", ")} ({stakes.reduce((sum, s) => sum + s.cost, 0)} or misés au total).
+            </p>
+          )}
+
           {!isLeader && isParticipant && (
             <p className="text-center text-xs text-muted-foreground mt-3">En attente que le chef lance l'expédition. Les autres membres de ta guilde peuvent encore rejoindre depuis leur page guilde.</p>
           )}
