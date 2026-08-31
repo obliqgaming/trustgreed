@@ -181,6 +181,11 @@ function Index() {
           </div>
         )}
 
+        {/* Vocation à choisir en priorité (surtout pour les persos créés avant ce système) */}
+        {myVocation === null && (
+          <RetroVocationPicker characterId={character.id} onDone={refresh} />
+        )}
+
         {/* Bandeau expédition en cours */}
         {activeExpedition && (
           <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
@@ -236,11 +241,9 @@ function Index() {
         </div>
 
         {/* Vocation */}
-        {myVocation === null ? (
-          <RetroVocationPicker characterId={character.id} onDone={refresh} />
-        ) : myVocation ? (
+        {myVocation && (
           <VocationPanel vocationId={myVocation} characterId={character.id} />
-        ) : null}
+        )}
 
         {/* Bouton expédition */}
         {!activeExpedition && (
@@ -842,8 +845,8 @@ function RetroVocationPicker({ characterId, onDone }: { characterId: string; onD
 
   return (
     <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
-      <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">Choisis ta vocation</p>
-      <p className="text-xs text-muted-foreground mb-3">Choix définitif, à faire une seule fois dans la vie de ton personnage.</p>
+      <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">⚔ Nouveau : les vocations sont arrivées</p>
+      <p className="text-xs text-muted-foreground mb-3">Chaque personnage a désormais un vrai rôle en expédition — pas juste un titre. Choix définitif, à faire une seule fois dans sa vie.</p>
       {!open ? (
         <button onClick={() => setOpen(true)} className="text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10">
           Choisir maintenant
