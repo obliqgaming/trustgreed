@@ -19,7 +19,9 @@ export function usePresenceHeartbeat(enabled: boolean) {
 
     const beat = () => {
       if (document.visibilityState === "visible") {
-        void supabase.rpc("heartbeat");
+        supabase.rpc("heartbeat").then(({ error }) => {
+          if (error) console.error("[heartbeat] échec :", error.message);
+        });
       }
     };
 

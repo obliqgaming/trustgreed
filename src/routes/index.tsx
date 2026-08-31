@@ -706,7 +706,8 @@ function GuildChatBox({ guildId, character }: { guildId: string; character: Char
     e.preventDefault();
     if (!text.trim() || busy) return;
     setBusy(true);
-    await supabase.from("guild_chat_messages").insert({ guild_id: guildId, character_id: character.id, message: text.trim() });
+    const { error } = await supabase.from("guild_chat_messages").insert({ guild_id: guildId, character_id: character.id, message: text.trim() });
+    if (error) console.error("[chat guilde] échec d'envoi :", error.message);
     setText("");
     await fetchMessages();
     setBusy(false);
