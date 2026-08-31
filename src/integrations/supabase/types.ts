@@ -312,6 +312,45 @@ export type Database = {
           },
         ]
       }
+      expedition_stakes: {
+        Row: {
+          activated_by_character_id: string
+          cost: number
+          created_at: string
+          expedition_id: string
+          stake_type: string
+        }
+        Insert: {
+          activated_by_character_id: string
+          cost: number
+          created_at?: string
+          expedition_id: string
+          stake_type: string
+        }
+        Update: {
+          activated_by_character_id?: string
+          cost?: number
+          created_at?: string
+          expedition_id?: string
+          stake_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expedition_stakes_activated_by_character_id_fkey"
+            columns: ["activated_by_character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expedition_stakes_expedition_id_fkey"
+            columns: ["expedition_id"]
+            isOneToOne: false
+            referencedRelation: "expeditions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expeditions: {
         Row: {
           created_at: string
@@ -890,6 +929,16 @@ export type Database = {
           resolved_at: string | null
           resolved_by_character_id: string | null
           status: string
+        }
+      }
+      choose_expedition_stake: {
+        Args: { p_expedition_id: string; p_character_id: string; p_stake_type: string }
+        Returns: {
+          activated_by_character_id: string
+          cost: number
+          created_at: string
+          expedition_id: string
+          stake_type: string
         }
       }
       choose_vocation: {
