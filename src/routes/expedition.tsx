@@ -37,6 +37,10 @@ function ExpeditionPage() {
   const [guildGold, setGuildGold] = useState<number | null>(null);
   const [stakes, setStakes] = useState<{ stake_type: string; cost: number }[]>([]);
   const [stakeBusy, setStakeBusy] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [availableBots, setAvailableBots] = useState<{ id: string; name: string }[]>([]);
+  const [botAddBusy, setBotAddBusy] = useState<string | null>(null);
+  const [debugCopied, setDebugCopied] = useState(false);
 
   const loadParticipants = useCallback(async (expeditionId: string) => {
     const { data } = await supabase
@@ -44,6 +48,23 @@ function ExpeditionPage() {
       .select("character_id, character:characters(name, level)")
       .eq("expedition_id", expeditionId);
     setParticipants((data as any) ?? []);
+  }, []);
+
+  const loadAvailableBots = useCallback(async (guildId: string, expeditionId: string | null) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const { data: bots } = await supabase
+      .from("characters")
+      .select("id, name")
+      .eq("profile_id", session.user.id)
+      .eq("guild_id", guildId)
+      .eq("is_bot", true)
+      .eq("is_alive", true);
+    if (!bots) { setAvailableBots([]); return; }
+    if (!expeditionId) { setAvailableBots(bots); return; }
+    const { data: parts } = await supabase.from("expedition_participants").select("character_id").eq("expedition_id", expeditionId);
+    const inExp = new Set((parts ?? []).map((p: any) => p.character_id));
+    setAvailableBots(bots.filter((b) => !inExp.has(b.id)));
   }, []);
 
   const loadExpedition = useCallback(async (guildId: string) => {
@@ -84,8 +105,12 @@ function ExpeditionPage() {
       if (!char?.guild_id) { navigate({ to: "/" }); return; }
       setCharacter(char);
 
+      const { data: profileRow } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle();
+      setIsAdmin(!!profileRow?.is_admin);
+
       const exp = await loadExpedition(char.guild_id);
       setReady(true);
+      if (profileRow?.is_admin) void loadAvailableBots(char.guild_id, exp?.id ?? null);
 
       if (exp?.status === "active") {
         navigate({ to: "/vote", search: { expedition: exp.id } });
@@ -158,6 +183,29 @@ function ExpeditionPage() {
     if (insertError) setError(insertError.message);
     else await loadParticipants(expedition.id);
     setBusy(false);
+  }
+
+  async function addBotToExpedition(botId: string) {
+    if (!expedition) return;
+    setBotAddBusy(botId); setError(null);
+    const { error: insertError } = await supabase
+      .from("expedition_participants")
+      .insert({ expedition_id: expedition.id, character_id: botId });
+    if (insertError) setError(insertError.message);
+    else {
+      await loadParticipants(expedition.id);
+      if (character?.guild_id) await loadAvailableBots(character.guild_id, expedition.id);
+    }
+    setBotAddBusy(null);
+  }
+
+  async function copyDebugReport() {
+    if (!expedition) return;
+    const { data, error: rpcError } = await supabase.rpc("admin_debug_expedition", { p_expedition_id: expedition.id });
+    if (rpcError) { setError(rpcError.message); return; }
+    void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    setDebugCopied(true);
+    setTimeout(() => setDebugCopied(false), 2000);
   }
 
   async function startExpedition() {
@@ -283,6 +331,26 @@ function ExpeditionPage() {
 
           {!isParticipant && (
             <SealButton onClick={joinExpedition} disabled={busy}>{busy ? "Inscription…" : "Rejoindre l'expédition"}</SealButton>
+          )}
+
+          {isAdmin && availableBots.length > 0 && (
+            <div className="mt-3 border border-dashed border-amber-500/50 bg-amber-500/5 px-3 py-3">
+              <p className="text-xs tracking-[0.14em] uppercase text-amber-300 mb-2">Compagnons de test disponibles</p>
+              <div className="flex flex-wrap gap-2">
+                {availableBots.map((b) => (
+                  <button key={b.id} onClick={() => addBotToExpedition(b.id)} disabled={botAddBusy === b.id}
+                    className="text-xs uppercase tracking-[0.1em] border border-amber-500/50 text-amber-300 px-2.5 py-1 hover:bg-amber-500/10 disabled:opacity-30">
+                    {botAddBusy === b.id ? "…" : `Ajouter ${b.name}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {isAdmin && (
+            <button onClick={copyDebugReport}
+              className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
+              {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
+            </button>
           )}
           {isLeader && (
             <button onClick={startExpedition} disabled={!canStart || busy}
