@@ -31,6 +31,7 @@ function Index() {
   const [guild, setGuild] = useState<Guild | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [myVocation, setMyVocation] = useState<VocationId | null | undefined>(undefined);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition>(null);
@@ -59,8 +60,11 @@ function Index() {
     const { data: profile } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
     setProfileMissing(!profile);
 
-    const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id").eq("profile_id", session.user.id).eq("is_alive", true).maybeSingle();
+    const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
     setCharacter(char ?? null);
+
+    const { data: profileRow } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle();
+    setIsAdmin(!!profileRow?.is_admin);
 
     if (char) {
       const { data: vocData } = await supabase.rpc("get_my_vocation", { p_character_id: char.id });
@@ -270,6 +274,11 @@ function Index() {
               <VocationPanel vocationId={myVocation} characterId={character.id} />
             )}
 
+            {/* Panneau admin : compagnons de test */}
+            {isAdmin && guild && (
+              <AdminTestPanel guildId={guild.id} characterId={character.id} memberCount={members.length} history={history} onDone={refresh} />
+            )}
+
             {/* Bouton expédition */}
             {!activeExpedition && (
               <button onClick={() => navigate({ to: "/expedition" })}
@@ -470,6 +479,9 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
       </div>
       {tab === "create" ? (
         <form onSubmit={createGuild} noValidate>
+          <div className="mb-3 border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/90">
+            ⚠ Une expédition demande au moins 3 membres. En fondant seul, il te faudra convaincre 2 autres aventuriers de te rejoindre avant de pouvoir partir. Si une guilde existe déjà (voir "Guildes actives" plus bas), envisage plutôt de la rejoindre.
+          </div>
           <Field label="Nom de la guilde" required value={guildName} onChange={(e) => setGuildName(e.target.value)} />
           <LedgerError message={error} />
           <SealButton type="submit" disabled={busy}>{busy ? "Fondation…" : "Fonder la guilde"}</SealButton>
@@ -618,6 +630,7 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
         .select("id")
         .eq("profile_id", session.user.id)
         .eq("is_alive", false)
+        .eq("is_bot", false)
         .limit(1)
         .maybeSingle();
       setHasDied(!!data);
@@ -992,6 +1005,50 @@ function GuildBannerEditor({ guildId, characterId, currentSymbol, currentColor, 
           Annuler
         </button>
       </div>
+    </div>
+  );
+}
+
+function AdminTestPanel({ guildId, characterId, memberCount, history, onDone }: {
+  guildId: string; characterId: string; memberCount: number; history: HistoryEvent[]; onDone: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function spawnBots() {
+    setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("admin_spawn_bots", { p_guild_id: guildId });
+    if (rpcError) setError(rpcError.message); else await onDone();
+    setBusy(false);
+  }
+
+  function copyLogs() {
+    const text = history.map(e => `[${e.created_at}] ${e.event_type} — ${e.description}`).join("\n");
+    void navigator.clipboard.writeText(text || "(historique vide)");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="mb-4 border border-dashed border-amber-500/50 bg-amber-500/5 px-3 py-3">
+      <p className="text-xs tracking-[0.14em] uppercase text-amber-300 mb-2">Mode admin — compagnons de test</p>
+      <LedgerError message={error} />
+      <div className="flex flex-wrap gap-2">
+        {memberCount < 3 && (
+          <button onClick={spawnBots} disabled={busy}
+            className="text-xs uppercase tracking-[0.1em] border border-amber-500/50 text-amber-300 px-3 py-1.5 hover:bg-amber-500/10 disabled:opacity-30">
+            {busy ? "…" : "Ajouter 2 compagnons de test"}
+          </button>
+        )}
+        <button onClick={copyLogs}
+          className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
+          {copied ? "Copié ✓" : "Copier l'historique (partage-le-moi)"}
+        </button>
+      </div>
+      <p className="text-[11px] text-muted-foreground/60 mt-2">
+        Les compagnons apparaissent dans "Membres" et peuvent être pilotés (vote, résurrection) depuis la page de vote pendant l'expédition. Utilise une guilde de test dédiée, pas ta guilde principale.
+      </p>
     </div>
   );
 }
