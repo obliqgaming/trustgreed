@@ -727,6 +727,39 @@ export type Database = {
           },
         ]
       }
+      step_acknowledgments: {
+        Row: {
+          acknowledged_at: string
+          character_id: string
+          step_id: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          character_id: string
+          step_id: string
+        }
+        Update: {
+          acknowledged_at?: string
+          character_id?: string
+          step_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "step_acknowledgments_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "step_acknowledgments_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "expedition_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       step_votes: {
         Row: {
           character_id: string
@@ -962,6 +995,10 @@ export type Database = {
       admin_debug_expedition: {
         Args: { p_expedition_id: string }
         Returns: Json
+      }
+      acknowledge_step_result: {
+        Args: { p_step_id: string; p_character_id: string }
+        Returns: undefined
       }
       admin_bot_vote: {
         Args: { p_step_id: string; p_bot_character_id: string; p_vote: string }
