@@ -479,26 +479,17 @@ function VotePage() {
         <LedgerCard title={title} subtitle={subtitle}>
           <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
 
-          {!result.iDied && !result.ended && (result.stepLoot > 0 || result.xpAwarded > 0) && (
-            <div className="flex justify-center gap-6 mb-5">
-              {result.stepLoot > 0 && (
-                <div className="text-center">
-                  <p className="text-2xl font-serif font-bold text-amber-400">+{result.stepLoot} or</p>
-                  <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Butin de l'étape</p>
-                </div>
-              )}
-              {result.xpAwarded > 0 && (
-                <div className="text-center">
-                  <p className="text-2xl font-serif font-bold text-purple-300">+{result.xpAwarded} XP</p>
-                  <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">par survivant</p>
-                </div>
-              )}
+          {!result.iDied && !result.ended && result.stepLoot > 0 && (
+            <div className="flex justify-center mb-5">
+              <div className="text-center">
+                <p className="text-2xl font-serif font-bold text-amber-400">+{result.stepLoot} or</p>
+                <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Butin de l'étape</p>
+              </div>
             </div>
           )}
 
-          {!result.iDied && !result.ended && result.survivorNames.length > 0 && (
+          {!result.iDied && !result.ended && result.survivorNames.length > 0 && result.xpAwarded > 0 && (
             <div className="mb-4 px-3 py-2 border border-border/20">
-              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground mb-1">XP gagnée (le butin, lui, va au trésor commun de la guilde)</p>
               {result.survivorNames.map(n => (
                 <p key={n} className="text-xs text-muted-foreground">
                   {n} — <span className="text-purple-300">+{result.xpAwarded} XP</span>
