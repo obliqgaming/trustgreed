@@ -959,7 +959,7 @@ export type Database = {
       }
       reveal_risk: {
         Args: { p_step_id: string; p_character_id: string }
-        Returns: undefined
+        Returns: number
       }
       trigger_martyr: {
         Args: { p_step_id: string; p_character_id: string }

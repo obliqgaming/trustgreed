@@ -5,6 +5,7 @@ import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
+import { Frame, DecorativeBorder } from "@/components/frame";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -469,14 +470,22 @@ function VotePage() {
           transition:"filter 1s ease"
         }} />
       )}
-      <LedgerCard
-        title={step ? `Étape ${step.step_number} — ${step.event_type}` : "Expédition"}
-        subtitle={step ? `Risque : ${RISK_LABEL[step.risk_level] ?? step.risk_level} · Butin : ${step.loot_min}–${step.loot_max} or` : ""}
-      >
+      <LedgerCard>
         {step && !step.resolved && (
           <>
+            <Frame variant="bar" className="mb-4">
+              <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold">
+                Étape {step.step_number} — {step.event_type}
+              </span>
+            </Frame>
+            <p className="text-sm text-muted-foreground mb-4 px-1">
+              Risque : {RISK_LABEL[step.risk_level] ?? step.risk_level} · Butin : {step.loot_min}–{step.loot_max} or
+            </p>
+
             {step.description && (
-              <p className="text-sm text-muted-foreground italic mb-4 px-1 leading-relaxed">{step.description}</p>
+              <Frame variant="journal" contentClassName="!items-center !justify-center" className="mb-4">
+                <p className="text-sm italic leading-relaxed text-center">{step.description}</p>
+              </Frame>
             )}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
               <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
@@ -555,7 +564,8 @@ function VotePage() {
                 {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
-            <div className="mt-4 border-t border-border/20 pt-4">
+            <div className="relative mt-4 pt-8 px-6 pb-6">
+              <DecorativeBorder variant="wide" />
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <ul className="space-y-1.5">
                 {participants.map((p) => (
