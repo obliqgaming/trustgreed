@@ -55,6 +55,18 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
     survive: ["La porte s'ouvre. Ce qu'il y a derrière valait le détour.", "Le verrou saute. La pièce est vide, sauf pour ce qu'on cherchait.", "On passe. La porte se referme derrière. On ne reviendra pas."],
     die: ["Ce qui était derrière la porte n'attendait que ça.", "La porte s'est ouverte. Elle n'aurait pas dû.", "On pensait savoir. On avait tort."],
   },
+  rencontre: {
+    survive: ["L'inconnu s'efface, vous laisse passer. Personne ne baisse sa garde pour autant.", "On échange peu de mots. Ça suffit. Chacun repart de son côté.", "La rencontre se termine sans heurt. Un soulagement qu'on n'ose pas montrer."],
+    die: ["La main tendue cachait autre chose. On ne l'a vu qu'une fois trop tard.", "Ce qui semblait amical ne l'était pas. Le groupe l'apprend à ses dépens.", "La confiance, ici, était le vrai piège."],
+  },
+  decouverte: {
+    survive: ["L'objet rejoint le sac. Rien ne s'est réveillé en le prenant.", "On l'examine, on l'empoche. Le silence retombe, intact.", "Ce qui a été trouvé valait la halte."],
+    die: ["L'objet n'était pas aussi inerte qu'il en avait l'air.", "Une dernière protection veillait encore sur la trouvaille.", "Ce qu'on a dérangé en le touchant ne l'était plus."],
+  },
+  traces: {
+    survive: ["Le groupe comprend ce qui s'est passé ici, et avance quand même.", "On ne s'attarde pas sur ce qu'on devine. On continue.", "Les traces racontent une histoire. Ce n'est pas la vôtre. Pas encore."],
+    die: ["Ce qui a laissé ces traces n'était pas parti bien loin.", "L'histoire que racontaient les traces vient de rattraper le groupe.", "Ceux qui étaient passés avant n'avaient pas eu de chance non plus. Vous non plus."],
+  },
 };
 
 function getCinematic(eventType: string, hasDeath: boolean): string {
