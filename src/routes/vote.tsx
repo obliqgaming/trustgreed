@@ -24,6 +24,12 @@ type Participant = { character_id: string; is_alive: boolean; character: { name:
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
+const EVENT_IMAGES: Record<string, string> = {
+  coffre: "/event_coffre.png",
+  porte: "/event_porte.png",
+  gardien: "/event_gardien.png",
+  passage: "/event_passage.png",
+};
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
 const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
