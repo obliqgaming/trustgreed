@@ -77,6 +77,7 @@ function VotePage() {
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
   const [visibleRisk, setVisibleRisk] = useState<number | null>(null);
+  const [myPrivateRisk, setMyPrivateRisk] = useState<number | null>(null);
   const [vocationBusy, setVocationBusy] = useState<string | null>(null);
   const [vocationError, setVocationError] = useState<string | null>(null);
   const [inspectTarget, setInspectTarget] = useState<string | null>(null);
@@ -142,6 +143,7 @@ function VotePage() {
         setResult(null);
         setPendingReveal(false);
         setIDied(false);
+        setMyPrivateRisk(null);
       } else {
         stepIdRef.current = data.id;
       }
@@ -259,9 +261,9 @@ function VotePage() {
   async function useReveal() {
     if (!step || !character) return;
     setVocationError(null); setVocationBusy("reveal");
-    const { error: rpcError } = await supabase.rpc("reveal_risk", { p_step_id: step.id, p_character_id: character.id });
+    const { data, error: rpcError } = await supabase.rpc("reveal_risk", { p_step_id: step.id, p_character_id: character.id });
     if (rpcError) setVocationError(rpcError.message);
-    else { setUsedAbilities(prev => new Set(prev).add("eclaireur_reveal")); await fetchStep(); }
+    else { setUsedAbilities(prev => new Set(prev).add("eclaireur_reveal")); setMyPrivateRisk(data as number); }
     setVocationBusy(null);
   }
 
@@ -484,16 +486,17 @@ function VotePage() {
             </div>
             <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
               ⚠ Risque {RISK_LABEL[step.risk_level]}
-              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact)</span>}
+              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
+              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort exact — connu de toi seul)</span>}
             </p>
 
             {/* Pouvoirs de vocation actifs pendant le vote */}
             {myVocation && !myVote && (
               <div className="mb-4 space-y-2">
-                {myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") && !step.risk_revealed && (
+                {myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") && (
                   <button onClick={useReveal} disabled={vocationBusy === "reveal"}
                     className="w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-2 hover:bg-primary/10 disabled:opacity-30">
-                    {vocationBusy === "reveal" ? "…" : "Révéler le risque exact au groupe"}
+                    {vocationBusy === "reveal" ? "…" : "Révéler le risque exact (à toi seul)"}
                   </button>
                 )}
                 {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
@@ -567,7 +570,7 @@ function VotePage() {
                     {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
                       inspectResult?.id === p.character_id ? (
                         <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
-                          {inspectResult.honest ? "Honnête" : "Mensonge"}
+                          {inspectResult.honest ? "Honnête" : "Traître"}
                         </span>
                       ) : (
                         <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
