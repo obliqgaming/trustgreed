@@ -490,15 +490,6 @@ function VotePage() {
 
   return (
     <LedgerPage>
-      {eventBg && (
-        <div style={{
-          position:"fixed", inset:0, zIndex:0,
-          backgroundImage:`url(${eventBg})`,
-          backgroundSize:"cover", backgroundPosition:"center",
-          filter: bgFilter,
-          transition:"filter 1s ease"
-        }} />
-      )}
       <LedgerCard>
         {step && !step.resolved && (
           <>
@@ -512,8 +503,11 @@ function VotePage() {
             </p>
 
             {step.description && (
-              <Frame variant="journal" contentClassName="!items-center !justify-center" className="mb-4">
-                <p className="text-sm italic leading-relaxed text-center">{step.description}</p>
+              <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start" className="mb-4">
+                {eventBg && (
+                  <img src={eventBg} alt="" className="w-full h-32 object-cover rounded-sm mb-3" style={{ filter: bgFilter }} />
+                )}
+                <p className="text-sm italic leading-relaxed text-center flex-1 flex items-center justify-center">{step.description}</p>
               </Frame>
             )}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
