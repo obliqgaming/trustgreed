@@ -28,6 +28,7 @@ function CartePage() {
           .select("guild_id")
           .eq("profile_id", session.user.id)
           .eq("is_alive", true)
+          .eq("is_bot", false)
           .maybeSingle();
         setMyGuildId(char?.guild_id ?? null);
       }
