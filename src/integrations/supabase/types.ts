@@ -25,6 +25,7 @@ export type Database = {
           id: string
           invited_by_character_id: string | null
           is_alive: boolean
+          is_bot: boolean
           level: number
           miracle_used: boolean
           name: string
@@ -43,6 +44,7 @@ export type Database = {
           id?: string
           invited_by_character_id?: string | null
           is_alive?: boolean
+          is_bot?: boolean
           level?: number
           miracle_used?: boolean
           name: string
@@ -61,6 +63,7 @@ export type Database = {
           id?: string
           invited_by_character_id?: string | null
           is_alive?: boolean
+          is_bot?: boolean
           level?: number
           miracle_used?: boolean
           name?: string
@@ -645,6 +648,7 @@ export type Database = {
           created_at: string
           id: string
           invited_by_profile_id: string | null
+          is_admin: boolean
           last_seen_at: string | null
           username: string
         }
@@ -652,6 +656,7 @@ export type Database = {
           created_at?: string
           id: string
           invited_by_profile_id?: string | null
+          is_admin?: boolean
           last_seen_at?: string | null
           username: string
         }
@@ -659,6 +664,7 @@ export type Database = {
           created_at?: string
           id?: string
           invited_by_profile_id?: string | null
+          is_admin?: boolean
           last_seen_at?: string | null
           username?: string
         }
@@ -930,6 +936,36 @@ export type Database = {
           resolved_by_character_id: string | null
           status: string
         }
+      }
+      admin_spawn_bots: {
+        Args: { p_guild_id: string }
+        Returns: {
+          carried_gold: number
+          created_at: string
+          declared_vocation: string | null
+          died_at: string | null
+          died_in_expedition_id: string | null
+          guild_id: string | null
+          id: string
+          invited_by_character_id: string | null
+          is_alive: boolean
+          is_bot: boolean
+          level: number
+          miracle_used: boolean
+          name: string
+          portrait: string | null
+          profile_id: string
+          vocation: string | null
+          xp: number
+        }[]
+      }
+      admin_bot_vote: {
+        Args: { p_step_id: string; p_bot_character_id: string; p_vote: string }
+        Returns: undefined
+      }
+      admin_revive_bot: {
+        Args: { p_bot_character_id: string }
+        Returns: undefined
       }
       choose_expedition_stake: {
         Args: { p_expedition_id: string; p_character_id: string; p_stake_type: string }
