@@ -1035,19 +1035,17 @@ function AdminTestPanel({ guildId, characterId, memberCount, history, onDone }: 
       <p className="text-xs tracking-[0.14em] uppercase text-amber-300 mb-2">Mode admin — compagnons de test</p>
       <LedgerError message={error} />
       <div className="flex flex-wrap gap-2">
-        {memberCount < 3 && (
-          <button onClick={spawnBots} disabled={busy}
-            className="text-xs uppercase tracking-[0.1em] border border-amber-500/50 text-amber-300 px-3 py-1.5 hover:bg-amber-500/10 disabled:opacity-30">
-            {busy ? "…" : "Ajouter 2 compagnons de test"}
-          </button>
-        )}
+        <button onClick={spawnBots} disabled={busy}
+          className="text-xs uppercase tracking-[0.1em] border border-amber-500/50 text-amber-300 px-3 py-1.5 hover:bg-amber-500/10 disabled:opacity-30">
+          {busy ? "…" : "Ajouter 2 compagnons de test"}
+        </button>
         <button onClick={copyLogs}
           className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
-          {copied ? "Copié ✓" : "Copier l'historique (partage-le-moi)"}
+          {copied ? "Copié ✓" : "Copier l'historique de guilde"}
         </button>
       </div>
       <p className="text-[11px] text-muted-foreground/60 mt-2">
-        Les compagnons apparaissent dans "Membres" et peuvent être pilotés (vote, résurrection) depuis la page de vote pendant l'expédition. Utilise une guilde de test dédiée, pas ta guilde principale.
+        Une fois créés, ajoute-les à ta prochaine expédition depuis la salle d'attente ("Compagnons de test disponibles"). Pour un rapport de bug complet (étapes, votes, morts), utilise "Copier le rapport de debug" sur la page d'expédition ou de vote. Utilise une guilde de test dédiée, pas ta guilde principale.
       </p>
     </div>
   );
