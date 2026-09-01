@@ -30,6 +30,9 @@ const EVENT_IMAGES: Record<string, string> = {
   porte: "/event_porte.png",
   gardien: "/event_gardien.png",
   passage: "/event_passage.png",
+  rencontre: "/event_passage.png", // placeholder temporaire
+  decouverte: "/event_coffre.png", // placeholder temporaire
+  traces: "/event_porte.png", // placeholder temporaire
 };
 const STEP_RESULT_SUCCESS = "/step_success.png.png";
 const STEP_RESULT_FAIL = "/step_fail.png";
