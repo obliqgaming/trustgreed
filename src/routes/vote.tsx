@@ -21,7 +21,7 @@ type Step = {
   loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
 };
-type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null } };
+type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
@@ -76,6 +76,8 @@ function VotePage() {
   const [iDied, setIDied] = useState(false);
   const [pendingReveal, setPendingReveal] = useState(false); // étape résolue, pas encore vue
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [botBusy, setBotBusy] = useState<string | null>(null);
   const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
   const [visibleRisk, setVisibleRisk] = useState<number | null>(null);
   const [myPrivateRisk, setMyPrivateRisk] = useState<number | null>(null);
@@ -102,13 +104,13 @@ function VotePage() {
     const ids = parts.map((p: any) => p.character_id);
     const { data: chars } = await supabase
       .from("characters")
-      .select("id, name, portrait, is_alive, declared_vocation")
+      .select("id, name, portrait, is_alive, declared_vocation, is_bot")
       .in("id", ids);
 
     const enriched = (chars ?? []).map((c: any) => ({
       character_id: c.id,
       is_alive: c.is_alive,
-      character: { name: c.name, portrait: c.portrait ?? "ombre", declared_vocation: c.declared_vocation ?? null },
+      character: { name: c.name, portrait: c.portrait ?? "ombre", declared_vocation: c.declared_vocation ?? null, is_bot: c.is_bot ?? false },
     }));
     setParticipants(enriched);
     return enriched;
@@ -205,13 +207,16 @@ function VotePage() {
 
       const { data: char } = await supabase
         .from("characters").select("id, name")
-        .eq("profile_id", session.user.id).eq("is_alive", true).maybeSingle();
+        .eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
       if (!char) { navigate({ to: "/" }); return; }
       setCharacter(char);
       characterIdRef.current = char.id;
 
       const { data: vocData } = await supabase.rpc("get_my_vocation", { p_character_id: char.id });
       setMyVocation((vocData as VocationId | null) ?? null);
+
+      const { data: profileRow } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle();
+      setIsAdmin(!!profileRow?.is_admin);
 
       const { data: usedData } = await supabase
         .from("vocation_triggers").select("ability")
@@ -295,6 +300,21 @@ function VotePage() {
     if (rpcError) setVocationError(rpcError.message);
     else setInspectResult({ id: targetId, honest: !!data });
     setVocationBusy(null);
+  }
+
+  async function botVote(botCharacterId: string, vote: "continuer" | "rentrer") {
+    if (!step) return;
+    setBotBusy(botCharacterId); setError(null);
+    const { error: rpcError } = await supabase.rpc("admin_bot_vote", { p_step_id: step.id, p_bot_character_id: botCharacterId, p_vote: vote });
+    if (rpcError) setError(rpcError.message); else await fetchVotes(step.id);
+    setBotBusy(null);
+  }
+
+  async function botRevive(botCharacterId: string) {
+    setBotBusy(botCharacterId); setError(null);
+    const { error: rpcError } = await supabase.rpc("admin_revive_bot", { p_bot_character_id: botCharacterId });
+    if (rpcError) setError(rpcError.message); else await fetchParticipants();
+    setBotBusy(null);
   }
 
   async function resolveStep() {
@@ -577,6 +597,24 @@ function VotePage() {
                       {!p.is_alive ? " ✝" : ""}
                     </span>
                     <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
+                    {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
+                      <div className="flex gap-1">
+                        <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id}
+                          className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
+                          Continuer
+                        </button>
+                        <button onClick={() => botVote(p.character_id, "rentrer")} disabled={botBusy === p.character_id}
+                          className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
+                          Rentrer
+                        </button>
+                      </div>
+                    )}
+                    {isAdmin && p.character.is_bot && !p.is_alive && (
+                      <button onClick={() => botRevive(p.character_id)} disabled={botBusy === p.character_id}
+                        className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
+                        {botBusy === p.character_id ? "…" : "Ressusciter"}
+                      </button>
+                    )}
                     {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
                       inspectResult?.id === p.character_id ? (
                         <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
