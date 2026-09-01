@@ -27,6 +27,7 @@ function Inviter() {
         .select("name, guild_id")
         .eq("profile_id", session.user.id)
         .eq("is_alive", true)
+        .eq("is_bot", false)
         .maybeSingle();
       if (!char) { navigate({ to: "/" }); return; }
       setCharacterName(char.name);
