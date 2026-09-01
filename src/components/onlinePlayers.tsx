@@ -4,10 +4,10 @@ import { LedgerError } from "@/components/ledger";
 import { DecorativeBorder } from "@/components/frame";
 import { isOnline, usePresenceHeartbeat, ONLINE_THRESHOLD_MS } from "@/hooks/usePresence";
 
-type PlayerRow = { id: string; username: string; last_seen_at: string | null };
+type PlayerRow = { id: string; username: string; last_seen_at: string | null; characterName: string | null; guildId: string | null };
 
 /** Liste des joueurs en ligne, affichée directement (pas de clic requis), avec envoi de code d'invitation. */
-export function OnlinePlayersPanel({ guildName }: { guildName?: string | null }) {
+export function OnlinePlayersPanel({ guildName, guildId }: { guildName?: string | null; guildId?: string | null }) {
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [sendingTo, setSendingTo] = useState<string | null>(null);
@@ -24,10 +24,20 @@ export function OnlinePlayersPanel({ guildName }: { guildName?: string | null })
     const since = new Date(Date.now() - ONLINE_THRESHOLD_MS).toISOString();
     const { data } = await supabase
       .from("profiles")
-      .select("id, username, last_seen_at")
+      .select("id, username, last_seen_at, characters(name, guild_id, is_alive)")
       .gte("last_seen_at", since)
       .order("username", { ascending: true });
-    setPlayers(data ?? []);
+
+    setPlayers((data ?? []).map((row: any) => {
+      const aliveChar = (row.characters ?? []).find((c: any) => c.is_alive);
+      return {
+        id: row.id,
+        username: row.username,
+        last_seen_at: row.last_seen_at,
+        characterName: aliveChar?.name ?? null,
+        guildId: aliveChar?.guild_id ?? null,
+      };
+    }));
   }, []);
 
   useEffect(() => {
@@ -69,23 +79,29 @@ export function OnlinePlayersPanel({ guildName }: { guildName?: string | null })
         <p className="text-xs text-muted-foreground/50 italic">Personne d'autre en ligne pour l'instant.</p>
       ) : (
         <ul className="space-y-1.5">
-          {players.map((p) => (
-            <li key={p.id} className="flex items-center justify-between border border-border/40 px-3 py-2 text-sm">
-              <span className="flex items-center gap-2">
-                <span className={`h-1.5 w-1.5 rounded-full ${isOnline(p.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
-                {p.username}{p.id === myProfileId ? " (toi)" : ""}
-              </span>
-              {p.id !== myProfileId && (
-                <button
-                  onClick={() => sendInvite(p.id)}
-                  disabled={sendingTo === p.id}
-                  className="text-xs tracking-[0.1em] uppercase border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10 disabled:opacity-30"
-                >
-                  {sentTo === p.id ? "Envoyé ✓" : sendingTo === p.id ? "…" : "Envoyer un code"}
-                </button>
-              )}
-            </li>
-          ))}
+          {players.map((p) => {
+            const alreadyInMyGuild = !!guildId && p.guildId === guildId;
+            return (
+              <li key={p.id} className="flex items-center justify-between border border-border/40 px-3 py-2 text-sm">
+                <span className="flex items-center gap-2">
+                  <span className={`h-1.5 w-1.5 rounded-full ${isOnline(p.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
+                  {p.characterName ?? p.username}{p.id === myProfileId ? " (toi)" : ""}
+                </span>
+                {p.id !== myProfileId && !alreadyInMyGuild && (
+                  <button
+                    onClick={() => sendInvite(p.id)}
+                    disabled={sendingTo === p.id}
+                    className="text-xs tracking-[0.1em] uppercase border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10 disabled:opacity-30"
+                  >
+                    {sentTo === p.id ? "Envoyé ✓" : sendingTo === p.id ? "…" : "Envoyer un code"}
+                  </button>
+                )}
+                {alreadyInMyGuild && p.id !== myProfileId && (
+                  <span className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground/50">Déjà dans ta guilde</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
