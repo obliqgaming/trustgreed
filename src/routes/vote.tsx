@@ -377,6 +377,14 @@ function VotePage() {
     // (par ce joueur si c'est le dernier, ou par un autre sinon).
   }
 
+  async function acknowledgeForBot(botId: string) {
+    if (!step) return;
+    setBotBusy(botId);
+    await supabase.rpc("acknowledge_step_result", { p_step_id: step.id, p_character_id: botId });
+    await refreshAckCount();
+    setBotBusy(null);
+  }
+
   async function resolveStep() {
     if (!step) return;
     soundRevealClick();
@@ -403,22 +411,25 @@ function VotePage() {
 
   // Pendant l'écran de résultat (hors fin d'expédition / mort perso), affiche
   // en direct combien de joueurs ont déjà validé pour passer à la suite.
+  const refreshAckCount = useCallback(async () => {
+    if (!step) return;
+    const { count: alive } = await supabase.from("expedition_participants")
+      .select("character_id, characters!inner(is_alive)", { count: "exact", head: true })
+      .eq("expedition_id", expeditionId).eq("characters.is_alive", true);
+    const { count: done } = await supabase.from("step_acknowledgments")
+      .select("character_id, characters!inner(is_alive)", { count: "exact", head: true })
+      .eq("step_id", step.id).eq("characters.is_alive", true);
+    setAckCount({ done: done ?? 0, total: alive ?? 0 });
+  }, [step, expeditionId]);
+
   useEffect(() => {
     if (!result || result.ended || result.iDied || !step) { setAckCount(null); return; }
     let cancelled = false;
-    const poll = async () => {
-      const { count: alive } = await supabase.from("expedition_participants")
-        .select("character_id, characters!inner(is_alive)", { count: "exact", head: true })
-        .eq("expedition_id", expeditionId).eq("characters.is_alive", true);
-      const { count: done } = await supabase.from("step_acknowledgments")
-        .select("character_id, characters!inner(is_alive)", { count: "exact", head: true })
-        .eq("step_id", step.id).eq("characters.is_alive", true);
-      if (!cancelled) setAckCount({ done: done ?? 0, total: alive ?? 0 });
-    };
+    const poll = async () => { if (!cancelled) await refreshAckCount(); };
     void poll();
     const t = setInterval(poll, 3000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [result, step, expeditionId]);
+  }, [result, step, expeditionId, refreshAckCount]);
   useEffect(() => { if (allVoted && !prevAllVoted.current) soundAllVoted(); prevAllVoted.current = allVoted; }, [allVoted]);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -487,6 +498,16 @@ function VotePage() {
                 <p className="text-xs text-muted-foreground text-center mt-2">
                   {ackCount.done} / {ackCount.total} ont validé
                 </p>
+              )}
+              {isAdmin && participants.filter(p => p.character.is_bot && p.is_alive).length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
+                  {participants.filter(p => p.character.is_bot && p.is_alive).map((p) => (
+                    <button key={p.character_id} onClick={() => acknowledgeForBot(p.character_id)} disabled={botBusy === p.character_id}
+                      className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
+                      {botBusy === p.character_id ? "…" : `Continuer (${p.character.name})`}
+                    </button>
+                  ))}
+                </div>
               )}
             </>
           )}
