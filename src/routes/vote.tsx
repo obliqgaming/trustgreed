@@ -22,7 +22,7 @@ type Step = {
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; xpAwarded: number; survivorNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const EVENT_IMAGES: Record<string, string> = {
@@ -110,6 +110,7 @@ function VotePage() {
   useEffect(() => { unlockAudio(); return () => { if (tensionRef.current) clearInterval(tensionRef.current); }; }, []);
   const characterIdRef = useRef<string | null>(null);
   const stepIdRef = useRef<string | null>(null);
+  const resultShownRef = useRef(false);
 
   // Charge participants avec leur statut vivant/mort en temps réel
   const fetchParticipants = useCallback(async () => {
@@ -164,6 +165,7 @@ function VotePage() {
         setMyPrivateRisk(null);
         setAcked(false);
         setAckCount(null);
+        resultShownRef.current = false;
       } else {
         stepIdRef.current = data.id;
       }
@@ -178,7 +180,8 @@ function VotePage() {
       }
 
       // Si l'étape est résolue et qu'on n'a pas encore vu le résultat (ex: quelqu'un d'autre a révélé), l'afficher
-      if (data.resolved && !result) {
+      if (data.resolved && !resultShownRef.current) {
+        resultShownRef.current = true;
         await showStepResult(data.id, data.event_type, data.deaths_count);
       }
     }
@@ -334,13 +337,21 @@ function VotePage() {
 
   async function showStepResult(stepId: string, eventType: string, deathsCountHint: number) {
     const { data: resolvedStep } = await supabase
-      .from("expedition_steps").select("deaths_count").eq("id", stepId).maybeSingle();
+      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded").eq("id", stepId).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
 
     const { data: deadChars } = await supabase
       .from("characters").select("name")
       .eq("died_in_expedition_id", expeditionId).eq("is_alive", false);
     const deadNames = (deadChars ?? []).map((c: any) => c.name);
+
+    const { data: survivorChars } = await supabase
+      .from("expedition_participants").select("character:characters(name, is_alive)")
+      .eq("expedition_id", expeditionId);
+    const survivorNames = (survivorChars ?? [])
+      .map((p: any) => p.character)
+      .filter((c: any) => c?.is_alive)
+      .map((c: any) => c.name);
 
     let myDied = false;
     if (character) {
@@ -366,6 +377,9 @@ function VotePage() {
     setResult({
       deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended,
       deadNames, cinematic: cinematicText, iDied: myDied,
+      stepLoot: Math.round(resolvedStep?.loot_earned ?? 0),
+      xpAwarded: resolvedStep?.xp_awarded ?? 0,
+      survivorNames,
     });
   }
 
@@ -394,6 +408,7 @@ function VotePage() {
 
     // Petit temps de suspense avant l'affichage — purement cosmétique, ne bloque aucune donnée
     const started = Date.now();
+    resultShownRef.current = true;
     await showStepResult(step.id, step.event_type, 0);
     const elapsed = Date.now() - started;
     if (elapsed < 1200) await new Promise(r => setTimeout(r, 1200 - elapsed));
@@ -463,6 +478,34 @@ function VotePage() {
         <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title={title} subtitle={subtitle}>
           <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
+
+          {!result.iDied && !result.ended && (result.stepLoot > 0 || result.xpAwarded > 0) && (
+            <div className="flex justify-center gap-6 mb-5">
+              {result.stepLoot > 0 && (
+                <div className="text-center">
+                  <p className="text-2xl font-serif font-bold text-amber-400">+{result.stepLoot} or</p>
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Butin de l'étape</p>
+                </div>
+              )}
+              {result.xpAwarded > 0 && (
+                <div className="text-center">
+                  <p className="text-2xl font-serif font-bold text-purple-300">+{result.xpAwarded} XP</p>
+                  <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">par survivant</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!result.iDied && !result.ended && result.survivorNames.length > 0 && (
+            <div className="mb-4 px-3 py-2 border border-border/20">
+              <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground mb-1">XP gagnée (le butin, lui, va au trésor commun de la guilde)</p>
+              {result.survivorNames.map(n => (
+                <p key={n} className="text-xs text-muted-foreground">
+                  {n} — <span className="text-purple-300">+{result.xpAwarded} XP</span>
+                </p>
+              ))}
+            </div>
+          )}
 
           {result.deadNames.length > 0 && (
             <div className="mb-4 px-3 py-2 border border-red-400/20">
