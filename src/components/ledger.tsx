@@ -110,12 +110,13 @@ export function SealButton({
 
 export function TextLink({
   children,
+  className,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...props}
-      className="mt-4 block text-sm text-muted-foreground underline underline-offset-4 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className={`mt-4 block text-sm text-muted-foreground underline underline-offset-4 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${className ?? ""}`}
     >
       {children}
     </button>
