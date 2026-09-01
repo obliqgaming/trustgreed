@@ -90,6 +90,8 @@ function VotePage() {
   const [ready, setReady] = useState(false);
   const [revealing, setRevealing] = useState(false); // écran "Résolution en cours..." bref, purement cosmétique
   const [result, setResult] = useState<Result | null>(null);
+  const [acked, setAcked] = useState(false);
+  const [ackCount, setAckCount] = useState<{ done: number; total: number } | null>(null);
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [botBusy, setBotBusy] = useState<string | null>(null);
@@ -160,6 +162,8 @@ function VotePage() {
         setVotedIds([]);
         setResult(null);
         setMyPrivateRisk(null);
+        setAcked(false);
+        setAckCount(null);
       } else {
         stepIdRef.current = data.id;
       }
@@ -365,6 +369,14 @@ function VotePage() {
     });
   }
 
+  async function acknowledgeAndAdvance() {
+    if (!step || !character) return;
+    setAcked(true);
+    await supabase.rpc("acknowledge_step_result", { p_step_id: step.id, p_character_id: character.id });
+    // Le poll existant détectera l'étape suivante dès qu'elle sera générée
+    // (par ce joueur si c'est le dernier, ou par un autre sinon).
+  }
+
   async function resolveStep() {
     if (!step) return;
     soundRevealClick();
@@ -388,6 +400,25 @@ function VotePage() {
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !revealing;
   const prevAllVoted = useRef(false);
+
+  // Pendant l'écran de résultat (hors fin d'expédition / mort perso), affiche
+  // en direct combien de joueurs ont déjà validé pour passer à la suite.
+  useEffect(() => {
+    if (!result || result.ended || result.iDied || !step) { setAckCount(null); return; }
+    let cancelled = false;
+    const poll = async () => {
+      const { count: alive } = await supabase.from("expedition_participants")
+        .select("character_id, characters!inner(is_alive)", { count: "exact", head: true })
+        .eq("expedition_id", expeditionId).eq("characters.is_alive", true);
+      const { count: done } = await supabase.from("step_acknowledgments")
+        .select("character_id, characters!inner(is_alive)", { count: "exact", head: true })
+        .eq("step_id", step.id).eq("characters.is_alive", true);
+      if (!cancelled) setAckCount({ done: done ?? 0, total: alive ?? 0 });
+    };
+    void poll();
+    const t = setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [result, step, expeditionId]);
   useEffect(() => { if (allVoted && !prevAllVoted.current) soundAllVoted(); prevAllVoted.current = allVoted; }, [allVoted]);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -447,10 +478,17 @@ function VotePage() {
               Retour à la guilde
             </button>
           ) : (
-            <button onClick={() => { setResult(null); void fetchStep(); }}
-              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
-              Étape suivante
-            </button>
+            <>
+              <button onClick={acknowledgeAndAdvance} disabled={acked}
+                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-40">
+                {acked ? "En attente des autres…" : "Continuer"}
+              </button>
+              {ackCount && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  {ackCount.done} / {ackCount.total} ont validé
+                </p>
+              )}
+            </>
           )}
         </LedgerCard>
       </LedgerPage>
