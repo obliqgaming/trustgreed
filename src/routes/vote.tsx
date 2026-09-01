@@ -22,7 +22,7 @@ type Step = {
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[] };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const EVENT_IMAGES: Record<string, string> = {
@@ -73,10 +73,8 @@ function VotePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const [cinematic, setCinematic] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false); // écran "Résolution en cours..." bref, purement cosmétique
   const [result, setResult] = useState<Result | null>(null);
-  const [iDied, setIDied] = useState(false);
-  const [pendingReveal, setPendingReveal] = useState(false); // étape résolue, pas encore vue
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [botBusy, setBotBusy] = useState<string | null>(null);
@@ -145,10 +143,7 @@ function VotePage() {
         stepIdRef.current = data.id;
         setMyVote(null);
         setVotedIds([]);
-        setCinematic(null);
         setResult(null);
-        setPendingReveal(false);
-        setIDied(false);
         setMyPrivateRisk(null);
       } else {
         stepIdRef.current = data.id;
@@ -163,19 +158,9 @@ function VotePage() {
         setVisibleRisk(null);
       }
 
-      // Si l'étape est résolue et qu'on n'a pas encore vu le résultat, signaler
-      if (data.resolved && !result && !cinematic) {
-        setPendingReveal(true);
-      }
-
-      // Vérifier si expédition terminée
-      if (data.resolved) {
-        const { data: exp } = await supabase
-          .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
-        if (exp?.status === "completed") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          setResult({ deaths: data.deaths_count, loot: Math.round(exp.total_loot_kept ?? 0), ended: true, deadNames: [] });
-        }
+      // Si l'étape est résolue et qu'on n'a pas encore vu le résultat (ex: quelqu'un d'autre a révélé), l'afficher
+      if (data.resolved && !result) {
+        await showStepResult(data.id, data.event_type, data.deaths_count);
       }
     }
     return data;
@@ -328,58 +313,57 @@ function VotePage() {
     setTimeout(() => setDebugCopied(false), 2000);
   }
 
-  async function resolveStep() {
-    if (!step) return;
-    soundRevealClick();
-    setBusy(true); setError(null);
-    const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
-    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
-
+  async function showStepResult(stepId: string, eventType: string, deathsCountHint: number) {
     const { data: resolvedStep } = await supabase
-      .from("expedition_steps").select("deaths_count").eq("id", step.id).maybeSingle();
-    const deaths = resolvedStep?.deaths_count ?? 0;
+      .from("expedition_steps").select("deaths_count").eq("id", stepId).maybeSingle();
+    const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
 
     const { data: deadChars } = await supabase
       .from("characters").select("name")
       .eq("died_in_expedition_id", expeditionId).eq("is_alive", false);
     const deadNames = (deadChars ?? []).map((c: any) => c.name);
 
-    const cinematicText = getCinematic(step.event_type, deaths > 0);
-    setCinematic(cinematicText);
-
-    // Suis-je mort ?
+    let myDied = false;
     if (character) {
       const { data: charData } = await supabase
         .from("characters").select("is_alive").eq("id", character.id).maybeSingle();
-      if (charData && !charData.is_alive) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        soundMaMort();
-        setBusy(false);
-        setTimeout(() => { setIDied(true); setResult({ deaths: -1, loot: 0, ended: true, deadNames }); }, 2500);
-        return;
-      }
+      myDied = !!charData && !charData.is_alive;
     }
 
     const { data: exp } = await supabase
       .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
+    const ended = exp?.status === "completed";
 
-    if (exp?.status === "completed" && (exp.total_loot_kept ?? 0) > 0) soundRetourVictoire();
-    else if (exp?.status === "completed") soundRetourWipe();
+    const cinematicText = getCinematic(eventType, deaths > 0 || myDied);
+
+    if (myDied) soundMaMort();
+    else if (ended && (exp?.total_loot_kept ?? 0) > 0) soundRetourVictoire();
+    else if (ended) soundRetourWipe();
     else if (deaths > 0) soundMortMembre();
     else soundSurvived();
 
-    setTimeout(() => {
-      setCinematic(null);
-      setPendingReveal(true);
-    }, 2500);
+    if (ended && pollRef.current) clearInterval(pollRef.current);
 
-    if (exp?.status === "completed") {
-      if (pollRef.current) clearInterval(pollRef.current);
-      setResult({ deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended: true, deadNames });
-    } else {
-      setResult({ deaths, loot: 0, ended: false, deadNames });
-    }
+    setResult({
+      deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended,
+      deadNames, cinematic: cinematicText, iDied: myDied,
+    });
+  }
 
+  async function resolveStep() {
+    if (!step) return;
+    soundRevealClick();
+    setBusy(true); setRevealing(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
+    if (rpcError) { setError(rpcError.message); setBusy(false); setRevealing(false); return; }
+
+    // Petit temps de suspense avant l'affichage — purement cosmétique, ne bloque aucune donnée
+    const started = Date.now();
+    await showStepResult(step.id, step.event_type, 0);
+    const elapsed = Date.now() - started;
+    if (elapsed < 1200) await new Promise(r => setTimeout(r, 1200 - elapsed));
+
+    setRevealing(false);
     setBusy(false);
   }
 
@@ -387,93 +371,68 @@ function VotePage() {
   const aliveParticipants = participants.filter(p => p.is_alive);
   const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
-  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !cinematic;
+  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !revealing;
   const prevAllVoted = useRef(false);
   useEffect(() => { if (allVoted && !prevAllVoted.current) soundAllVoted(); prevAllVoted.current = allVoted; }, [allVoted]);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
-  // Cinématique
-  // Écran intermédiaire : l'étape est résolue, chaque joueur confirme individuellement
-  if (pendingReveal && !cinematic) {
-    const resultBg = result && result.deaths > 0 ? STEP_RESULT_FAIL : STEP_RESULT_SUCCESS;
-    return (
-      <LedgerPage>
-        <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
-        <LedgerCard title="Résultat disponible" subtitle="L'étape a été résolue.">
-          <p className="text-sm text-muted-foreground mb-6 text-center">
-            Prêt à voir ce qui s'est passé ?
-          </p>
-          <button
-            onClick={() => {
-              setPendingReveal(false);
-              // Si pas encore de cinématique, en générer une maintenant
-              if (step && !cinematic) {
-                const hasDeath = (result?.deaths ?? 0) > 0 || iDied;
-                setCinematic(getCinematic(step.event_type, hasDeath));
-              }
-            }}
-            className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
-            Révéler
-          </button>
-        </LedgerCard>
-      </LedgerPage>
-    );
-  }
-
-  if (cinematic && !result) {
+  // Bref écran de suspense pendant la résolution (purement cosmétique, aucune donnée n'attend dessus)
+  if (revealing && !result) {
     return (
       <LedgerPage>
         <LedgerCard title="" subtitle="">
-          <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">{cinematic}</p>
+          <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">
+            La poussière retombe…
+          </p>
         </LedgerCard>
       </LedgerPage>
     );
   }
 
-  // Mort personnelle
-  if (result && iDied) {
-    return (
-      <LedgerPage>
-        <LedgerCard title="Tu es mort." subtitle="Ton personnage ne reviendra pas.">
-          {cinematic && <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed">{cinematic}</p>}
-          <div className="mb-6 px-3 py-4 border border-red-400/30 bg-red-400/5">
-            <p className="text-sm text-red-400/80 leading-relaxed">
-              Le sort t'a désigné. Ton histoire s'arrête ici. Ton nom restera dans l'historique de la guilde.
-            </p>
-          </div>
-          <button onClick={() => navigate({ to: "/" })}
-            className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-red-400/40 text-red-400/70 hover:bg-red-400/10">
-            Quitter l'expédition
-          </button>
-        </LedgerCard>
-      </LedgerPage>
-    );
-  }
-
-  // Résultat normal
+  // Écran de résultat unique : succès/échec, morts, narration — tout en même temps
   if (result) {
-    const title = result.ended ? "Expédition terminée"
+    const resultBg = result.deaths > 0 || result.iDied ? STEP_RESULT_FAIL : STEP_RESULT_SUCCESS;
+    const title = result.iDied ? "Tu es mort."
+      : result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
-    const subtitle = result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
+    const subtitle = result.iDied ? "Ton personnage ne reviendra pas."
+      : result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
       : result.deaths > 0 ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri.`
       : "Le groupe avance.";
     return (
       <LedgerPage>
+        <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title={title} subtitle={subtitle}>
+          <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
+
           {result.deadNames.length > 0 && (
             <div className="mb-4 px-3 py-2 border border-red-400/20">
               {result.deadNames.map(n => <p key={n} className="text-xs text-red-400/70">✝ {n}</p>)}
             </div>
           )}
-          {result.ended ? (
+
+          {result.iDied && (
+            <div className="mb-6 px-3 py-4 border border-red-400/30 bg-red-400/5">
+              <p className="text-sm text-red-400/80 leading-relaxed">
+                Le sort t'a désigné. Ton histoire s'arrête ici. Ton nom restera dans l'historique de la guilde.
+              </p>
+            </div>
+          )}
+
+          {result.iDied ? (
+            <button onClick={() => navigate({ to: "/" })}
+              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-red-400/40 text-red-400/70 hover:bg-red-400/10">
+              Quitter l'expédition
+            </button>
+          ) : result.ended ? (
             <button onClick={() => navigate({ to: "/" })}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Retour à la guilde
             </button>
           ) : (
-            <button onClick={() => { setResult(null); setCinematic(null); void fetchStep(); }}
+            <button onClick={() => { setResult(null); void fetchStep(); }}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Étape suivante
             </button>
