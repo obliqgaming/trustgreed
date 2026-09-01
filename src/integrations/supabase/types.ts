@@ -959,6 +959,10 @@ export type Database = {
           xp: number
         }[]
       }
+      admin_debug_expedition: {
+        Args: { p_expedition_id: string }
+        Returns: Json
+      }
       admin_bot_vote: {
         Args: { p_step_id: string; p_bot_character_id: string; p_vote: string }
         Returns: undefined
