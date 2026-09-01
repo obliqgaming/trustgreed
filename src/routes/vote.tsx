@@ -78,6 +78,7 @@ function VotePage() {
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [botBusy, setBotBusy] = useState<string | null>(null);
+  const [debugCopied, setDebugCopied] = useState(false);
   const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
   const [visibleRisk, setVisibleRisk] = useState<number | null>(null);
   const [myPrivateRisk, setMyPrivateRisk] = useState<number | null>(null);
@@ -315,6 +316,14 @@ function VotePage() {
     const { error: rpcError } = await supabase.rpc("admin_revive_bot", { p_bot_character_id: botCharacterId });
     if (rpcError) setError(rpcError.message); else await fetchParticipants();
     setBotBusy(null);
+  }
+
+  async function copyDebugReport() {
+    const { data, error: rpcError } = await supabase.rpc("admin_debug_expedition", { p_expedition_id: expeditionId });
+    if (rpcError) { setError(rpcError.message); return; }
+    void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    setDebugCopied(true);
+    setTimeout(() => setDebugCopied(false), 2000);
   }
 
   async function resolveStep() {
@@ -582,6 +591,12 @@ function VotePage() {
               <button onClick={resolveStep} disabled={busy}
                 className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
                 {busy ? "Résolution…" : "Révéler le résultat"}
+              </button>
+            )}
+            {isAdmin && (
+              <button onClick={copyDebugReport}
+                className="w-full mb-2 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
+                {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
               </button>
             )}
             <div className="relative mt-4 pt-8 px-6 pb-6">
