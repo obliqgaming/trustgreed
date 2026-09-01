@@ -273,7 +273,7 @@ function Index() {
             {/* Membres */}
             <div className="mb-5">
               <Frame variant="bar" className="mb-3 max-w-xs mx-auto lg:mx-0 lg:max-w-none">
-                <span className="text-xs tracking-[0.16em] uppercase font-serif">Membres</span>
+                <span className="text-lg tracking-[0.16em] uppercase font-serif font-semibold">Membres</span>
               </Frame>
               <div className="space-y-2">
                 {members.map((m) => (
@@ -837,9 +837,9 @@ function JoinRequestsPanel({ guildId, character, onResolved }: { guildId: string
   if (requests.length === 0) return null;
 
   return (
-    <div className="relative mb-4 bg-primary/5 px-4 py-4">
+    <div className="relative mb-4 bg-primary/5 px-8 pt-10 pb-8">
       <DecorativeBorder variant="wide" />
-      <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">Demandes pour rejoindre la guilde</p>
+      <p className="text-sm tracking-[0.14em] uppercase text-primary mb-3">Demandes pour rejoindre la guilde</p>
       <LedgerError message={error} />
       <ul className="space-y-2">
         {requests.map((r) => (

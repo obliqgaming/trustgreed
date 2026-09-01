@@ -26,7 +26,6 @@ export function OnlinePlayersPanel({ guildName }: { guildName?: string | null })
       .from("profiles")
       .select("id, username, last_seen_at")
       .gte("last_seen_at", since)
-      .neq("id", session.user.id)
       .order("username", { ascending: true });
     setPlayers(data ?? []);
   }, []);
@@ -60,9 +59,9 @@ export function OnlinePlayersPanel({ guildName }: { guildName?: string | null })
   }
 
   return (
-    <div className="relative mb-6 bg-card/40 px-4 py-4">
+    <div className="relative mb-6 bg-card/40 px-8 pt-10 pb-8">
       <DecorativeBorder variant="wide" />
-      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
+      <p className="text-sm tracking-[0.14em] uppercase text-muted-foreground mb-3">
         Joueurs en ligne {players.length > 0 ? `(${players.length})` : ""}
       </p>
       <LedgerError message={error} />
@@ -74,15 +73,17 @@ export function OnlinePlayersPanel({ guildName }: { guildName?: string | null })
             <li key={p.id} className="flex items-center justify-between border border-border/40 px-3 py-2 text-sm">
               <span className="flex items-center gap-2">
                 <span className={`h-1.5 w-1.5 rounded-full ${isOnline(p.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
-                {p.username}
+                {p.username}{p.id === myProfileId ? " (toi)" : ""}
               </span>
-              <button
-                onClick={() => sendInvite(p.id)}
-                disabled={sendingTo === p.id}
-                className="text-xs tracking-[0.1em] uppercase border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10 disabled:opacity-30"
-              >
-                {sentTo === p.id ? "Envoyé ✓" : sendingTo === p.id ? "…" : "Envoyer un code"}
-              </button>
+              {p.id !== myProfileId && (
+                <button
+                  onClick={() => sendInvite(p.id)}
+                  disabled={sendingTo === p.id}
+                  className="text-xs tracking-[0.1em] uppercase border border-primary/40 text-primary px-2.5 py-1 hover:bg-primary/10 disabled:opacity-30"
+                >
+                  {sentTo === p.id ? "Envoyé ✓" : sendingTo === p.id ? "…" : "Envoyer un code"}
+                </button>
+              )}
             </li>
           ))}
         </ul>
