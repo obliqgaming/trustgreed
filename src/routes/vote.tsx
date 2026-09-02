@@ -21,6 +21,7 @@ type Step = {
   loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
   resolving: boolean; resolution_deadline: string | null; was_retreat: boolean;
+  resolved_at: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; xpAwarded: number; survivorNames: string[] };
@@ -162,7 +163,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -218,6 +219,18 @@ function VotePage() {
         setVisibleRisk(risk as number | null);
       } else {
         setVisibleRisk(null);
+      }
+
+      // Filet de sécurité : si le groupe reste bloqué sans que tout le monde
+      // ait cliqué "Continuer", force le passage à la suite après 90s.
+      // Ce check tourne à chaque poll (même après le premier affichage du
+      // résultat), tant qu'il reste au moins un client avec l'onglet ouvert.
+      // Utilise characterIdRef (pas character) pour éviter toute fermeture figée.
+      if (data.resolved && data.resolved_at && characterIdRef.current) {
+        const elapsedMs = Date.now() - new Date(data.resolved_at).getTime();
+        if (elapsedMs >= 90000) {
+          await supabase.rpc("acknowledge_step_result", { p_step_id: data.id, p_character_id: characterIdRef.current });
+        }
       }
 
       // Si la fenêtre d'intervention est écoulée, quelqu'un doit déclencher le vrai jet.
