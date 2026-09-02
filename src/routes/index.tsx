@@ -135,42 +135,23 @@ function Index() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Ouverture du registre…</p></LedgerPage>;
   if (!session) return (
-    <LedgerPage>
+    <LedgerPage wide={mode === "landing"}>
       {mode === "landing" ? (
-        <>
-          <div className="flex justify-center mb-4">
-            <img src="/logo_web.webp" alt="Trust & Greed" className="w-28 h-28 rounded-full border border-border/40" />
+        <div className="max-w-3xl mx-auto">
+          <div className="mb-6 rounded-sm overflow-hidden border border-border/40">
+            <img src="/landing_hero.webp" alt="Trust & Greed" className="w-full h-auto block" />
           </div>
-          <LedgerCard subtitle="Une règle : un seul vote CONTINUER suffit à entraîner tout le groupe.">
-          <div className="mb-6 space-y-1.5 border border-border/20 px-3 py-3 text-xs text-muted-foreground/70">
-            <p>① Crée un compte et choisis un personnage</p>
-            <p>② Fonde ou rejoins une guilde (via code d'invitation)</p>
-            <p>③ Lance une expédition avec au moins 3 membres</p>
-            <p>④ Vote à chaque étape — personne ne sait ce que les autres ont voté</p>
-            <p>La mort est définitive.</p>
-          </div>
-          <div className="space-y-2">
+          <div className="max-w-sm mx-auto space-y-2">
             <button onClick={() => setMode("signup")}
               className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
-              Rejoindre le registre
+              Créer un compte
             </button>
             <button onClick={() => setMode("signin")}
               className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.14em] uppercase border-border/40 text-muted-foreground hover:bg-border/10">
               J'ai déjà un compte
             </button>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => navigate({ to: "/carte" })}
-                className="flex-1 text-xs tracking-[0.12em] uppercase text-muted-foreground/60 hover:text-primary transition-colors py-1">
-                Carte des guildes
-              </button>
-              <button onClick={() => navigate({ to: "/monde" })}
-                className="flex-1 text-xs tracking-[0.12em] uppercase text-muted-foreground/60 hover:text-primary transition-colors py-1">
-                Le monde
-              </button>
-            </div>
           </div>
-        </LedgerCard>
-        </>
+        </div>
       ) : mode === "signup" ? (
         <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} />
       ) : (
