@@ -2,7 +2,7 @@ export const BANNER_SYMBOLS = ["⚔", "🛡", "🏴", "☠", "🐺", "🦅", "�
 export const BANNER_COLORS = ["#c9a24b", "#b0413e", "#4a7c6f", "#6b5b95", "#8a8a8a", "#3f5d7d"];
 
 export function GuildBanner({ symbol, color, size = 28 }: { symbol?: string | null; color?: string | null; size?: number }) {
-  if (!symbol) return null;
+  if (!symbol || !BANNER_SYMBOLS.includes(symbol)) return null;
   return (
     <span
       style={{
