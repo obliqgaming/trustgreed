@@ -137,11 +137,10 @@ function Index() {
   if (!session) return (
     <LedgerPage wide={mode === "landing"}>
       {mode === "landing" ? (
-        <div className="max-w-3xl mx-auto">
-          <div className="mb-6 rounded-sm overflow-hidden border border-border/40">
-            <img src="/landing_hero.webp" alt="Trust & Greed" className="w-full h-auto block" />
-          </div>
-          <div className="max-w-sm mx-auto space-y-2">
+        <div className="fixed inset-0 z-0 flex items-end justify-center pb-16" style={{
+          backgroundImage: "url(/landing_hero.webp)", backgroundSize: "cover", backgroundPosition: "center",
+        }}>
+          <div className="max-w-sm w-full mx-4 space-y-2 bg-background/40 backdrop-blur-sm p-4 rounded-sm">
             <button onClick={() => setMode("signup")}
               className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
               Créer un compte
@@ -380,6 +379,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   const [guilds, setGuilds] = useState<(Guild & { member_count: number })[]>([]);
   const [tab, setTab] = useState<"create" | "join">("create");
   const [guildName, setGuildName] = useState("");
+  const [buildingStyle, setBuildingStyle] = useState<"chaos" | "arcane" | "noble" | "sylvan">("chaos");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -434,8 +434,13 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
 
   async function createGuild(e: React.FormEvent) {
     e.preventDefault(); setError(null); setBusy(true);
-    const { error: rpcError } = await supabase.rpc("create_guild", { p_guild_name: guildName, p_character_id: character.id });
-    if (rpcError) setError(rpcError.message); else await onDone();
+    const { data: newGuild, error: rpcError } = await supabase.rpc("create_guild", { p_guild_name: guildName, p_character_id: character.id });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    const guildId = (newGuild as any)?.id;
+    if (guildId) {
+      await supabase.rpc("set_guild_building_style", { p_guild_id: guildId, p_character_id: character.id, p_style: buildingStyle });
+    }
+    await onDone();
     setBusy(false);
   }
 
@@ -464,6 +469,22 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
             ⚠ Une expédition demande au moins 3 membres. En fondant seul, il te faudra convaincre 2 autres aventuriers de te rejoindre avant de pouvoir partir. Si une guilde existe déjà (voir "Guildes actives" plus bas), envisage plutôt de la rejoindre.
           </div>
           <Field label="Nom de la guilde" required value={guildName} onChange={(e) => setGuildName(e.target.value)} />
+
+          <div className="mb-4">
+            <p className="text-xs tracking-[0.12em] uppercase text-muted-foreground mb-2">Style de bâtiment de guilde</p>
+            <div className="grid grid-cols-4 gap-2">
+              {(["chaos", "arcane", "noble", "sylvan"] as const).map((style) => (
+                <button key={style} type="button" onClick={() => setBuildingStyle(style)}
+                  className={`border p-1.5 transition-colors ${buildingStyle === style ? "border-primary bg-primary/10" : "border-border/40 hover:border-border"}`}>
+                  <img src={`/guildbuildings/${style}_tier1.webp`} alt={style} className="w-full h-auto" />
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground/60 mt-1">
+              Ton bâtiment grandira avec la richesse et le classement de ta guilde sur la carte du monde.
+            </p>
+          </div>
+
           <LedgerError message={error} />
           <SealButton type="submit" disabled={busy}>{busy ? "Fondation…" : "Fonder la guilde"}</SealButton>
         </form>
