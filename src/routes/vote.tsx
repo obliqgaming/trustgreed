@@ -20,7 +20,7 @@ type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
   loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
-  resolving: boolean; resolution_deadline: string | null;
+  resolving: boolean; resolution_deadline: string | null; was_retreat: boolean;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; xpAwarded: number; survivorNames: string[] };
@@ -155,7 +155,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -179,19 +179,17 @@ function VotePage() {
         stepIdRef.current = data.id;
       }
       setStep(data);
-      await fetchVotes(data.id);
 
-      if (data.risk_revealed) {
-        const { data: risk } = await supabase.rpc("get_visible_risk", { p_step_id: data.id });
-        setVisibleRisk(risk as number | null);
-      } else {
-        setVisibleRisk(null);
-      }
-
-      // Si l'étape est résolue et qu'on n'a pas encore vu le résultat (ex: quelqu'un d'autre a révélé),
-      // on anime d'abord la jauge vers le vrai résultat (déjà connu côté serveur) avant de le détailler.
+      // Priorité absolue : si l'étape vient d'être résolue, basculer vers l'animation
+      // de révélation IMMÉDIATEMENT, avant tout autre appel réseau qui laisserait
+      // passer un rendu intermédiaire (flash visible entre les deux écrans).
+      // Un retour volontaire ("rentrer") ne passe jamais par la jauge.
       if (data.resolved && !resultShownRef.current) {
         resultShownRef.current = true;
+        if (data.was_retreat) {
+          await showStepResult(data.id, data.event_type, data.deaths_count, true);
+          return;
+        }
         setRevealingOutcome(true);
         const goodOutcome = data.deaths_count === 0;
         const start = Date.now();
@@ -203,6 +201,16 @@ function VotePage() {
         clearInterval(animInterval);
         setRevealingOutcome(false);
         await showStepResult(data.id, data.event_type, data.deaths_count);
+        return;
+      }
+
+      await fetchVotes(data.id);
+
+      if (data.risk_revealed) {
+        const { data: risk } = await supabase.rpc("get_visible_risk", { p_step_id: data.id });
+        setVisibleRisk(risk as number | null);
+      } else {
+        setVisibleRisk(null);
       }
 
       // Si la fenêtre d'intervention est écoulée, quelqu'un doit déclencher le vrai jet.
@@ -355,7 +363,7 @@ function VotePage() {
     setTimeout(() => setDebugCopied(false), 2000);
   }
 
-  async function showStepResult(stepId: string, eventType: string, deathsCountHint: number) {
+  async function showStepResult(stepId: string, eventType: string, deathsCountHint: number, isRetreat: boolean = false) {
     const { data: resolvedStep } = await supabase
       .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded").eq("id", stepId).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
@@ -384,9 +392,22 @@ function VotePage() {
       .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
     const ended = exp?.status === "completed";
 
-    const cinematicText = getCinematic(eventType, deaths > 0 || myDied);
+    let cinematicText: string;
+    if (isRetreat) {
+      cinematicText = "Pris·es d'un élan de sagesse, vous décidez de rentrer à la guilde.";
+    } else {
+      cinematicText = getCinematic(eventType, deaths > 0 || myDied);
+      const { count: interventionCount } = await supabase
+        .from("step_interventions").select("character_id", { count: "exact", head: true }).eq("step_id", stepId);
+      if (interventionCount && interventionCount > 0) {
+        cinematicText += deaths > 0 || myDied
+          ? " Une intervention désespérée du groupe n'aura pas suffi à conjurer le sort."
+          : " Une intervention de dernière minute a fait pencher la balance en votre faveur.";
+      }
+    }
 
     if (myDied) soundMaMort();
+    else if (isRetreat) { /* pas de son dramatique pour un retour volontaire */ }
     else if (ended && (exp?.total_loot_kept ?? 0) > 0) soundRetourVictoire();
     else if (ended) soundRetourWipe();
     else if (deaths > 0) soundMortMembre();
@@ -423,10 +444,18 @@ function VotePage() {
     if (!step) return;
     soundRevealClick();
     setBusy(true); setError(null);
-    const { error: rpcError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
+    const { data: beganStep, error: rpcError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
-    // La suite se joue dans l'écran de résolution (jauge + interventions) —
-    // le poll existant détectera resolving=true et affichera cet écran pour tous.
+
+    const bs = beganStep as any;
+    if (bs) {
+      setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec ses 17s pleines
+      if (bs.resolved) {
+        // Tout le monde a voté rentrer : résolu instantanément côté serveur, aucune jauge.
+        resultShownRef.current = true;
+        await showStepResult(bs.id, bs.event_type, bs.deaths_count, true);
+      }
+    }
     setBusy(false);
   }
 
