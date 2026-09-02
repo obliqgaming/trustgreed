@@ -18,7 +18,7 @@ type GuildEntry = {
 };
 
 const TIER_SCALE: Record<number, number> = { 1: 0.5, 2: 0.8, 3: 1, 4: 1.2, 5: 1.5 };
-const BASE_BUILDING_WIDTH = 56; // px, à l'échelle 100% (palier 3)
+const BASE_BUILDING_WIDTH = 78; // px, à l'échelle 100% (palier 3)
 
 function CartePage() {
   const navigate = useNavigate();
@@ -50,10 +50,10 @@ function CartePage() {
       .select("id, name, gold, founder_profile_id, map_x, map_y, building_style, banner_symbol, banner_color")
       .order("gold", { ascending: false });
 
+    if (!guildData) { setReady(true); return; }
+
     const { data: tierData } = await supabase.rpc("get_guild_building_tiers");
     const tierMap = new Map((tierData ?? []).map((t: any) => [t.guild_id, t]));
-
-    if (!guildData) { setReady(true); return; }
 
     const enriched = await Promise.all(guildData.map(async (g) => {
       const { count: members } = await supabase
@@ -104,8 +104,8 @@ function CartePage() {
   if (!ready) return <LedgerPage bg="/world_map_bg.png"><p className="text-center text-sm text-muted-foreground">Consultation du registre…</p></LedgerPage>;
 
   return (
-    <LedgerPage bg="/world_map_bg.png" wide>
-      <div className="w-full max-w-5xl mx-auto px-4 py-8">
+    <LedgerPage bg="/world_map_bg.png" maxWidthClass="max-w-7xl">
+      <div className="w-full max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6 bg-card/85 backdrop-blur-md border border-border/40 px-4 py-3 rounded-sm">
           <div>
             <h1 className="font-serif text-2xl tracking-[0.16em] uppercase text-primary">Carte des guildes</h1>
