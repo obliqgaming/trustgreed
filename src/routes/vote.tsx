@@ -20,6 +20,7 @@ type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
   loot_min: number; loot_max: number; vote_deadline: string;
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
+  resolving: boolean; resolution_deadline: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; xpAwarded: number; survivorNames: string[] };
@@ -88,10 +89,14 @@ function VotePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const [revealing, setRevealing] = useState(false); // écran "Résolution en cours..." bref, purement cosmétique
   const [result, setResult] = useState<Result | null>(null);
   const [acked, setAcked] = useState(false);
   const [ackCount, setAckCount] = useState<{ done: number; total: number } | null>(null);
+  const [interventionsRemaining, setInterventionsRemaining] = useState<number | null>(null);
+  const [myIntervened, setMyIntervened] = useState(false);
+  const [interventionBusy, setInterventionBusy] = useState(false);
+  const [gaugeWobble, setGaugeWobble] = useState(50);
+  const finalizeAttemptedRef = useRef(false);
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [botBusy, setBotBusy] = useState<string | null>(null);
@@ -149,7 +154,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -166,6 +171,9 @@ function VotePage() {
         setAcked(false);
         setAckCount(null);
         resultShownRef.current = false;
+        setInterventionsRemaining(null);
+        setMyIntervened(false);
+        setGaugeWobble(50);
       } else {
         stepIdRef.current = data.id;
       }
@@ -184,6 +192,13 @@ function VotePage() {
         resultShownRef.current = true;
         await showStepResult(data.id, data.event_type, data.deaths_count);
       }
+
+      // Si la fenêtre d'intervention est écoulée, quelqu'un doit déclencher le vrai jet.
+      // Best-effort : en cas de course entre plusieurs clients, un seul réussit vraiment,
+      // les autres échouent silencieusement et récupèrent le résultat au prochain poll.
+      if (data.resolving && !data.resolved && data.resolution_deadline && new Date(data.resolution_deadline) <= new Date()) {
+        await supabase.rpc("finalize_resolution", { p_step_id: data.id }).catch(() => {});
+      }
     }
     return data;
   }, [expeditionId, fetchVotes]);
@@ -192,20 +207,10 @@ function VotePage() {
   const startPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
-      // 1. Suis-je encore vivant ?
-      if (characterIdRef.current) {
-        const { data: charData } = await supabase
-          .from("characters").select("is_alive").eq("id", characterIdRef.current).maybeSingle();
-        if (charData && !charData.is_alive) {
-          clearInterval(pollRef.current!);
-          setIDied(true);
-          setResult({ deaths: -1, loot: 0, ended: true, deadNames: [] });
-          return;
-        }
-      }
-      // 2. Participants (avec statut vivant/mort)
+      // Participants (avec statut vivant/mort)
       await fetchParticipants();
-      // 3. Étape + votes
+      // Étape + votes (la détection de mort personnelle est gérée dans showStepResult,
+      // déclenché naturellement quand l'étape se résout)
       void fetchStep();
     }, 5000);
   }, [fetchStep, fetchParticipants]);
@@ -402,26 +407,60 @@ function VotePage() {
   async function resolveStep() {
     if (!step) return;
     soundRevealClick();
-    setBusy(true); setRevealing(true); setError(null);
-    const { error: rpcError } = await supabase.rpc("resolve_step", { p_step_id: step.id });
-    if (rpcError) { setError(rpcError.message); setBusy(false); setRevealing(false); return; }
-
-    // Petit temps de suspense avant l'affichage — purement cosmétique, ne bloque aucune donnée
-    const started = Date.now();
-    resultShownRef.current = true;
-    await showStepResult(step.id, step.event_type, 0);
-    const elapsed = Date.now() - started;
-    if (elapsed < 1200) await new Promise(r => setTimeout(r, 1200 - elapsed));
-
-    setRevealing(false);
+    setBusy(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    // La suite se joue dans l'écran de résolution (jauge + interventions) —
+    // le poll existant détectera resolving=true et affichera cet écran pour tous.
     setBusy(false);
   }
+
+  async function useIntervention() {
+    if (!step || !character || interventionBusy) return;
+    setInterventionBusy(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("use_intervention", { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setError(rpcError.message);
+    else { setMyIntervened(true); await refreshInterventionState(); soundRevealClick(); }
+    setInterventionBusy(false);
+  }
+
+  async function useInterventionAsBot(botId: string) {
+    if (!step) return;
+    setInterventionBusy(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("use_intervention", { p_step_id: step.id, p_character_id: botId });
+    if (rpcError) setError(rpcError.message); else await refreshInterventionState();
+    setInterventionBusy(false);
+  }
+
+  const refreshInterventionState = useCallback(async () => {
+    if (!step) return;
+    const { data: exp } = await supabase.from("expeditions").select("interventions_remaining").eq("id", expeditionId).maybeSingle();
+    setInterventionsRemaining(exp?.interventions_remaining ?? null);
+    if (character) {
+      const { data: mine } = await supabase.from("step_interventions")
+        .select("character_id").eq("step_id", step.id).eq("character_id", character.id).maybeSingle();
+      setMyIntervened(!!mine);
+    }
+  }, [step, expeditionId, character]);
+
+  // Pendant la fenêtre de résolution : jauge cosmétique (le vrai jet est
+  // recalculé côté serveur à la fin), compte à rebours, et suivi du pool
+  // d'interventions partagé.
+  useEffect(() => {
+    if (!step?.resolving || step.resolved) return;
+    void refreshInterventionState();
+    const t = setInterval(() => {
+      void refreshInterventionState();
+      setGaugeWobble(w => Math.min(85, Math.max(15, w + (Math.random() - 0.5) * 18)));
+    }, 1500);
+    return () => clearInterval(t);
+  }, [step?.resolving, step?.resolved, refreshInterventionState]);
 
   // Participants vivants = ceux qui comptent pour le vote
   const aliveParticipants = participants.filter(p => p.is_alive);
   const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
-  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !busy && !revealing;
+  const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !step.resolving && !busy;
   const prevAllVoted = useRef(false);
 
   // Pendant l'écran de résultat (hors fin d'expédition / mort perso), affiche
@@ -450,14 +489,56 @@ function VotePage() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
-  // Bref écran de suspense pendant la résolution (purement cosmétique, aucune donnée n'attend dessus)
-  if (revealing && !result) {
+  // Fenêtre de résolution active : jauge + interventions, avant le vrai résultat
+  if (step?.resolving && !step.resolved && !result) {
+    const secondsLeft = step.resolution_deadline
+      ? Math.max(0, Math.ceil((new Date(step.resolution_deadline).getTime() - Date.now()) / 1000))
+      : 0;
+    const availableBotsForIntervention = isAdmin
+      ? participants.filter(p => p.character.is_bot && p.is_alive)
+      : [];
     return (
       <LedgerPage>
-        <LedgerCard title="" subtitle="">
-          <p className="text-base text-foreground leading-relaxed text-center py-8 italic px-4">
-            La poussière retombe…
+        <LedgerCard title="Résolution en cours…" subtitle="Le sort du groupe se joue maintenant.">
+          <div className="mb-6">
+            <div className="h-4 border border-border/60 relative overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 transition-all duration-1000 ease-in-out"
+                style={{ width: `${gaugeWobble}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] uppercase tracking-[0.1em] text-muted-foreground mt-1">
+              <span>Échec</span>
+              <span>Réussite</span>
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-muted-foreground mb-4">
+            {secondsLeft > 0 ? `${secondsLeft}s avant le verdict` : "Verdict imminent…"}
           </p>
+
+          <LedgerError message={error} />
+
+          <button onClick={useIntervention} disabled={interventionBusy || myIntervened || !interventionsRemaining}
+            className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+            {myIntervened ? "Intervention déjà utilisée sur cette étape"
+              : !interventionsRemaining ? "Plus d'intervention disponible"
+              : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour la guilde)`}
+          </button>
+          <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+            Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
+          </p>
+
+          {availableBotsForIntervention.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
+              {availableBotsForIntervention.map((p) => (
+                <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy}
+                  className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
+                  Intervenir ({p.character.name})
+                </button>
+              ))}
+            </div>
+          )}
         </LedgerCard>
       </LedgerPage>
     );
