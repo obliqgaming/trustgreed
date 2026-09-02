@@ -96,6 +96,7 @@ function VotePage() {
   const [myIntervened, setMyIntervened] = useState(false);
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
+  const [revealingOutcome, setRevealingOutcome] = useState(false);
   const finalizeAttemptedRef = useRef(false);
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -187,9 +188,20 @@ function VotePage() {
         setVisibleRisk(null);
       }
 
-      // Si l'étape est résolue et qu'on n'a pas encore vu le résultat (ex: quelqu'un d'autre a révélé), l'afficher
+      // Si l'étape est résolue et qu'on n'a pas encore vu le résultat (ex: quelqu'un d'autre a révélé),
+      // on anime d'abord la jauge vers le vrai résultat (déjà connu côté serveur) avant de le détailler.
       if (data.resolved && !resultShownRef.current) {
         resultShownRef.current = true;
+        setRevealingOutcome(true);
+        const goodOutcome = data.deaths_count === 0;
+        const start = Date.now();
+        const animInterval = setInterval(() => {
+          const t = Math.min(1, (Date.now() - start) / 2200);
+          setGaugeWobble(goodOutcome ? 50 + t * 42 : 50 - t * 42);
+        }, 100);
+        await new Promise(r => setTimeout(r, 2400));
+        clearInterval(animInterval);
+        setRevealingOutcome(false);
         await showStepResult(data.id, data.event_type, data.deaths_count);
       }
 
@@ -197,7 +209,10 @@ function VotePage() {
       // Best-effort : en cas de course entre plusieurs clients, un seul réussit vraiment,
       // les autres échouent silencieusement et récupèrent le résultat au prochain poll.
       if (data.resolving && !data.resolved && data.resolution_deadline && new Date(data.resolution_deadline) <= new Date()) {
-        await supabase.rpc("finalize_resolution", { p_step_id: data.id }).catch(() => {});
+        await supabase.rpc("finalize_resolution", { p_step_id: data.id });
+        // Pas de .catch() ici : supabase-js ne lève pas d'exception sur une RPC
+        // en échec, elle renvoie juste { error } — qu'on ignore volontairement
+        // (course normale entre plusieurs clients, un seul réussit vraiment).
       }
     }
     return data;
@@ -490,8 +505,8 @@ function VotePage() {
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
   // Fenêtre de résolution active : jauge + interventions, avant le vrai résultat
-  if (step?.resolving && !step.resolved && !result) {
-    const secondsLeft = step.resolution_deadline
+  if ((step?.resolving || revealingOutcome) && !result) {
+    const secondsLeft = step?.resolution_deadline
       ? Math.max(0, Math.ceil((new Date(step.resolution_deadline).getTime() - Date.now()) / 1000))
       : 0;
     const availableBotsForIntervention = isAdmin
@@ -499,11 +514,11 @@ function VotePage() {
       : [];
     return (
       <LedgerPage>
-        <LedgerCard title="Résolution en cours…" subtitle="Le sort du groupe se joue maintenant.">
+        <LedgerCard title={revealingOutcome ? "Le verdict tombe…" : "Résolution en cours…"} subtitle="Le sort du groupe se joue maintenant.">
           <div className="mb-6">
             <div className="h-4 border border-border/60 relative overflow-hidden">
               <div
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 transition-all duration-1000 ease-in-out"
+                className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-1000 ease-in-out"}`}
                 style={{ width: `${gaugeWobble}%` }}
               />
             </div>
@@ -513,31 +528,37 @@ function VotePage() {
             </div>
           </div>
 
-          <p className="text-center text-sm text-muted-foreground mb-4">
-            {secondsLeft > 0 ? `${secondsLeft}s avant le verdict` : "Verdict imminent…"}
-          </p>
+          {revealingOutcome ? (
+            <p className="text-center text-sm text-muted-foreground mb-4 italic">…</p>
+          ) : (
+            <>
+              <p className="text-center text-sm text-muted-foreground mb-4">
+                {secondsLeft > 0 ? `${secondsLeft}s avant le verdict` : "Verdict imminent…"}
+              </p>
 
-          <LedgerError message={error} />
+              <LedgerError message={error} />
 
-          <button onClick={useIntervention} disabled={interventionBusy || myIntervened || !interventionsRemaining}
-            className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-            {myIntervened ? "Intervention déjà utilisée sur cette étape"
-              : !interventionsRemaining ? "Plus d'intervention disponible"
-              : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour la guilde)`}
-          </button>
-          <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-            Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
-          </p>
+              <button onClick={useIntervention} disabled={interventionBusy || myIntervened || !interventionsRemaining}
+                className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                {myIntervened ? "Intervention déjà utilisée sur cette étape"
+                  : !interventionsRemaining ? "Plus d'intervention disponible"
+                  : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour cette expédition)`}
+              </button>
+              <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+                Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
+              </p>
 
-          {availableBotsForIntervention.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
-              {availableBotsForIntervention.map((p) => (
-                <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy}
-                  className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
-                  Intervenir ({p.character.name})
-                </button>
-              ))}
-            </div>
+              {availableBotsForIntervention.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
+                  {availableBotsForIntervention.map((p) => (
+                    <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy}
+                      className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
+                      Intervenir ({p.character.name})
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </LedgerCard>
       </LedgerPage>
