@@ -10,8 +10,8 @@ export type FrameVariant = "journal" | "bar";
  * rien d'autre à changer dans l'app.
  */
 const FRAME_CONFIG: Record<FrameVariant, { src: string; ratio: number; inset: string }> = {
-  journal: { src: "/frames/panel_journal.png", ratio: 1287 / 1222, inset: "10% 12% 11% 14%" },
-  bar: { src: "/frames/bar_header.png", ratio: 1684 / 767, inset: "28% 8% 35% 8%" },
+  journal: { src: "/panel_journal.webp", ratio: 1287 / 1222, inset: "10% 12% 11% 14%" },
+  bar: { src: "/bar_header.webp", ratio: 1684 / 767, inset: "28% 8% 35% 8%" },
 };
 
 export function Frame({
@@ -58,7 +58,7 @@ export function MemberFrame({
 }) {
   return (
     <div className={`relative w-full ${className}`} style={{ aspectRatio: String(MEMBER_CARD_RATIO) }}>
-      <img src="/frames/card_member.png" alt="" aria-hidden className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
+      <img src="/card_member.webp" alt="" aria-hidden className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
       <div className="absolute overflow-hidden rounded-sm" style={MEMBER_PORTRAIT_BOX}>
         {portrait}
       </div>
@@ -73,8 +73,8 @@ export function MemberFrame({
 }
 
 const BORDER_CONFIG = {
-  wide: "/frames/border_wide.png",
-  square: "/frames/border_square.png",
+  wide: "/border_wide.webp",
+  square: "/border_square.webp",
 } as const;
 
 /**

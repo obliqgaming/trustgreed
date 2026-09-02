@@ -160,12 +160,12 @@ function Index() {
   );
   if (profileMissing) return <LedgerPage bg="/register_book.png"><CreateProfileScreen onDone={refresh} /></LedgerPage>;
   if (!character) return <LedgerPage bg="/register_book.png"><CreateOrReviveScreen onDone={refresh} /></LedgerPage>;
-  if (!character.guild_id) return <LedgerPage bg="/guild_hall_bg.png"><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
+  if (!character.guild_id) return <LedgerPage bg="/guild_hall_bg.webp"><GuildScreen character={character} onDone={refresh} /></LedgerPage>;
 
   const isInExpedition = activeExpedition && members.some(m => m.id === character.id);
 
   return (
-    <LedgerPage bg="/guild_hall_bg.png" wide>
+    <LedgerPage bg="/guild_hall_bg.webp" wide>
       <LedgerCard>
 
         {/* En-tête : bannière inline + nom + sous-titre */}

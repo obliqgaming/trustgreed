@@ -27,16 +27,16 @@ type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const EVENT_IMAGES: Record<string, string> = {
-  coffre: "/event_coffre.png",
-  porte: "/event_porte.png",
-  gardien: "/event_gardien.png",
-  passage: "/event_passage.png",
-  rencontre: "/event_passage.png", // placeholder temporaire
-  decouverte: "/event_coffre.png", // placeholder temporaire
-  traces: "/event_porte.png", // placeholder temporaire
+  coffre: "/event_coffre.webp",
+  porte: "/event_porte.webp",
+  gardien: "/event_gardien.webp",
+  passage: "/event_passage.webp",
+  rencontre: "/event_passage.webp", // placeholder temporaire
+  decouverte: "/event_coffre.webp", // placeholder temporaire
+  traces: "/event_porte.webp", // placeholder temporaire
 };
-const STEP_RESULT_SUCCESS = "/step_success.png.png";
-const STEP_RESULT_FAIL = "/step_fail.png";
+const STEP_RESULT_SUCCESS = "/step_success.png.webp";
+const STEP_RESULT_FAIL = "/step_fail.webp";
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
 const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {

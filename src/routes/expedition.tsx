@@ -236,13 +236,13 @@ function ExpeditionPage() {
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const canStart = isLeader && participants.length >= 3;
 
-  if (!ready) return <LedgerPage bg="/guild_hall_bg.png"><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
+  if (!ready) return <LedgerPage bg="/guild_hall_bg.webp"><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
   return (
     <LedgerPage>
       {!expedition ? (
         <>
-          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.png)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.6}} />
+          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.webp)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.6}} />
           <LedgerCard title="Nouvelle expédition" subtitle="Choisis combien de membres peuvent rejoindre. Plus le groupe est grand, plus le butin est élevé — et plus la trahison est possible.">
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>

@@ -4,7 +4,7 @@ export const PORTRAITS: { id: string; label: string; src: string }[] = [
   { id: "viking",     label: "Le Viking",   src: "/portrait_viking.png" },
   { id: "mage",       label: "Le Mage",     src: "/portrait_mage.png" },
   { id: "capuche",    label: "La Capuche",  src: "/portrait_capuche.png" },
-  { id: "chevalier",  label: "Le Chevalier",src: "/portrait_chevalier.png" },
+  { id: "chevalier",  label: "Le Chevalier",src: "/portrait_chevalier.webp" },
 ];
 
 export function PortraitDisplay({ portraitId, size = 64 }: { portraitId: string; size?: number }) {
