@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
@@ -37,6 +37,11 @@ const EVENT_IMAGES: Record<string, string> = {
 };
 const STEP_RESULT_SUCCESS = "/step_success.png.webp";
 const STEP_RESULT_FAIL = "/step_fail.webp";
+const DEATH_SCREEN = "/death_screen.png";
+const RETURN_SUCCESS = "/return_success.png";
+const RETURN_WIPE = "/return_wipe.png";
+const CINEMATIC_DEATH_IMG = "/cinematic_death.png";
+const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.png", "/cinematic_survive_bis.png"];
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
 const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
@@ -97,6 +102,8 @@ function VotePage() {
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
   const [revealingOutcome, setRevealingOutcome] = useState(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resultImageVariant = useMemo(() => Math.random(), [result]);
   const finalizeAttemptedRef = useRef(false);
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -596,7 +603,17 @@ function VotePage() {
 
   // Écran de résultat unique : succès/échec, morts, narration — tout en même temps
   if (result) {
-    const resultBg = result.deaths > 0 || result.iDied ? STEP_RESULT_FAIL : STEP_RESULT_SUCCESS;
+    let resultBg: string;
+    if (result.iDied) {
+      resultBg = DEATH_SCREEN;
+    } else if (result.ended) {
+      resultBg = result.deadNames.length > 0 ? RETURN_WIPE : RETURN_SUCCESS;
+    } else if (result.deaths > 0) {
+      resultBg = resultImageVariant < 0.5 ? STEP_RESULT_FAIL : CINEMATIC_DEATH_IMG;
+    } else {
+      resultBg = resultImageVariant < 0.34 ? STEP_RESULT_SUCCESS
+        : resultImageVariant < 0.67 ? CINEMATIC_SURVIVE_IMGS[0] : CINEMATIC_SURVIVE_IMGS[1];
+    }
     const title = result.iDied ? "Tu es mort."
       : result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
