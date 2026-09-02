@@ -282,10 +282,12 @@ function ExpeditionPage() {
           </LedgerCard>
         </>
       ) : (
-        <LedgerCard
-          title="Salle d'attente"
-          subtitle={`${participants.length} / ${expedition.target_size} inscrits · en attente que chacun rejoigne depuis la page guilde`}
-        >
+        <>
+          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.webp)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.6}} />
+          <LedgerCard
+            title="Salle d'attente"
+            subtitle={`${participants.length} / ${expedition.target_size} inscrits · en attente que chacun rejoigne depuis la page guilde`}
+          >
           <ul className="space-y-1 mb-4">
             {participants.map((p) => (
               <li key={p.character_id} className={`flex justify-between px-3 py-2 text-sm border ${p.character_id === character?.id ? "border-primary/60 text-primary" : "border-border/30"}`}>
@@ -369,7 +371,8 @@ function ExpeditionPage() {
           )}
 
           <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>
-        </LedgerCard>
+          </LedgerCard>
+        </>
       )}
     </LedgerPage>
   );
