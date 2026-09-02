@@ -95,7 +95,7 @@ function CartePage() {
       };
     }));
 
-    setGuilds(enriched);
+    setGuilds(enriched.filter((g) => g.member_count > 0));
     setReady(true);
   }
 
