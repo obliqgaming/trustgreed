@@ -2,7 +2,7 @@ import { useState, type ReactNode, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 import fondwild from "@/assets/fondwild2.webp.asset.json";
 
-export function LedgerPage({ children, bg, wide }: { children: ReactNode; bg?: string; wide?: boolean }) {
+export function LedgerPage({ children, bg, wide, maxWidthClass }: { children: ReactNode; bg?: string; wide?: boolean; maxWidthClass?: string }) {
   return (
     <main
       className="min-h-screen w-full bg-background px-4 py-10 sm:py-16"
@@ -15,7 +15,7 @@ export function LedgerPage({ children, bg, wide }: { children: ReactNode; bg?: s
         backgroundAttachment: "fixed",
       }}
     >
-      <div className={`mx-auto w-full ${wide ? "max-w-5xl" : "max-w-md"}`}>{children}</div>
+      <div className={`mx-auto w-full ${maxWidthClass ?? (wide ? "max-w-5xl" : "max-w-md")}`}>{children}</div>
     </main>
   );
 }
