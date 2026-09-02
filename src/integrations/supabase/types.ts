@@ -563,10 +563,13 @@ export type Database = {
           banner_bg: string | null
           banner_color: string | null
           banner_symbol: string | null
+          building_style: string
           created_at: string
           founder_profile_id: string
           gold: number
           id: string
+          map_x: number
+          map_y: number
           name: string
         }
         Insert: {
@@ -574,10 +577,13 @@ export type Database = {
           banner_bg?: string | null
           banner_color?: string | null
           banner_symbol?: string | null
+          building_style?: string
           created_at?: string
           founder_profile_id: string
           gold?: number
           id?: string
+          map_x?: number
+          map_y?: number
           name: string
         }
         Update: {
@@ -585,10 +591,13 @@ export type Database = {
           banner_bg?: string | null
           banner_color?: string | null
           banner_symbol?: string | null
+          building_style?: string
           created_at?: string
           founder_profile_id?: string
           gold?: number
           id?: string
+          map_x?: number
+          map_y?: number
           name?: string
         }
         Relationships: [
@@ -991,6 +1000,14 @@ export type Database = {
           vocation: string | null
           xp: number
         }[]
+      }
+      get_guild_building_tiers: {
+        Args: Record<PropertyKey, never>
+        Returns: { guild_id: string; tier: number; rank: number }[]
+      }
+      set_guild_building_style: {
+        Args: { p_guild_id: string; p_character_id: string; p_style: string }
+        Returns: undefined
       }
       admin_debug_expedition: {
         Args: { p_expedition_id: string }
