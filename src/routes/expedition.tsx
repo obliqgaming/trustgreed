@@ -248,6 +248,18 @@ function ExpeditionPage() {
     setBusy(false);
   }
 
+  async function leaveExpedition() {
+    if (!expedition || !character) return;
+    setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("leave_expedition", {
+      p_expedition_id: expedition.id,
+      p_character_id: character.id,
+    });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    if (character.guild_id) await loadExpedition(character.guild_id);
+    setBusy(false);
+  }
+
   const isLeader = expedition?.created_by_character_id === character?.id;
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const canStart = isLeader && participants.length >= 3;
@@ -419,7 +431,13 @@ function ExpeditionPage() {
           )}
 
           {!isLeader && isParticipant && (
-            <p className="text-center text-xs text-muted-foreground mt-3">En attente que le chef lance l'expédition. Les autres membres de ta guilde peuvent encore rejoindre depuis leur page guilde.</p>
+            <div className="mt-3 text-center">
+              <p className="text-xs text-muted-foreground mb-2">En attente que le chef lance l'expédition. Les autres membres de ta guilde peuvent encore rejoindre depuis leur page guilde.</p>
+              <button onClick={leaveExpedition} disabled={busy}
+                className="text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5 disabled:opacity-30">
+                {busy ? "…" : "Quitter l'expédition"}
+              </button>
+            </div>
           )}
 
           <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>
