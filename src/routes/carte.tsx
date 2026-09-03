@@ -17,12 +17,51 @@ type GuildEntry = {
   tier: number; rank: number;
 };
 
+type WorldEvent = {
+  id: string; event_type: string; description: string; created_at: string;
+  guild: { name: string };
+};
+
+type WorldStats = { guild_count: number; total_gold: number; total_deaths: number; total_expeditions: number };
+
+type Pantheon = {
+  furthest: { guild_name: string; step: number } | null;
+  richest_haul: { guild_name: string; loot: number } | null;
+  most_wipes: { guild_name: string; count: number } | null;
+};
+
 const TIER_SCALE: Record<number, number> = { 1: 0.5, 2: 0.8, 3: 1, 4: 1.2, 5: 1.5 };
 const BASE_BUILDING_WIDTH = 78; // px, à l'échelle 100% (palier 3)
+
+const EVENT_ICON: Record<string, string> = {
+  member_died: "✝", expedition_completed: "⚔", member_joined: "→",
+  member_left: "←", guild_founded: "⊕", wealth_lost: "↓",
+};
+
+function eventColor(e: WorldEvent) {
+  if (e.event_type === "expedition_completed" && e.description.includes("anéantie")) return "text-red-500";
+  if (e.event_type === "member_died") return "text-red-400/80";
+  if (e.event_type === "expedition_completed") return "text-primary";
+  if (e.event_type === "member_joined") return "text-emerald-400/70";
+  if (e.event_type === "guild_founded") return "text-primary/70";
+  return "text-muted-foreground";
+}
+
+function fmtTime(iso: string) {
+  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return "à l'instant";
+  if (diffMin < 60) return `il y a ${diffMin} min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `il y a ${diffH}h`;
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
 
 function CartePage() {
   const navigate = useNavigate();
   const [guilds, setGuilds] = useState<GuildEntry[]>([]);
+  const [events, setEvents] = useState<WorldEvent[]>([]);
+  const [stats, setStats] = useState<WorldStats | null>(null);
+  const [pantheon, setPantheon] = useState<Pantheon | null>(null);
   const [ready, setReady] = useState(false);
   const [myGuildId, setMyGuildId] = useState<string | null>(null);
 
@@ -31,6 +70,64 @@ function CartePage() {
     const t = setInterval(load, 60000); // recalcul live, pas de tâche planifiée nécessaire
     return () => clearInterval(t);
   }, []);
+
+  async function loadWorldFeed() {
+    const { data } = await supabase
+      .from("guild_history_events")
+      .select("id, event_type, description, created_at, guild:guilds(name)")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    setEvents((data as any) ?? []);
+
+    const { count: guildCount } = await supabase.from("guilds").select("id", { count: "exact", head: true });
+    const { data: goldData } = await supabase.from("guilds").select("gold");
+    const totalGold = (goldData ?? []).reduce((sum, g) => sum + (g.gold ?? 0), 0);
+    const { count: deathCount } = await supabase.from("guild_history_events").select("id", { count: "exact", head: true }).eq("event_type", "member_died");
+    const { count: expCount } = await supabase.from("expeditions").select("id", { count: "exact", head: true }).eq("status", "completed");
+    setStats({ guild_count: guildCount ?? 0, total_gold: Math.round(totalGold), total_deaths: deathCount ?? 0, total_expeditions: expCount ?? 0 });
+  }
+
+  async function loadPantheon() {
+    // Guilde étant allée le plus loin dans une expédition (tous temps confondus)
+    const { data: steps } = await supabase
+      .from("expedition_steps")
+      .select("step_number, expedition:expeditions(guild:guilds(name))")
+      .order("step_number", { ascending: false })
+      .limit(50);
+    const furthestStep = (steps as any)?.[0];
+    const furthest = furthestStep?.expedition?.guild?.name
+      ? { guild_name: furthestStep.expedition.guild.name, step: furthestStep.step_number }
+      : null;
+
+    // Plus gros butin ramené sur une seule expédition
+    const { data: bestExp } = await supabase
+      .from("expeditions")
+      .select("total_loot_kept, guild:guilds(name)")
+      .eq("status", "completed")
+      .order("total_loot_kept", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const richest_haul = (bestExp as any)?.guild?.name
+      ? { guild_name: (bestExp as any).guild.name, loot: Math.round((bestExp as any).total_loot_kept ?? 0) }
+      : null;
+
+    // Guilde ayant subi le plus d'anéantissements
+    const { data: wipeEvents } = await supabase
+      .from("guild_history_events")
+      .select("guild:guilds(name)")
+      .ilike("description", "%anéantie%");
+    const wipeCounts = new Map<string, number>();
+    (wipeEvents as any[] ?? []).forEach((e) => {
+      const n = e.guild?.name;
+      if (n) wipeCounts.set(n, (wipeCounts.get(n) ?? 0) + 1);
+    });
+    let most_wipes: Pantheon["most_wipes"] = null;
+    for (const [guild_name, count] of wipeCounts) {
+      if (!most_wipes || count > most_wipes.count) most_wipes = { guild_name, count };
+    }
+
+    setPantheon({ furthest, richest_haul, most_wipes });
+  }
 
   async function load() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -96,6 +193,7 @@ function CartePage() {
     }));
 
     setGuilds(enriched.filter((g) => g.member_count > 0));
+    await Promise.all([loadWorldFeed(), loadPantheon()]);
     setReady(true);
   }
 
@@ -157,10 +255,55 @@ function CartePage() {
           })}
         </div>
 
+        {/* Stats globales du monde */}
+        {stats && (
+          <div className="grid grid-cols-2 gap-2 mb-6 sm:grid-cols-4">
+            {[
+              { label: "Guildes", value: stats.guild_count },
+              { label: "Or total", value: `${stats.total_gold}` },
+              { label: "Expéditions", value: stats.total_expeditions },
+              { label: "Morts", value: stats.total_deaths, red: stats.total_deaths > 0 },
+            ].map((s) => (
+              <div key={s.label} className="border border-border/30 bg-card/85 backdrop-blur-md px-3 py-3 text-center rounded-sm">
+                <p className={`font-mono text-xl ${s.red ? "text-red-400" : "text-primary"}`}>{s.value}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-[0.1em] mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Panthéon — les records du monde */}
+        {pantheon && (pantheon.furthest || pantheon.richest_haul || pantheon.most_wipes) && (
+          <div className="mb-6 bg-card/85 backdrop-blur-md border border-border/40 rounded-sm px-4 py-4">
+            <p className="font-serif text-sm tracking-[0.16em] uppercase text-primary mb-3">Panthéon</p>
+            <div className="grid gap-2 sm:grid-cols-3 text-xs">
+              {pantheon.furthest && (
+                <div className="border border-border/20 px-3 py-2.5">
+                  <p className="text-muted-foreground uppercase tracking-[0.08em] mb-1">Plus loin dans une expédition</p>
+                  <p className="text-primary font-serif">{pantheon.furthest.guild_name} <span className="text-muted-foreground">— étape {pantheon.furthest.step}</span></p>
+                </div>
+              )}
+              {pantheon.richest_haul && (
+                <div className="border border-border/20 px-3 py-2.5">
+                  <p className="text-muted-foreground uppercase tracking-[0.08em] mb-1">Plus gros butin (1 expédition)</p>
+                  <p className="text-primary font-serif">{pantheon.richest_haul.guild_name} <span className="text-muted-foreground">— {pantheon.richest_haul.loot} or</span></p>
+                </div>
+              )}
+              {pantheon.most_wipes && (
+                <div className="border border-border/20 px-3 py-2.5">
+                  <p className="text-muted-foreground uppercase tracking-[0.08em] mb-1">Le plus d'anéantissements</p>
+                  <p className="text-red-400 font-serif">{pantheon.most_wipes.guild_name} <span className="text-muted-foreground">— {pantheon.most_wipes.count}</span></p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-6 lg:items-start">
         {guilds.length === 0 ? (
           <p className="text-center text-muted-foreground text-sm">Aucune guilde n'a encore écrit son histoire.</p>
         ) : (
-          <ul className="space-y-4">
+          <ul className="space-y-4 min-w-0">
             {guilds.map((g, i) => {
               const barWidth = Math.max(4, Math.round((g.gold / maxGold) * 100));
               const isMyGuild = g.id === myGuildId;
@@ -204,6 +347,27 @@ function CartePage() {
             })}
           </ul>
         )}
+
+        {/* Fil du monde — événements récents, tous guildes confondues */}
+        <div className="mt-6 lg:mt-0 min-w-0 bg-card/85 backdrop-blur-md border border-border/40 rounded-sm px-4 py-4 max-h-[600px] overflow-y-auto">
+          <p className="font-serif text-sm tracking-[0.16em] uppercase text-primary mb-3">Le registre du monde</p>
+          {events.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Rien ne s'est encore passé.</p>
+          ) : (
+            <ul className="space-y-2">
+              {events.map((e) => (
+                <li key={e.id} className="text-xs border-b border-border/10 pb-2 last:border-0">
+                  <span className={`mr-1.5 ${eventColor(e)}`}>{EVENT_ICON[e.event_type] ?? "·"}</span>
+                  <span className={eventColor(e) === "text-red-500" ? "text-red-400" : "text-foreground"}>{e.description}</span>
+                  <p className="text-muted-foreground/50 mt-0.5">
+                    <span className="text-primary/50">{e.guild?.name ?? "?"}</span> · {fmtTime(e.created_at)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        </div>
       </div>
     </LedgerPage>
   );
