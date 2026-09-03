@@ -6,6 +6,7 @@ import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 import { Frame, DecorativeBorder } from "@/components/frame";
+import { GuildChatBox } from "@/components/guildChat";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/vote")({
   component: VotePage,
 });
 
-type Character = { id: string; name: string };
+type Character = { id: string; name: string; guild_id?: string | null };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
   loot_min: number; loot_max: number; vote_deadline: string;
@@ -24,7 +25,7 @@ type Step = {
   resolved_at: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; xpAwarded: number; survivorNames: string[] };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 const EVENT_IMAGES: Record<string, string> = {
@@ -268,7 +269,7 @@ function VotePage() {
       if (!session) { navigate({ to: "/" }); return; }
 
       const { data: char } = await supabase
-        .from("characters").select("id, name")
+        .from("characters").select("id, name, guild_id")
         .eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
       if (!char) { navigate({ to: "/" }); return; }
       setCharacter(char);
@@ -413,7 +414,7 @@ function VotePage() {
     }
 
     const { data: exp } = await supabase
-      .from("expeditions").select("status, total_loot_kept").eq("id", expeditionId).maybeSingle();
+      .from("expeditions").select("status, total_loot_kept, total_loot_earned").eq("id", expeditionId).maybeSingle();
     const ended = exp?.status === "completed";
 
     let cinematicText: string;
@@ -443,6 +444,7 @@ function VotePage() {
       deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended,
       deadNames, cinematic: cinematicText, iDied: myDied,
       stepLoot: Math.round(resolvedStep?.loot_earned ?? 0),
+      totalSoFar: Math.round(exp?.total_loot_earned ?? 0),
       xpAwarded: resolvedStep?.xp_awarded ?? 0,
       survivorNames,
     });
@@ -611,6 +613,7 @@ function VotePage() {
                   ))}
                 </div>
               )}
+              {character?.guild_id && <GuildChatBox guildId={character.guild_id} characterId={character.id} />}
             </>
           )}
         </LedgerCard>
@@ -652,6 +655,7 @@ function VotePage() {
               <div className="text-center">
                 <p className="text-2xl font-serif font-bold text-amber-400">+{result.stepLoot} or</p>
                 <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Butin de l'étape</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">Butin accumulé de l'expédition : {result.totalSoFar} or</p>
               </div>
             </div>
           )}
@@ -746,9 +750,6 @@ function VotePage() {
                 Étape {step.step_number} — {step.event_type}
               </span>
             </Frame>
-            <p className="text-sm text-muted-foreground mb-4 px-1">
-              Risque : {RISK_LABEL[step.risk_level] ?? step.risk_level} · Butin : {step.loot_min}–{step.loot_max} or
-            </p>
 
             {step.description && (
               <Frame variant="journal" contentClassName="!items-center !justify-center" className="mb-4">
@@ -763,6 +764,7 @@ function VotePage() {
             </div>
             <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
               ⚠ Risque {RISK_LABEL[step.risk_level]}
+              <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
               {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
               {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort exact — connu de toi seul)</span>}
             </p>
