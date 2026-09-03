@@ -202,7 +202,10 @@ function Index() {
             Inviter quelqu'un
           </button>
           <LeaveGuildButton character={character} onDone={refresh} />
-          <TextLink onClick={() => supabase.auth.signOut()} className="!mt-0 ml-auto self-center">Se déconnecter</TextLink>
+          <button onClick={() => supabase.auth.signOut()}
+            className="text-xs tracking-[0.1em] uppercase border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors px-3 py-1.5 ml-auto">
+            Se déconnecter
+          </button>
         </div>
 
         <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-6 lg:items-start">
@@ -392,7 +395,7 @@ function LeaveGuildButton({ character, onDone }: { character: Character; onDone:
 
   if (!confirm) return (
     <button onClick={() => setConfirm(true)}
-      className="w-full text-xs tracking-[0.12em] uppercase text-red-400/50 hover:text-red-400 transition-colors py-1">
+      className="text-xs tracking-[0.1em] uppercase border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5">
       Quitter la guilde
     </button>
   );
