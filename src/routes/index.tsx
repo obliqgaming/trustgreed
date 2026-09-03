@@ -9,6 +9,7 @@ import { GuildBanner, BannerPicker } from "@/components/banners";
 import { Frame, MemberFrame, DecorativeBorder } from "@/components/frame";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { GuildChatBox } from "@/components/guildChat";
+import { getTitleForLevel, getNextTitleThreshold } from "@/lib/titles";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 
 export const Route = createFileRoute("/")({
@@ -238,7 +239,7 @@ function Index() {
             )}
 
             {/* Stats perso */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-2 gap-3 mb-2">
               <div className="border border-border/60 p-3">
                 <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Niveau</dt>
                 <dd className="mt-1 font-mono text-xl text-primary">{character.level}</dd>
@@ -247,6 +248,12 @@ function Index() {
                 <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">XP</dt>
                 <dd className="mt-1 font-mono text-xl text-primary">{character.xp}</dd>
               </div>
+            </div>
+            <div className="mb-4 text-xs text-muted-foreground">
+              Titre : <span className="text-primary uppercase tracking-[0.06em]">{getTitleForLevel(character.level)}</span>
+              {getNextTitleThreshold(character.level) !== null && (
+                <span> · prochain palier au niveau {getNextTitleThreshold(character.level)}</span>
+              )}
             </div>
 
             {/* Vocation (petite carte compacte) */}
@@ -321,6 +328,7 @@ function Index() {
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[11px] font-mono opacity-90">niv. {m.level}</span>
+                        <span className="text-[11px] uppercase tracking-[0.06em] text-primary/70">{getTitleForLevel(m.level)}</span>
                         <VocationBadge vocationId={m.declared_vocation} className="!border-[#f2e4c8]/40 !text-[#f2e4c8]" />
                       </div>
                     </MemberFrame>
@@ -347,13 +355,13 @@ function Index() {
 }
 
 function GuildMemorial({ guildId }: { guildId: string }) {
-  const [dead, setDead] = useState<{ id: string; name: string; died_at: string | null }[]>([]);
+  const [dead, setDead] = useState<{ id: string; name: string; died_at: string | null; level: number }[]>([]);
 
   useEffect(() => {
     void (async () => {
       const { data } = await supabase
         .from("characters")
-        .select("id, name, died_at")
+        .select("id, name, died_at, level")
         .eq("guild_id", guildId)
         .eq("is_alive", false)
         .order("died_at", { ascending: false })
@@ -372,7 +380,7 @@ function GuildMemorial({ guildId }: { guildId: string }) {
       <ul className="space-y-1">
         {dead.map((c) => (
           <li key={c.id} className="text-xs text-muted-foreground/70 border border-border/20 px-3 py-1.5 flex justify-between">
-            <span className="line-through">{c.name}</span>
+            <span className="line-through">{c.name} <span className="opacity-60">— {getTitleForLevel(c.level)} (niv. {c.level})</span></span>
             {c.died_at && (
               <span>{new Date(c.died_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
             )}
