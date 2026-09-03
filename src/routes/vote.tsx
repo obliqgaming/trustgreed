@@ -32,16 +32,20 @@ const EVENT_IMAGES: Record<string, string> = {
   porte: "/event_porte.webp",
   gardien: "/event_gardien.webp",
   passage: "/event_passage.webp",
-  rencontre: "/event_passage.webp", // placeholder temporaire
-  decouverte: "/event_coffre.webp", // placeholder temporaire
-  traces: "/event_porte.webp", // placeholder temporaire
+  rencontre: "/event_rencontre.webp",
+  decouverte: "/event_decouverte.webp",
+  traces: "/event_traces.webp",
+};
+const EVENT_IMAGES_ALT: Partial<Record<string, string>> = {
+  rencontre: "/event_rencontre_bis.webp", // 2 variantes pour éviter la redondance visuelle
 };
 const STEP_RESULT_SUCCESS = "/step_success.png.webp";
 const STEP_RESULT_FAIL = "/step_fail.webp";
 const DEATH_SCREEN = "/death_screen.png";
 const RETURN_SUCCESS = "/return_success.png";
 const RETURN_WIPE = "/return_wipe.png";
-const CINEMATIC_DEATH_IMG = "/cinematic_death.png";
+const CINEMATIC_TPK_IMG = "/cinematic_wipe.webp";
+const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde
 const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.png", "/cinematic_survive_bis.png"];
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
@@ -616,18 +620,18 @@ function VotePage() {
 
   // Écran de résultat unique : succès/échec, morts, narration — tout en même temps
   if (result) {
+    const isWipe = result.ended && result.loot === 0 && result.deadNames.length > 0;
     let resultBg: string;
     if (result.iDied) {
       resultBg = DEATH_SCREEN;
     } else if (result.ended) {
-      resultBg = result.deadNames.length > 0 ? RETURN_WIPE : RETURN_SUCCESS;
+      resultBg = isWipe ? CINEMATIC_TPK_IMG : result.deadNames.length > 0 ? RETURN_WIPE : RETURN_SUCCESS;
     } else if (result.deaths > 0) {
-      resultBg = resultImageVariant < 0.5 ? STEP_RESULT_FAIL : CINEMATIC_DEATH_IMG;
+      resultBg = resultImageVariant < 0.5 ? CINEMATIC_DEATH_IMGS[0] : CINEMATIC_DEATH_IMGS[1];
     } else {
       resultBg = resultImageVariant < 0.34 ? STEP_RESULT_SUCCESS
         : resultImageVariant < 0.67 ? CINEMATIC_SURVIVE_IMGS[0] : CINEMATIC_SURVIVE_IMGS[1];
     }
-    const isWipe = result.ended && result.loot === 0 && result.deadNames.length > 0;
     const title = result.iDied ? "Tu es mort."
       : isWipe ? "Expédition anéantie"
       : result.ended ? "Expédition terminée"
@@ -714,7 +718,9 @@ function VotePage() {
     );
   }
 
-  const eventBg = step ? EVENT_IMAGES[step.event_type] : null;
+  const eventBg = step
+    ? (step.id.charCodeAt(0) % 2 === 0 && EVENT_IMAGES_ALT[step.event_type]) || EVENT_IMAGES[step.event_type]
+    : null;
   const bgFilter = step?.risk_level === "eleve"
     ? "brightness(0.18) sepia(0.4)"
     : step?.risk_level === "moyen"
