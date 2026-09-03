@@ -168,7 +168,7 @@ function Index() {
     <LedgerPage bg="/guild_hall_bg.webp" wide>
       <LedgerCard>
 
-        {/* En-tête : bannière inline + nom + sous-titre */}
+        {/* En-tête : bannière inline + nom + sous-titre + accès carte (mis en avant) */}
         <div className="flex items-start gap-3 mb-4">
           <GuildBanner symbol={guild?.banner_symbol} color={guild?.banner_color} size={40} />
           <div className="min-w-0 flex-1">
@@ -180,6 +180,10 @@ function Index() {
               <GuildBannerEditor guildId={guild.id} characterId={character.id} currentSymbol={guild.banner_symbol ?? null} currentColor={guild.banner_color ?? null} onDone={refresh} />
             )}
           </div>
+          <button onClick={() => navigate({ to: "/carte" })}
+            className="flex-shrink-0 font-serif tracking-[0.12em] uppercase border-2 border-primary/60 text-primary px-4 py-2.5 hover:bg-primary/10 hover:border-primary transition-colors rounded-sm text-sm shadow-[0_0_12px_rgba(201,162,75,0.15)]">
+            Carte des guildes →
+          </button>
         </div>
 
         {/* Vocation à choisir en priorité (surtout pour les persos créés avant ce système) */}
@@ -192,14 +196,6 @@ function Index() {
           <button onClick={() => navigate({ to: "/profil" })}
             className="text-xs tracking-[0.1em] uppercase border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors px-3 py-1.5">
             Mon profil
-          </button>
-          <button onClick={() => navigate({ to: "/monde" })}
-            className="text-xs tracking-[0.1em] uppercase border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors px-3 py-1.5">
-            Le monde
-          </button>
-          <button onClick={() => navigate({ to: "/carte" })}
-            className="text-xs tracking-[0.1em] uppercase border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors px-3 py-1.5">
-            Carte des guildes
           </button>
           <button onClick={() => navigate({ to: "/inviter" })}
             className="text-xs tracking-[0.1em] uppercase border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors px-3 py-1.5">
@@ -261,10 +257,15 @@ function Index() {
 
             {/* Bouton expédition */}
             {!activeExpedition && (
-              <button onClick={() => navigate({ to: "/expedition" })}
-                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 mb-4">
-                Partir en expédition
-              </button>
+              <div className="mb-4">
+                <p className="text-xs text-muted-foreground text-center mb-1.5">
+                  {members.length} membre{members.length > 1 ? "s" : ""} vivant{members.length > 1 ? "s" : ""} dans la guilde
+                </p>
+                <button onClick={() => navigate({ to: "/expedition" })}
+                  className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
+                  Partir en expédition
+                </button>
+              </div>
             )}
 
             {/* Historique — dans le grand cadre, c'est ce qui grandit le plus */}
@@ -272,14 +273,17 @@ function Index() {
               <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left !inset-[14%_16%_15%_18%]">
                 <p className="text-xs tracking-[0.14em] uppercase opacity-90 mb-3">Historique</p>
                 <ul className="space-y-2.5">
-                  {history.map((e) => (
-                    <li key={e.id} className="text-xs">
-                      <span className={`inline-block mr-2 ${e.event_type === "member_died" ? "text-red-700" : e.event_type === "expedition_completed" ? "text-primary" : "opacity-60"}`}>
-                        {e.event_type === "member_died" ? "✝" : e.event_type === "expedition_completed" ? "⚔" : "·"}
-                      </span>
-                      {e.description}
-                    </li>
-                  ))}
+                  {history.map((e) => {
+                    const isWipe = e.event_type === "expedition_completed" && e.description.includes("anéantie");
+                    return (
+                      <li key={e.id} className="text-xs">
+                        <span className={`inline-block mr-2 ${isWipe ? "text-red-500 font-bold" : e.event_type === "member_died" ? "text-red-700" : e.event_type === "expedition_completed" ? "text-primary" : "opacity-60"}`}>
+                          {isWipe ? "☠" : e.event_type === "member_died" ? "✝" : e.event_type === "expedition_completed" ? "⚔" : "·"}
+                        </span>
+                        <span className={isWipe ? "text-red-400" : ""}>{e.description}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </Frame>
             )}
@@ -327,10 +331,49 @@ function Index() {
             )}
 
             <OnlinePlayersPanel guildName={guild?.name} guildId={guild?.id} />
+
+            {guild && <GuildMemorial guildId={guild.id} />}
           </div>
         </div>
       </LedgerCard>
     </LedgerPage>
+  );
+}
+
+function GuildMemorial({ guildId }: { guildId: string }) {
+  const [dead, setDead] = useState<{ id: string; name: string; died_at: string | null }[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("characters")
+        .select("id, name, died_at")
+        .eq("guild_id", guildId)
+        .eq("is_alive", false)
+        .order("died_at", { ascending: false })
+        .limit(10);
+      setDead(data ?? []);
+    })();
+  }, [guildId]);
+
+  if (dead.length === 0) return null;
+
+  return (
+    <div className="mt-5">
+      <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
+        Mémorial de la guilde — {dead.length} mort{dead.length > 1 ? "s" : ""}
+      </p>
+      <ul className="space-y-1">
+        {dead.map((c) => (
+          <li key={c.id} className="text-xs text-muted-foreground/70 border border-border/20 px-3 py-1.5 flex justify-between">
+            <span className="line-through">{c.name}</span>
+            {c.died_at && (
+              <span>{new Date(c.died_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
