@@ -273,9 +273,11 @@ function Index() {
             )}
 
             {/* Historique — dans le grand cadre, c'est ce qui grandit le plus */}
-            {history.length > 0 && (
-              <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left !inset-[14%_16%_15%_18%]">
-                <p className="text-xs tracking-[0.14em] uppercase opacity-90 mb-3">Historique</p>
+            <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left !inset-[14%_16%_15%_18%]">
+              <p className="text-xs tracking-[0.14em] uppercase opacity-90 mb-3">Historique</p>
+              {history.length === 0 ? (
+                <p className="text-xs opacity-50 italic">Rien à raconter pour l'instant.</p>
+              ) : (
                 <ul className="space-y-2.5">
                   {history.map((e) => {
                     const isWipe = e.event_type === "expedition_completed" && e.description.includes("anéantie");
@@ -289,8 +291,8 @@ function Index() {
                     );
                   })}
                 </ul>
-              </Frame>
-            )}
+              )}
+            </Frame>
           </div>
 
           {/* Colonne latérale : membres (repliable), demandes, chat, joueurs en ligne */}
