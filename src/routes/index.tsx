@@ -326,11 +326,16 @@ function Index() {
                           {m.name}{m.id === character.id ? " (toi)" : ""}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] font-mono opacity-90">niv. {m.level}</span>
-                        <span className="text-[11px] uppercase tracking-[0.06em] text-primary/70">{getTitleForLevel(m.level)}</span>
-                        <VocationBadge vocationId={m.declared_vocation} className="!border-[#f2e4c8]/40 !text-[#f2e4c8]" />
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] font-mono opacity-90 whitespace-nowrap">
+                        <span>niv. {m.level}</span>
+                        <span className="opacity-50">·</span>
+                        <span className="uppercase tracking-[0.04em] text-primary/70 truncate">{getTitleForLevel(m.level)}</span>
                       </div>
+                      {m.declared_vocation && (
+                        <div className="mt-1">
+                          <VocationBadge vocationId={m.declared_vocation} className="!border-[#f2e4c8]/40 !text-[#f2e4c8] !text-[9px]" />
+                        </div>
+                      )}
                     </MemberFrame>
                   ))}
                 </div>
