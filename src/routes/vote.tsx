@@ -27,6 +27,15 @@ type Participant = { character_id: string; is_alive: boolean; character: { name:
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
+
+function formatCountdown(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remMin = minutes % 60;
+  return remMin > 0 ? `${hours}h ${remMin}min` : `${hours}h`;
+}
 const EVENT_IMAGES: Record<string, string> = {
   coffre: "/event_coffre.webp",
   porte: "/event_porte.webp",
@@ -474,7 +483,7 @@ function VotePage() {
 
     const bs = beganStep as any;
     if (bs) {
-      setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec ses 10s pleines
+      setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec sa fenêtre pleine
       if (bs.resolved) {
         // Tout le monde a voté rentrer : résolu instantanément côté serveur, aucune jauge.
         resultShownRef.current = true;
@@ -587,7 +596,7 @@ function VotePage() {
           ) : (
             <>
               <p className="text-center text-sm text-muted-foreground mb-4">
-                {secondsLeft > 0 ? `${secondsLeft}s avant le verdict` : "Verdict imminent…"}
+                {secondsLeft > 0 ? `${formatCountdown(secondsLeft)} avant le verdict` : "Verdict imminent…"}
               </p>
 
               <LedgerError message={error} />
