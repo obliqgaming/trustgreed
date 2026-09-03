@@ -469,7 +469,7 @@ function VotePage() {
 
     const bs = beganStep as any;
     if (bs) {
-      setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec ses 17s pleines
+      setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec ses 10s pleines
       if (bs.resolved) {
         // Tout le monde a voté rentrer : résolu instantanément côté serveur, aucune jauge.
         resultShownRef.current = true;
@@ -627,15 +627,18 @@ function VotePage() {
       resultBg = resultImageVariant < 0.34 ? STEP_RESULT_SUCCESS
         : resultImageVariant < 0.67 ? CINEMATIC_SURVIVE_IMGS[0] : CINEMATIC_SURVIVE_IMGS[1];
     }
+    const isWipe = result.ended && result.loot === 0 && result.deadNames.length > 0;
     const title = result.iDied ? "Tu es mort."
+      : isWipe ? "Expédition anéantie"
       : result.ended ? "Expédition terminée"
       : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
     const subtitle = result.iDied ? "Ton personnage ne reviendra pas."
+      : isWipe ? "Aucun survivant. Rien n'est rapporté à la guilde."
       : result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
       : result.deaths > 0 ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri.`
       : "Le groupe avance.";
     return (
-      <LedgerPage>
+      <LedgerPage maxWidthClass="max-w-2xl">
         <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title={title} subtitle={subtitle}>
           <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
