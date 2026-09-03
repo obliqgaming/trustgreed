@@ -40,6 +40,7 @@ function ExpeditionPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [availableBots, setAvailableBots] = useState<{ id: string; name: string }[]>([]);
   const [botAddBusy, setBotAddBusy] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [debugCopied, setDebugCopied] = useState(false);
 
   const loadParticipants = useCallback(async (expeditionId: string) => {
@@ -232,6 +233,19 @@ function ExpeditionPage() {
     setStakeBusy(null);
   }
 
+  async function cancelExpedition() {
+    if (!expedition || !character) return;
+    setError(null); setBusy(true);
+    const { error: rpcError } = await supabase.rpc("cancel_expedition", {
+      p_expedition_id: expedition.id,
+      p_character_id: character.id,
+    });
+    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+    setExpedition(null); setParticipants([]); setStakes([]);
+    if (character.guild_id) await loadExpedition(character.guild_id);
+    setBusy(false);
+  }
+
   const isLeader = expedition?.created_by_character_id === character?.id;
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const canStart = isLeader && participants.length >= 3;
@@ -359,6 +373,31 @@ function ExpeditionPage() {
               className="mt-3 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-primary/60 text-primary hover:bg-primary/10">
               {canStart ? "Lancer l'expédition" : `En attente (${participants.length}/3 min.)`}
             </button>
+          )}
+          {isLeader && !confirmCancel && (
+            <button onClick={() => setConfirmCancel(true)} disabled={busy}
+              className="mt-2 w-full text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5">
+              Annuler l'expédition
+            </button>
+          )}
+          {isLeader && confirmCancel && (
+            <div className="mt-2 border border-red-400/30 px-3 py-2">
+              <p className="text-xs text-red-400/70 mb-2">
+                {stakes.length > 0
+                  ? `Les mises engagées (${stakes.reduce((sum, s) => sum + s.cost, 0)} or) seront intégralement remboursées à la guilde. Cette action est irréversible.`
+                  : "Cette action est irréversible."}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={cancelExpedition} disabled={busy}
+                  className="flex-1 text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
+                  {busy ? "Annulation…" : "Confirmer"}
+                </button>
+                <button onClick={() => setConfirmCancel(false)} disabled={busy}
+                  className="flex-1 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground py-1.5 hover:bg-border/10">
+                  Retour
+                </button>
+              </div>
+            </div>
           )}
           {!isLeader && stakes.length > 0 && (
             <p className="text-xs text-primary/80 mb-3 px-1">
