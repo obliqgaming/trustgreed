@@ -6,7 +6,6 @@ import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 import { Frame, DecorativeBorder } from "@/components/frame";
-import { GuildChatBox } from "@/components/guildChat";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -613,7 +612,7 @@ function VotePage() {
                   ))}
                 </div>
               )}
-              {character?.guild_id && <GuildChatBox guildId={character.guild_id} characterId={character.id} />}
+              <ChatBox expeditionId={expeditionId} character={character} />
             </>
           )}
         </LedgerCard>
