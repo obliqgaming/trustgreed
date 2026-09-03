@@ -15,7 +15,9 @@ export const Route = createFileRoute("/expedition")({
 });
 
 type Character = { id: string; name: string; level: number; guild_id: string | null };
-type Expedition = { id: string; status: string; target_size: number; created_by_character_id: string };
+type Expedition = { id: string; status: string; target_size: number; created_by_character_id: string; vote_window_seconds: number };
+
+const VOTE_WINDOW_LABEL: Record<number, string> = { 180: "3 min", 3600: "1h", 21600: "6h", 86400: "24h" };
 type Participant = { character_id: string; character: { name: string; level: number } };
 
 const STAKES: { id: "forge" | "infirmerie" | "eclaireurs"; label: string; cost: number; description: string }[] = [
@@ -71,7 +73,7 @@ function ExpeditionPage() {
   const loadExpedition = useCallback(async (guildId: string) => {
     const { data } = await supabase
       .from("expeditions")
-      .select("id, status, target_size, created_by_character_id")
+      .select("id, status, target_size, created_by_character_id, vote_window_seconds")
       .eq("guild_id", guildId)
       .in("status", ["waiting", "active"])
       .maybeSingle();
@@ -273,9 +275,13 @@ function ExpeditionPage() {
 
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Durée de vote par étape</p>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-stretch">
+                <button onClick={() => setVoteWindow(180)}
+                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow === 180 ? "border-amber-400 text-amber-300" : "border-amber-500/30 text-amber-400/60"}`}>
+                  3 min ⚡
+                </button>
+                <div className="w-px bg-border/30 my-1" />
                 {[
-                  { label: "3 min", value: 180 },
                   { label: "1h", value: 3600 },
                   { label: "6h", value: 21600 },
                   { label: "24h", value: 86400 },
@@ -286,8 +292,10 @@ function ExpeditionPage() {
                   </button>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {voteWindow <= 180 ? "Mode session — tous connectés en même temps." : "Mode asynchrone — chacun vote dans son temps."}
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {voteWindow <= 180
+                  ? "⚡ Mode session : soyez tous en ligne au même moment, sans quoi l'étape restera bloquée en attente de vote."
+                  : "Mode asynchrone : chacun vote quand il peut, pas besoin d'être connectés ensemble."}
               </p>
             </div>
             <LedgerError message={error} />
@@ -302,6 +310,16 @@ function ExpeditionPage() {
             title="Salle d'attente"
             subtitle={`${participants.length} / ${expedition.target_size} inscrits · en attente que chacun rejoigne depuis la page guilde`}
           >
+          <div className="mb-4 border border-border/30 px-3 py-2.5">
+            <p className="text-xs text-muted-foreground">
+              Durée de vote par étape : <span className="text-primary font-mono">{VOTE_WINDOW_LABEL[expedition.vote_window_seconds] ?? `${expedition.vote_window_seconds}s`}</span>
+            </p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              {expedition.vote_window_seconds <= 180
+                ? "Mode session — mieux vaut être tous en ligne en même temps pour voter."
+                : "Mode asynchrone — chacun peut voter à son rythme, pas besoin d'être connectés ensemble."}
+            </p>
+          </div>
           <ul className="space-y-1 mb-4">
             {participants.map((p) => (
               <li key={p.character_id} className={`flex justify-between px-3 py-2 text-sm border ${p.character_id === character?.id ? "border-primary/60 text-primary" : "border-border/30"}`}>
@@ -316,10 +334,10 @@ function ExpeditionPage() {
 
           <LedgerError message={error} />
 
-          {isLeader && (
+          {isParticipant && (
             <div className="mb-4 border border-border/30 px-3 py-3">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-1">Mises de guilde (cumulables, chacune définitive)</p>
-              <p className="text-xs text-muted-foreground/70 mb-3">Trésor disponible : {guildGold !== null ? Math.round(guildGold) : "…"} or</p>
+              <p className="text-xs text-muted-foreground/70 mb-3">Trésor disponible : {guildGold !== null ? Math.round(guildGold) : "…"} or · payable par n'importe quel membre inscrit</p>
               <div className="space-y-2">
                 {STAKES.map((s) => {
                   const taken = stakes.some(x => x.stake_type === s.id);
@@ -398,11 +416,6 @@ function ExpeditionPage() {
                 </button>
               </div>
             </div>
-          )}
-          {!isLeader && stakes.length > 0 && (
-            <p className="text-xs text-primary/80 mb-3 px-1">
-              Le chef a engagé : {stakes.map(s => STAKES.find(x => x.id === s.stake_type)?.label).join(", ")} ({stakes.reduce((sum, s) => sum + s.cost, 0)} or misés au total).
-            </p>
           )}
 
           {!isLeader && isParticipant && (
