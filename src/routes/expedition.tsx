@@ -37,6 +37,8 @@ function ExpeditionPage() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [guildGold, setGuildGold] = useState<number | null>(null);
+  const [guildFounderId, setGuildFounderId] = useState<string | null>(null);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [stakes, setStakes] = useState<{ stake_type: string; cost: number }[]>([]);
   const [stakeBusy, setStakeBusy] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -84,8 +86,9 @@ function ExpeditionPage() {
         .from("expedition_stakes").select("stake_type, cost").eq("expedition_id", data.id);
       setStakes(stakeData ?? []);
     }
-    const { data: guild } = await supabase.from("guilds").select("gold").eq("id", guildId).maybeSingle();
+    const { data: guild } = await supabase.from("guilds").select("gold, founder_profile_id").eq("id", guildId).maybeSingle();
     setGuildGold(guild?.gold ?? null);
+    setGuildFounderId(guild?.founder_profile_id ?? null);
     return data;
   }, [loadParticipants]);
 
@@ -107,6 +110,7 @@ function ExpeditionPage() {
         .maybeSingle();
       if (!char?.guild_id) { navigate({ to: "/" }); return; }
       setCharacter(char);
+      setMyUserId(session.user.id);
 
       const { data: profileRow } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle();
       setIsAdmin(!!profileRow?.is_admin);
@@ -263,6 +267,8 @@ function ExpeditionPage() {
   const isLeader = expedition?.created_by_character_id === character?.id;
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const canStart = isLeader && participants.length >= 3;
+  const isGuildFounder = !!myUserId && !!guildFounderId && myUserId === guildFounderId;
+  const canCancel = isLeader || isGuildFounder;
 
   if (!ready) return <LedgerPage bg="/guild_hall_bg.webp"><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
@@ -404,13 +410,13 @@ function ExpeditionPage() {
               {canStart ? "Lancer l'expédition" : `En attente (${participants.length}/3 min.)`}
             </button>
           )}
-          {isLeader && !confirmCancel && (
+          {canCancel && !confirmCancel && (
             <button onClick={() => setConfirmCancel(true)} disabled={busy}
               className="mt-2 w-full text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5">
-              Annuler l'expédition
+              Annuler l'expédition{isGuildFounder && !isLeader ? " (en tant que fondateur)" : ""}
             </button>
           )}
-          {isLeader && confirmCancel && (
+          {canCancel && confirmCancel && (
             <div className="mt-2 border border-red-400/30 px-3 py-2">
               <p className="text-xs text-red-400/70 mb-2">
                 {stakes.length > 0
