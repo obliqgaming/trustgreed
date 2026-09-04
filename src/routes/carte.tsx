@@ -175,6 +175,8 @@ function CartePage() {
         .from("characters")
         .select("name")
         .eq("profile_id", g.founder_profile_id)
+        .eq("is_bot", false)
+        .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
 
