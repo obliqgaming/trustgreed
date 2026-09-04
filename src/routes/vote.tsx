@@ -113,6 +113,7 @@ function VotePage() {
   const [ackCount, setAckCount] = useState<{ done: number; total: number } | null>(null);
   const [interventionsRemaining, setInterventionsRemaining] = useState<number | null>(null);
   const [myIntervened, setMyIntervened] = useState(false);
+  const [intervenerNames, setIntervenerNames] = useState<string[]>([]);
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
   const [revealingOutcome, setRevealingOutcome] = useState(false);
@@ -430,12 +431,14 @@ function VotePage() {
       cinematicText = "Pris·es d'un élan de sagesse, vous décidez de rentrer à la guilde.";
     } else {
       cinematicText = getCinematic(eventType, deaths > 0 || myDied);
-      const { count: interventionCount } = await supabase
-        .from("step_interventions").select("character_id", { count: "exact", head: true }).eq("step_id", stepId);
-      if (interventionCount && interventionCount > 0) {
+      const { data: interventionRows } = await supabase
+        .from("step_interventions").select("character:characters(name)").eq("step_id", stepId);
+      const intervenerNames = (interventionRows as any[] ?? []).map(r => r.character?.name).filter(Boolean);
+      if (intervenerNames.length > 0) {
+        const names = intervenerNames.join(", ");
         cinematicText += deaths > 0 || myDied
-          ? " Une intervention désespérée du groupe n'aura pas suffi à conjurer le sort."
-          : " Une intervention de dernière minute a fait pencher la balance en votre faveur.";
+          ? ` Une intervention désespérée de ${names} n'aura pas suffi à conjurer le sort.`
+          : ` Une intervention de dernière minute de ${names} a fait pencher la balance en votre faveur.`;
       }
     }
 
@@ -519,6 +522,9 @@ function VotePage() {
         .select("character_id").eq("step_id", step.id).eq("character_id", character.id).maybeSingle();
       setMyIntervened(!!mine);
     }
+    const { data: rows } = await supabase
+      .from("step_interventions").select("character:characters(name)").eq("step_id", step.id);
+    setIntervenerNames((rows as any[] ?? []).map(r => r.character?.name).filter(Boolean));
   }, [step, expeditionId, character]);
 
   // Pendant la fenêtre de résolution : jauge cosmétique (le vrai jet est
@@ -610,6 +616,11 @@ function VotePage() {
               <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
                 Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
               </p>
+              {intervenerNames.length > 0 && (
+                <p className="text-xs text-amber-400/90 text-center mt-2">
+                  Intervenu·e{intervenerNames.length > 1 ? "s" : ""} sur cette étape : {intervenerNames.join(", ")}
+                </p>
+              )}
 
               {availableBotsForIntervention.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
