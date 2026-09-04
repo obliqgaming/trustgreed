@@ -703,9 +703,11 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) { setError("Le nom du personnage ne peut pas être vide."); return; }
     if (!vocation) { setError("Choisis une vocation."); return; }
     setError(null); setBusy(true);
-    const { data: char, error: rpcError } = await supabase.rpc("create_character", { p_name: name });
+    const { data: char, error: rpcError } = await supabase.rpc("create_character", { p_name: trimmedName });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
     if (char) {
       await supabase.from("characters").update({ portrait }).eq("id", (char as any).id);
