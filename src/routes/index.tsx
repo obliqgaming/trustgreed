@@ -336,9 +336,6 @@ function Index() {
                           <VocationBadge vocationId={m.declared_vocation} className="!border-[#f2e4c8]/40 !text-[#f2e4c8] !text-[9px]" />
                         </div>
                       )}
-                      {guild && session?.user?.id === guild.founder_profile_id && m.id !== character.id && (
-                        <KickMemberButton guildId={guild.id} targetId={m.id} targetName={m.name} onDone={refresh} />
-                      )}
                     </MemberFrame>
                   ))}
                 </div>
@@ -395,44 +392,6 @@ function GuildMemorial({ guildId }: { guildId: string }) {
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function KickMemberButton({ guildId, targetId, targetName, onDone }: { guildId: string; targetId: string; targetName: string; onDone: () => Promise<void> }) {
-  const [confirm, setConfirm] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function kick() {
-    setBusy(true); setError(null);
-    const { error: rpcError } = await supabase.rpc("kick_member", { p_guild_id: guildId, p_target_character_id: targetId });
-    if (rpcError) { setError(rpcError.message); setBusy(false); setConfirm(false); return; }
-    await onDone();
-    setBusy(false);
-  }
-
-  if (!confirm) return (
-    <button onClick={() => setConfirm(true)}
-      className="mt-1 text-[10px] tracking-[0.06em] uppercase text-red-400/50 hover:text-red-400 transition-colors">
-      Exclure
-    </button>
-  );
-
-  return (
-    <div className="mt-1 border border-red-400/30 px-2 py-1.5">
-      <p className="text-[10px] text-red-400/70 mb-1.5">Exclure {targetName} ?</p>
-      {error && <p className="text-[10px] text-red-400 mb-1.5">{error}</p>}
-      <div className="flex gap-1.5">
-        <button onClick={kick} disabled={busy}
-          className="flex-1 text-[10px] uppercase border border-red-400/40 text-red-400 py-1 hover:bg-red-400/10 disabled:opacity-30">
-          {busy ? "…" : "Confirmer"}
-        </button>
-        <button onClick={() => setConfirm(false)} disabled={busy}
-          className="flex-1 text-[10px] uppercase border border-border/40 text-muted-foreground py-1 hover:bg-border/10">
-          Non
-        </button>
-      </div>
     </div>
   );
 }
