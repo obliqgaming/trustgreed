@@ -71,6 +71,12 @@ function BoutiquePage() {
 
   return (
     <LedgerPage maxWidthClass="max-w-2xl">
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 0,
+        backgroundImage: "url(/boutique_bg.webp)",
+        backgroundSize: "cover", backgroundPosition: "center",
+        filter: "brightness(0.35)",
+      }} />
       <LedgerCard title="Boutique" subtitle={`Or personnel : ${Math.round(character.personal_gold)}`}>
         <LedgerError message={error} />
 
