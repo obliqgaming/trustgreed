@@ -11,6 +11,7 @@ import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { GuildChatBox } from "@/components/guildChat";
 import { getTitleForLevel, getNextTitleThreshold } from "@/lib/titles";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
+import { Coins } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -59,53 +60,73 @@ function Index() {
       return;
     }
 
-    const { data: profile } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
-    setProfileMissing(!profile);
-
-    const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
+    // Vague 1 : tout ce qui ne dépend que de la session, en parallèle.
+    // (profil + is_admin fusionnés en une seule requête plutôt que deux
+    // identiques sur la même ligne)
+    const [profileRes, charRes] = await Promise.all([
+      supabase.from("profiles").select("id, is_admin").eq("id", session.user.id).maybeSingle(),
+      supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle(),
+    ]);
+    setProfileMissing(!profileRes.data);
+    setIsAdmin(!!profileRes.data?.is_admin);
+    const char = charRes.data;
     setCharacter(char ?? null);
 
-    const { data: profileRow } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle();
-    setIsAdmin(!!profileRow?.is_admin);
-
-    if (char) {
-      const { data: vocData } = await supabase.rpc("get_my_vocation", { p_character_id: char.id });
-      setMyVocation((vocData as VocationId | null) ?? null);
+    if (!char) {
+      setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null);
+      setReady(true);
+      return;
     }
 
-    if (char?.guild_id) {
-      const { data: g } = await supabase.from("guilds").select("id, name, gold, founder_profile_id, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle();
-      setGuild(g ?? null);
+    // Vague 2 : tout ce qui dépend du personnage, mais pas les uns des
+    // autres — vocation et (si en guilde) guilde/membres/historique/expédition
+    // active partent tous en même temps.
+    const [vocRes, guildRes, membersRes, historyRes, expRes] = await Promise.all([
+      supabase.rpc("get_my_vocation", { p_character_id: char.id }),
+      char.guild_id
+        ? supabase.from("guilds").select("id, name, gold, founder_profile_id, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      char.guild_id
+        ? supabase.from("characters").select("id, name, level, portrait, declared_vocation, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false })
+        : Promise.resolve({ data: null }),
+      char.guild_id
+        ? supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10)
+        : Promise.resolve({ data: null }),
+      char.guild_id
+        ? supabase.from("expeditions").select("id, status").eq("guild_id", char.guild_id).in("status", ["waiting", "active"]).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
 
-      const { data: m } = await supabase.from("characters").select("id, name, level, portrait, declared_vocation, profiles(last_seen_at)").eq("guild_id", char.guild_id).eq("is_alive", true).order("level", { ascending: false });
-      setMembers((m ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, portrait: row.portrait, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
+    setMyVocation((vocRes.data as VocationId | null) ?? null);
 
-      const { data: h } = await supabase.from("guild_history_events").select("id, event_type, description, created_at").eq("guild_id", char.guild_id).order("created_at", { ascending: false }).limit(10);
-      setHistory(h ?? []);
+    if (!char.guild_id) {
+      setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null);
+      setReady(true);
+      return;
+    }
 
-      const { data: exp } = await supabase.from("expeditions").select("id, status").eq("guild_id", char.guild_id).in("status", ["waiting", "active"]).maybeSingle();
-      if (exp) {
-        const { count } = await supabase.from("expedition_participants").select("character_id", { count: "exact", head: true }).eq("expedition_id", exp.id);
-        setActiveExpedition({ id: exp.id, status: exp.status, participant_count: count ?? 0 });
+    setGuild(guildRes.data ?? null);
+    setMembers(((membersRes.data as any[]) ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, portrait: row.portrait, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
+    setHistory((historyRes.data as any) ?? []);
 
-        // Si participant à une expédition active, rediriger directement
-        if (exp.status === "active") {
-          const isParticipant = await supabase
-            .from("expedition_participants")
-            .select("character_id")
-            .eq("expedition_id", exp.id)
-            .eq("character_id", char.id)
-            .maybeSingle();
-          if (isParticipant.data) {
-            // Laisser le composant se monter avant de rediriger
-            setTimeout(() => navigate({ to: "/vote", search: { expedition: exp.id } }), 500);
-          }
-        }
-      } else {
-        setActiveExpedition(null);
+    const exp = expRes.data as any;
+    if (exp) {
+      // Vague 3 : dépend de l'expédition trouvée en vague 2 — comptage des
+      // participants et vérification de participation en parallèle.
+      const [countRes, participantRes] = await Promise.all([
+        supabase.from("expedition_participants").select("character_id", { count: "exact", head: true }).eq("expedition_id", exp.id),
+        exp.status === "active"
+          ? supabase.from("expedition_participants").select("character_id").eq("expedition_id", exp.id).eq("character_id", char.id).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+      setActiveExpedition({ id: exp.id, status: exp.status, participant_count: countRes.count ?? 0 });
+
+      if (exp.status === "active" && participantRes.data) {
+        // Laisser le composant se monter avant de rediriger
+        setTimeout(() => navigate({ to: "/vote", search: { expedition: exp.id } }), 500);
       }
     } else {
-      setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null);
+      setActiveExpedition(null);
     }
     setReady(true);
   }, [session]);
@@ -182,10 +203,17 @@ function Index() {
               <GuildBannerEditor guildId={guild.id} characterId={character.id} currentSymbol={guild.banner_symbol ?? null} currentColor={guild.banner_color ?? null} onDone={refresh} />
             )}
           </div>
-          <button onClick={() => navigate({ to: "/carte" })}
-            className="flex-shrink-0 font-serif tracking-[0.12em] uppercase border-2 border-primary/60 text-primary px-4 py-2.5 hover:bg-primary/10 hover:border-primary transition-colors rounded-sm text-sm shadow-[0_0_12px_rgba(201,162,75,0.15)]">
-            Carte des guildes →
-          </button>
+          <div className="flex-shrink-0 flex gap-2">
+            <button onClick={() => navigate({ to: "/boutique" })}
+              className="flex items-center gap-1.5 font-serif tracking-[0.12em] uppercase border-2 border-amber-500/50 text-amber-300 px-4 py-2.5 hover:bg-amber-500/10 hover:border-amber-400 transition-colors rounded-sm text-sm">
+              <Coins size={16} />
+              Boutique
+            </button>
+            <button onClick={() => navigate({ to: "/carte" })}
+              className="font-serif tracking-[0.12em] uppercase border-2 border-primary/60 text-primary px-4 py-2.5 hover:bg-primary/10 hover:border-primary transition-colors rounded-sm text-sm shadow-[0_0_12px_rgba(201,162,75,0.15)]">
+              Carte des guildes →
+            </button>
+          </div>
         </div>
 
         {/* Vocation à choisir en priorité (surtout pour les persos créés avant ce système) */}
@@ -256,11 +284,10 @@ function Index() {
               )}
             </div>
 
-            <button onClick={() => navigate({ to: "/boutique" })}
-              className="w-full mb-4 flex items-center justify-between border border-amber-500/40 px-3 py-2 hover:bg-amber-500/10 transition-colors">
-              <span className="text-xs uppercase tracking-[0.1em] text-amber-300">Boutique</span>
-              <span className="font-mono text-sm text-amber-300">{Math.round(character.personal_gold ?? 0)} or personnel</span>
-            </button>
+            <div className="w-full mb-4 flex items-center justify-between border border-amber-500/40 px-3 py-2">
+              <span className="text-xs uppercase tracking-[0.1em] text-amber-300 flex items-center gap-1.5"><Coins size={14} /> Or personnel</span>
+              <span className="font-mono text-sm text-amber-300">{Math.round(character.personal_gold ?? 0)}</span>
+            </div>
 
             {/* Vocation (petite carte compacte) */}
             {myVocation && (

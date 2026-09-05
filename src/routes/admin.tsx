@@ -60,38 +60,36 @@ function AdminPage() {
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
 
   async function loadAll() {
-    const { data: guildData } = await supabase.from("guilds").select("id, name, gold");
-    const enrichedGuilds: GuildRow[] = [];
-    for (const g of guildData ?? []) {
-      const { count: memberCount } = await supabase.from("characters").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("is_alive", true);
-      const { count: historyCount } = await supabase.from("guild_history_events").select("id", { count: "exact", head: true }).eq("guild_id", g.id);
-      enrichedGuilds.push({ id: g.id, name: g.name, gold: Math.round(g.gold), member_count: memberCount ?? 0, history_count: historyCount ?? 0 });
-    }
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+
+    const [guildsRes, expRes, activeRes, feedRes, templatesRes, settingsRes] = await Promise.all([
+      supabase.from("guilds").select("id, name, gold"),
+      supabase.from("expeditions").select("id, status, guild_id, guild:guilds(name)").in("status", ["waiting", "active"]),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).gte("last_seen_at", dayAgo),
+      supabase.from("guild_history_events").select("id, description, created_at, guild:guilds(name)").order("created_at", { ascending: false }).limit(50),
+      supabase.rpc("admin_list_event_templates" as any),
+      supabase.from("app_settings" as any).select("value").eq("key", "maintenance").maybeSingle(),
+    ]);
+
+    const enrichedGuilds: GuildRow[] = await Promise.all((guildsRes.data ?? []).map(async (g) => {
+      const [memberRes, historyRes] = await Promise.all([
+        supabase.from("characters").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("is_alive", true),
+        supabase.from("guild_history_events").select("id", { count: "exact", head: true }).eq("guild_id", g.id),
+      ]);
+      return { id: g.id, name: g.name, gold: Math.round(g.gold), member_count: memberRes.count ?? 0, history_count: historyRes.count ?? 0 };
+    }));
     setGuilds(enrichedGuilds);
 
-    const { data: expData } = await supabase
-      .from("expeditions").select("id, status, guild_id, guild:guilds(name)").in("status", ["waiting", "active"]);
-    const enrichedExp: ExpeditionRow[] = [];
-    for (const e of (expData as any[]) ?? []) {
+    const enrichedExp: ExpeditionRow[] = await Promise.all(((expRes.data as any[]) ?? []).map(async (e) => {
       const { count } = await supabase.from("expedition_participants").select("character_id", { count: "exact", head: true }).eq("expedition_id", e.id);
-      enrichedExp.push({ id: e.id, status: e.status, guild_id: e.guild_id, guild_name: e.guild?.name ?? "?", participant_count: count ?? 0 });
-    }
+      return { id: e.id, status: e.status, guild_id: e.guild_id, guild_name: e.guild?.name ?? "?", participant_count: count ?? 0 };
+    }));
     setExpeditions(enrichedExp);
 
-    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const { count: activeCount } = await supabase.from("profiles").select("id", { count: "exact", head: true }).gte("last_seen_at", dayAgo);
-    setActivePlayers24h(activeCount ?? 0);
-
-    const { data: feedData } = await supabase
-      .from("guild_history_events").select("id, description, created_at, guild:guilds(name)")
-      .order("created_at", { ascending: false }).limit(50);
-    setFeed((feedData as any[] ?? []).map(e => ({ id: e.id, description: e.description, created_at: e.created_at, guild_name: e.guild?.name ?? "?" })));
-
-    const { data: templateData } = await supabase.rpc("admin_list_event_templates" as any);
-    setTemplates((templateData as any) ?? []);
-
-    const { data: settingsData } = await supabase.from("app_settings" as any).select("value").eq("key", "maintenance").maybeSingle();
-    const maint = (settingsData as any)?.value;
+    setActivePlayers24h(activeRes.count ?? 0);
+    setFeed((feedRes.data as any[] ?? []).map(e => ({ id: e.id, description: e.description, created_at: e.created_at, guild_name: e.guild?.name ?? "?" })));
+    setTemplates((templatesRes.data as any) ?? []);
+    const maint = (settingsRes.data as any)?.value;
     setMaintenanceActive(!!maint?.active);
     setMaintenanceMessage(maint?.message ?? "");
   }

@@ -72,52 +72,44 @@ function CartePage() {
   }, []);
 
   async function loadWorldFeed() {
-    const { data } = await supabase
-      .from("guild_history_events")
-      .select("id, event_type, description, created_at, guild:guilds(name)")
-      .order("created_at", { ascending: false })
-      .limit(30);
-    setEvents((data as any) ?? []);
-
-    const { count: guildCount } = await supabase.from("guilds").select("id", { count: "exact", head: true });
-    const { data: goldData } = await supabase.from("guilds").select("gold");
-    const totalGold = (goldData ?? []).reduce((sum, g) => sum + (g.gold ?? 0), 0);
-    const { count: deathCount } = await supabase.from("guild_history_events").select("id", { count: "exact", head: true }).eq("event_type", "member_died");
-    const { count: expCount } = await supabase.from("expeditions").select("id", { count: "exact", head: true }).eq("status", "completed");
-    setStats({ guild_count: guildCount ?? 0, total_gold: Math.round(totalGold), total_deaths: deathCount ?? 0, total_expeditions: expCount ?? 0 });
+    const [feedRes, guildCountRes, goldRes, deathCountRes, expCountRes] = await Promise.all([
+      supabase.from("guild_history_events").select("id, event_type, description, created_at, guild:guilds(name)").order("created_at", { ascending: false }).limit(30),
+      supabase.from("guilds").select("id", { count: "exact", head: true }),
+      supabase.from("guilds").select("gold"),
+      supabase.from("guild_history_events").select("id", { count: "exact", head: true }).eq("event_type", "member_died"),
+      supabase.from("expeditions").select("id", { count: "exact", head: true }).eq("status", "completed"),
+    ]);
+    setEvents((feedRes.data as any) ?? []);
+    const totalGold = (goldRes.data ?? []).reduce((sum, g) => sum + (g.gold ?? 0), 0);
+    setStats({
+      guild_count: guildCountRes.count ?? 0,
+      total_gold: Math.round(totalGold),
+      total_deaths: deathCountRes.count ?? 0,
+      total_expeditions: expCountRes.count ?? 0,
+    });
   }
 
   async function loadPantheon() {
-    // Guilde étant allée le plus loin dans une expédition (tous temps confondus)
-    const { data: steps } = await supabase
-      .from("expedition_steps")
-      .select("step_number, expedition:expeditions(guild:guilds(name))")
-      .order("step_number", { ascending: false })
-      .limit(50);
-    const furthestStep = (steps as any)?.[0];
+    const [stepsRes, bestExpRes, wipeEventsRes] = await Promise.all([
+      // Guilde étant allée le plus loin dans une expédition (tous temps confondus)
+      supabase.from("expedition_steps").select("step_number, expedition:expeditions(guild:guilds(name))").order("step_number", { ascending: false }).limit(50),
+      // Plus gros butin ramené sur une seule expédition
+      supabase.from("expeditions").select("total_loot_kept, guild:guilds(name)").eq("status", "completed").order("total_loot_kept", { ascending: false }).limit(1).maybeSingle(),
+      // Guilde ayant subi le plus d'anéantissements
+      supabase.from("guild_history_events").select("guild:guilds(name)").ilike("description", "%anéantie%"),
+    ]);
+
+    const furthestStep = (stepsRes.data as any)?.[0];
     const furthest = furthestStep?.expedition?.guild?.name
       ? { guild_name: furthestStep.expedition.guild.name, step: furthestStep.step_number }
       : null;
 
-    // Plus gros butin ramené sur une seule expédition
-    const { data: bestExp } = await supabase
-      .from("expeditions")
-      .select("total_loot_kept, guild:guilds(name)")
-      .eq("status", "completed")
-      .order("total_loot_kept", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const richest_haul = (bestExp as any)?.guild?.name
-      ? { guild_name: (bestExp as any).guild.name, loot: Math.round((bestExp as any).total_loot_kept ?? 0) }
+    const richest_haul = (bestExpRes.data as any)?.guild?.name
+      ? { guild_name: (bestExpRes.data as any).guild.name, loot: Math.round((bestExpRes.data as any).total_loot_kept ?? 0) }
       : null;
 
-    // Guilde ayant subi le plus d'anéantissements
-    const { data: wipeEvents } = await supabase
-      .from("guild_history_events")
-      .select("guild:guilds(name)")
-      .ilike("description", "%anéantie%");
     const wipeCounts = new Map<string, number>();
-    (wipeEvents as any[] ?? []).forEach((e) => {
+    (wipeEventsRes.data as any[] ?? []).forEach((e) => {
       const n = e.guild?.name;
       if (n) wipeCounts.set(n, (wipeCounts.get(n) ?? 0) + 1);
     });
@@ -130,64 +122,43 @@ function CartePage() {
   }
 
   async function load() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
+    // Session/perso d'un côté, guildes/paliers/flux/panthéon de l'autre —
+    // aucun des deux groupes ne dépend de l'autre, donc tout part en parallèle
+    // plutôt que d'attendre bêtement la session avant de lancer le reste.
+    const sessionPromise = supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
       const { data: char } = await supabase
-        .from("characters")
-        .select("guild_id")
-        .eq("profile_id", session.user.id)
-        .eq("is_alive", true)
-        .eq("is_bot", false)
-        .maybeSingle();
+        .from("characters").select("guild_id")
+        .eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
       setMyGuildId(char?.guild_id ?? null);
-    }
+    });
 
-    const { data: guildData } = await supabase
-      .from("guilds")
-      .select("id, name, gold, founder_profile_id, map_x, map_y, building_style, banner_symbol, banner_color")
-      .order("gold", { ascending: false });
+    const [guildDataRes, tierDataRes] = await Promise.all([
+      supabase.from("guilds").select("id, name, gold, founder_profile_id, map_x, map_y, building_style, banner_symbol, banner_color").order("gold", { ascending: false }),
+      supabase.rpc("get_guild_building_tiers"),
+    ]);
 
-    if (!guildData) { setReady(true); return; }
+    const guildData = guildDataRes.data;
+    if (!guildData) { await sessionPromise; setReady(true); return; }
 
-    const { data: tierData } = await supabase.rpc("get_guild_building_tiers");
-    const tierMap = new Map((tierData ?? []).map((t: any) => [t.guild_id, t]));
+    const tierMap = new Map((tierDataRes.data ?? []).map((t: any) => [t.guild_id, t]));
 
     const enriched = await Promise.all(guildData.map(async (g) => {
-      const { count: members } = await supabase
-        .from("characters")
-        .select("id", { count: "exact", head: true })
-        .eq("guild_id", g.id)
-        .eq("is_alive", true);
-
-      const { count: expeditions } = await supabase
-        .from("expeditions")
-        .select("id", { count: "exact", head: true })
-        .eq("guild_id", g.id)
-        .eq("status", "completed");
-
-      const { count: deaths } = await supabase
-        .from("guild_history_events")
-        .select("id", { count: "exact", head: true })
-        .eq("guild_id", g.id)
-        .eq("event_type", "member_died");
-
-      const { data: founderChar } = await supabase
-        .from("characters")
-        .select("name")
-        .eq("profile_id", g.founder_profile_id)
-        .eq("is_bot", false)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+      const [membersRes, expeditionsRes, deathsRes, founderRes] = await Promise.all([
+        supabase.from("characters").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("is_alive", true),
+        supabase.from("expeditions").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("status", "completed"),
+        supabase.from("guild_history_events").select("id", { count: "exact", head: true }).eq("guild_id", g.id).eq("event_type", "member_died"),
+        supabase.from("characters").select("name").eq("profile_id", g.founder_profile_id).eq("is_bot", false).order("created_at", { ascending: true }).limit(1).maybeSingle(),
+      ]);
 
       const tierInfo = tierMap.get(g.id) as { tier: number; rank: number } | undefined;
 
       return {
         id: g.id, name: g.name, gold: g.gold,
-        member_count: members ?? 0,
-        expedition_count: expeditions ?? 0,
-        death_count: deaths ?? 0,
-        founder: founderChar?.name ?? "Inconnu",
+        member_count: membersRes.count ?? 0,
+        expedition_count: expeditionsRes.count ?? 0,
+        death_count: deathsRes.count ?? 0,
+        founder: founderRes.data?.name ?? "Inconnu",
         map_x: g.map_x, map_y: g.map_y, building_style: g.building_style ?? "chaos",
         banner_symbol: g.banner_symbol, banner_color: g.banner_color,
         tier: tierInfo?.tier ?? 1, rank: tierInfo?.rank ?? 999,
@@ -195,7 +166,7 @@ function CartePage() {
     }));
 
     setGuilds(enriched.filter((g) => g.member_count > 0));
-    await Promise.all([loadWorldFeed(), loadPantheon()]);
+    await Promise.all([sessionPromise, loadWorldFeed(), loadPantheon()]);
     setReady(true);
   }
 
