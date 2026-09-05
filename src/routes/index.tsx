@@ -17,7 +17,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null };
+type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null; personal_gold?: number };
 type Guild = { id: string; name: string; gold: number; founder_profile_id?: string; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
 type Member = { id: string; name: string; level: number; portrait?: string | null; last_seen_at?: string | null; declared_vocation?: string | null };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
@@ -62,7 +62,7 @@ function Index() {
     const { data: profile } = await supabase.from("profiles").select("id").eq("id", session.user.id).maybeSingle();
     setProfileMissing(!profile);
 
-    const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
+    const { data: char } = await supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
     setCharacter(char ?? null);
 
     const { data: profileRow } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).maybeSingle();
@@ -255,6 +255,12 @@ function Index() {
                 <span> · prochain palier au niveau {getNextTitleThreshold(character.level)}</span>
               )}
             </div>
+
+            <button onClick={() => navigate({ to: "/boutique" })}
+              className="w-full mb-4 flex items-center justify-between border border-amber-500/40 px-3 py-2 hover:bg-amber-500/10 transition-colors">
+              <span className="text-xs uppercase tracking-[0.1em] text-amber-300">Boutique</span>
+              <span className="font-mono text-sm text-amber-300">{Math.round(character.personal_gold ?? 0)} or personnel</span>
+            </button>
 
             {/* Vocation (petite carte compacte) */}
             {myVocation && (

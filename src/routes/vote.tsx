@@ -853,6 +853,7 @@ function VotePage() {
                 {busy ? "Résolution…" : "Révéler le résultat"}
               </button>
             )}
+            <LarcenyButton expeditionId={expeditionId} character={character} />
             {isAdmin && (
               <button onClick={copyDebugReport}
                 className="w-full mb-2 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
@@ -920,6 +921,65 @@ function VotePage() {
 }
 
 type ChatMessage = { id: string; character_id: string; message: string; created_at: string; character: { name: string } };
+
+function LarcenyButton({ expeditionId, character }: { expeditionId: string; character: Character | null }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ success: boolean; amount: number } | null>(null);
+  const [alreadyTried, setAlreadyTried] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!character) return;
+    void (async () => {
+      const { data } = await supabase.from("larceny_attempts" as any)
+        .select("succeeded, amount").eq("expedition_id", expeditionId).eq("character_id", character.id).maybeSingle();
+      if (data) { setAlreadyTried(true); setResult(data as any); }
+    })();
+  }, [expeditionId, character]);
+
+  if (!character) return null;
+  if (result) {
+    return (
+      <p className={`text-xs text-center mt-2 ${result.success ? "text-amber-400" : "text-red-400"}`}>
+        {result.success ? `Larcin réussi — +${Math.round(result.amount)} or personnel, en silence.` : "Larcin raté — la guilde le sait maintenant."}
+      </p>
+    );
+  }
+  if (alreadyTried) return null;
+
+  async function attempt() {
+    setBusy(true); setError(null);
+    const { data, error: rpcError } = await supabase.rpc("attempt_larceny" as any, { p_expedition_id: expeditionId, p_character_id: character!.id });
+    if (rpcError) setError(rpcError.message);
+    else setResult(data as any);
+    setBusy(false); setConfirm(false);
+  }
+
+  if (!confirm) return (
+    <button onClick={() => setConfirm(true)}
+      className="w-full mt-2 text-xs uppercase tracking-[0.1em] text-muted-foreground/60 hover:text-amber-400 transition-colors">
+      Tenter un larcin (secret, une fois par expédition)
+    </button>
+  );
+
+  return (
+    <div className="mt-2 border border-amber-500/30 px-3 py-2 text-center">
+      <p className="text-xs text-amber-300/80 mb-2">60% de réussite. En cas d'échec, la guilde le saura. Une seule tentative par expédition.</p>
+      <LedgerError message={error} />
+      <div className="flex gap-2">
+        <button onClick={attempt} disabled={busy}
+          className="flex-1 text-xs uppercase border border-amber-500/40 text-amber-300 py-1.5 hover:bg-amber-500/10 disabled:opacity-30">
+          {busy ? "…" : "Tenter"}
+        </button>
+        <button onClick={() => setConfirm(false)} disabled={busy}
+          className="flex-1 text-xs uppercase border border-border/40 text-muted-foreground py-1.5 hover:bg-border/10">
+          Renoncer
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ChatBox({ expeditionId, character }: { expeditionId: string; character: Character | null }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
