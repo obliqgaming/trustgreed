@@ -9,7 +9,7 @@ export const Route = createFileRoute("/admin")({
 });
 
 type GuildRow = { id: string; name: string; gold: number; member_count: number; history_count: number };
-type CharacterRow = { id: string; name: string; is_alive: boolean; level: number; guild_id: string | null; guild_name?: string };
+type CharacterRow = { id: string; name: string; is_alive: boolean; level: number; guild_id: string | null; guild_name?: string; is_bot: boolean };
 type ExpeditionRow = { id: string; status: string; guild_id: string; guild_name: string; participant_count: number };
 type EventTemplate = {
   id: string; event_type: string; risk_level: string;
@@ -128,7 +128,7 @@ function AdminPage() {
     const { data: profile } = await supabase.from("profiles").select("id, username, last_seen_at").ilike("username", `%${query}%`).limit(1).maybeSingle();
     if (profile) {
       setFoundProfile(profile);
-      const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, guild:guilds(name)").eq("profile_id", profile.id);
+      const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, is_bot, guild:guilds(name)").eq("profile_id", profile.id);
       setProfileCharacters((chars as any[] ?? []).map(c => ({ ...c, guild_name: c.guild?.name })));
       return;
     }
@@ -138,7 +138,7 @@ function AdminPage() {
       const { data: byChar } = await supabase.from("profiles").select("id, username, last_seen_at").eq("id", charMatch.profile_id).maybeSingle();
       if (byChar) {
         setFoundProfile(byChar);
-        const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, guild:guilds(name)").eq("profile_id", byChar.id);
+        const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, is_bot, guild:guilds(name)").eq("profile_id", byChar.id);
         setProfileCharacters((chars as any[] ?? []).map(c => ({ ...c, guild_name: c.guild?.name })));
         return;
       }
@@ -373,7 +373,7 @@ function AdminPage() {
                 {profileCharacters.map((c) => (
                   <li key={c.id} className="flex items-center justify-between gap-2">
                     <span className={c.is_alive ? "" : "line-through opacity-60"}>
-                      {c.name} — niv. {c.level} · {c.guild_name ?? "sans guilde"} {c.is_alive ? "" : "(mort)"}
+                      {c.name} — niv. {c.level} · {c.guild_name ?? "sans guilde"} {c.is_bot ? "🤖 " : ""}{c.is_alive ? "" : "(mort)"}
                     </span>
                     <div className="flex gap-1.5 flex-shrink-0">
                       <button disabled={busy === c.id} onClick={() => renameCharacter(c.id, c.name)}
@@ -385,6 +385,13 @@ function AdminPage() {
                           onClick={() => runAction(c.id, () => supabase.rpc("admin_revive_character" as any, { p_character_id: c.id }).then((res) => { if (!res.error) void searchPlayer(); return res; }))}
                           className="text-[10px] uppercase border border-emerald-400/40 text-emerald-400 px-1.5 py-0.5 hover:bg-emerald-400/10 disabled:opacity-30">
                           {busy === c.id ? "…" : "Ressusciter"}
+                        </button>
+                      )}
+                      {c.is_bot && (
+                        <button disabled={busy === c.id}
+                          onClick={() => { if (confirm(`Supprimer définitivement le bot "${c.name}" ?`)) void runAction(c.id, () => supabase.rpc("admin_delete_bot_character" as any, { p_character_id: c.id }).then((res) => { if (!res.error) void searchPlayer(); return res; })); }}
+                          className="text-[10px] uppercase border border-red-400/40 text-red-400 px-1.5 py-0.5 hover:bg-red-400/10 disabled:opacity-30">
+                          {busy === c.id ? "…" : "Supprimer"}
                         </button>
                       )}
                     </div>
