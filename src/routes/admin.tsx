@@ -117,13 +117,44 @@ function AdminPage() {
   }
 
   async function searchPlayer() {
-    if (playerSearch.trim().length < 2) return;
+    const query = playerSearch.trim();
+    if (query.length < 2) return;
     setError(null);
-    const { data: profile } = await supabase.from("profiles").select("id, username, last_seen_at").ilike("username", `%${playerSearch.trim()}%`).limit(1).maybeSingle();
-    if (!profile) { setFoundProfile(null); setProfileCharacters([]); setError("Aucun joueur trouvé avec ce nom."); return; }
-    setFoundProfile(profile);
-    const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, guild:guilds(name)").eq("profile_id", profile.id);
-    setProfileCharacters((chars as any[] ?? []).map(c => ({ ...c, guild_name: c.guild?.name })));
+    setFoundProfile(null); setProfileCharacters([]);
+
+    // On cherche d'abord par pseudo de compte, sinon par nom de personnage —
+    // "Destructeur" est un nom de perso, pas forcément le pseudo du compte
+    // qui l'a créé.
+    const { data: profile } = await supabase.from("profiles").select("id, username, last_seen_at").ilike("username", `%${query}%`).limit(1).maybeSingle();
+    if (profile) {
+      setFoundProfile(profile);
+      const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, guild:guilds(name)").eq("profile_id", profile.id);
+      setProfileCharacters((chars as any[] ?? []).map(c => ({ ...c, guild_name: c.guild?.name })));
+      return;
+    }
+
+    const { data: charMatch } = await supabase.from("characters").select("profile_id").ilike("name", `%${query}%`).limit(1).maybeSingle();
+    if (charMatch?.profile_id) {
+      const { data: byChar } = await supabase.from("profiles").select("id, username, last_seen_at").eq("id", charMatch.profile_id).maybeSingle();
+      if (byChar) {
+        setFoundProfile(byChar);
+        const { data: chars } = await supabase.from("characters").select("id, name, is_alive, level, guild_id, guild:guilds(name)").eq("profile_id", byChar.id);
+        setProfileCharacters((chars as any[] ?? []).map(c => ({ ...c, guild_name: c.guild?.name })));
+        return;
+      }
+    }
+
+    setError("Aucun joueur ni personnage trouvé avec ce nom.");
+  }
+
+  async function renameCharacter(id: string, currentName: string) {
+    const newName = prompt("Nouveau nom :", currentName);
+    if (!newName || !newName.trim() || newName.trim() === currentName) return;
+    setBusy(id); setError(null);
+    const { error: rpcError } = await supabase.rpc("admin_rename_character" as any, { p_character_id: id, p_new_name: newName.trim() });
+    if (rpcError) setError(rpcError.message);
+    else await searchPlayer();
+    setBusy(null);
   }
 
   const abandonedCount = guilds.filter(g => g.member_count === 0 && g.history_count === 0).length;
@@ -340,8 +371,23 @@ function AdminPage() {
             <ScrollBox maxHeight="10rem">
               <ul className="space-y-1">
                 {profileCharacters.map((c) => (
-                  <li key={c.id} className={c.is_alive ? "" : "line-through opacity-60"}>
-                    {c.name} — niv. {c.level} · {c.guild_name ?? "sans guilde"} {c.is_alive ? "" : "(mort)"}
+                  <li key={c.id} className="flex items-center justify-between gap-2">
+                    <span className={c.is_alive ? "" : "line-through opacity-60"}>
+                      {c.name} — niv. {c.level} · {c.guild_name ?? "sans guilde"} {c.is_alive ? "" : "(mort)"}
+                    </span>
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <button disabled={busy === c.id} onClick={() => renameCharacter(c.id, c.name)}
+                        className="text-[10px] uppercase border border-border/40 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
+                        {busy === c.id ? "…" : "Renommer"}
+                      </button>
+                      {!c.is_alive && (
+                        <button disabled={busy === c.id}
+                          onClick={() => runAction(c.id, () => supabase.rpc("admin_revive_character" as any, { p_character_id: c.id }).then((res) => { if (!res.error) void searchPlayer(); return res; }))}
+                          className="text-[10px] uppercase border border-emerald-400/40 text-emerald-400 px-1.5 py-0.5 hover:bg-emerald-400/10 disabled:opacity-30">
+                          {busy === c.id ? "…" : "Ressusciter"}
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
