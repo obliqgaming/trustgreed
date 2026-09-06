@@ -1,6 +1,6 @@
 import type { ReactNode, CSSProperties } from "react";
 
-export type FrameVariant = "journal" | "bar" | "boutique";
+export type FrameVariant = "journal" | "bar";
 
 /**
  * Configuration par variante : chemin de l'image, ratio largeur/hauteur natif,
@@ -12,7 +12,6 @@ export type FrameVariant = "journal" | "bar" | "boutique";
 const FRAME_CONFIG: Record<FrameVariant, { src: string; ratio: number; inset: string }> = {
   journal: { src: "/panel_journal.webp", ratio: 1287 / 1222, inset: "10% 12% 11% 14%" },
   bar: { src: "/bar_header.webp", ratio: 1684 / 767, inset: "28% 8% 35% 8%" },
-  boutique: { src: "/boutique_frame.webp", ratio: 1536 / 1024, inset: "27.5% 21% 17.5% 32.5%" },
 };
 
 export function Frame({
