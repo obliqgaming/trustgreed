@@ -1,6 +1,6 @@
 import type { ReactNode, CSSProperties } from "react";
 
-export type FrameVariant = "journal" | "bar";
+export type FrameVariant = "journal" | "bar" | "boutique";
 
 /**
  * Configuration par variante : chemin de l'image, ratio largeur/hauteur natif,
@@ -12,6 +12,7 @@ export type FrameVariant = "journal" | "bar";
 const FRAME_CONFIG: Record<FrameVariant, { src: string; ratio: number; inset: string }> = {
   journal: { src: "/panel_journal.webp", ratio: 1287 / 1222, inset: "10% 12% 11% 14%" },
   bar: { src: "/bar_header.webp", ratio: 1684 / 767, inset: "28% 8% 35% 8%" },
+  boutique: { src: "/boutique_frame.webp", ratio: 1536 / 1024, inset: "29% 22% 19% 34%" },
 };
 
 export function Frame({
@@ -32,7 +33,7 @@ export function Frame({
     <div className={`relative w-full ${className}`} style={wrapperStyle}>
       <img src={cfg.src} alt="" aria-hidden className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
       <div
-        className={`absolute overflow-auto flex items-center justify-center text-[#f2e4c8] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] ${contentClassName}`}
+        className={`absolute overflow-y-auto overflow-x-hidden flex items-center justify-center text-[#f2e4c8] [text-shadow:0_1px_3px_rgba(0,0,0,0.9)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${contentClassName}`}
         style={{ inset: cfg.inset }}
       >
         {children}
