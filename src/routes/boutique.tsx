@@ -24,9 +24,10 @@ const MULTICLASS_BASE = 800;
 const MULTICLASS_MULT = 3;
 const PORTRAIT_COST = 250;
 
-const INK = "#2b1d0e";
-const INK_MUTED = "#5c4022";
-const PRICE = "#8a5a00";
+const INK = "#1a0f04";
+const INK_MUTED = "#3d2a16";
+const PRICE = "#7a4a00";
+const PANEL_BG = "rgba(250, 238, 208, 0.55)"; // fond clair et uniforme posé sur le parchemin, pour un contraste constant malgré les taches de la texture photo
 
 function useShopState() {
   const navigate = useNavigate();
@@ -77,19 +78,20 @@ function ShopContent({ character, error, busy, run, ink }: {
   );
   const multiclassCost = MULTICLASS_BASE * Math.pow(MULTICLASS_MULT, character.multiclass_vocations.length);
 
-  const textStyle = ink ? { color: INK } : undefined;
+  const textStyle = ink ? { color: INK, fontWeight: 600 } : undefined;
   const mutedStyle = ink ? { color: INK_MUTED } : undefined;
-  const priceStyle = ink ? { color: PRICE } : undefined;
-  const borderCls = ink ? "border-black/20" : "border-border/30";
+  const priceStyle = ink ? { color: PRICE, fontWeight: 700 } : undefined;
+  const borderCls = ink ? "" : "border-border/30";
   const headingCls = ink ? "" : "text-primary";
+  const panelStyle = ink ? { background: PANEL_BG, border: "1px solid rgba(43,29,14,0.4)" } : undefined;
 
   return (
     <>
       <LedgerError message={error} />
 
-      <p className={`font-serif text-sm tracking-[0.16em] uppercase mt-2 mb-2 ${headingCls}`} style={textStyle}>Destin</p>
+      <p className={`font-serif text-sm tracking-[0.16em] uppercase font-bold mt-2 mb-2 ${headingCls}`} style={textStyle}>Destin</p>
 
-      <div className={`border ${borderCls} px-3 py-3 mb-3`}>
+      <div className={`border ${borderCls} px-3 py-3 mb-3`} style={panelStyle}>
         <div className="flex items-center justify-between gap-2 mb-1">
           <p className="text-sm" style={textStyle}>Pierre d'âme</p>
           <span className="text-xs font-mono flex-shrink-0" style={priceStyle}>{Math.round(soulStoneCost)} or</span>
@@ -106,7 +108,7 @@ function ShopContent({ character, error, busy, run, ink }: {
         </button>
       </div>
 
-      <div className={`border ${borderCls} px-3 py-3 mb-4`}>
+      <div className={`border ${borderCls} px-3 py-3 mb-4`} style={panelStyle}>
         <div className="flex items-center justify-between gap-2 mb-1">
           <p className="text-sm" style={textStyle}>Sceau d'héritage</p>
           {!legacyMaxed && <span className="text-xs font-mono flex-shrink-0" style={priceStyle}>{Math.round(legacyCost)} or</span>}
@@ -125,13 +127,13 @@ function ShopContent({ character, error, busy, run, ink }: {
         )}
       </div>
 
-      <p className={`font-serif text-sm tracking-[0.16em] uppercase mb-2 ${headingCls}`} style={textStyle}>Apparence</p>
+      <p className={`font-serif text-sm tracking-[0.16em] uppercase font-bold mb-2 ${headingCls}`} style={textStyle}>Apparence</p>
       <div className="grid grid-cols-3 gap-2 mb-4">
         {PORTRAITS.filter(p => p.premium).map((p) => {
           const owned = character.unlocked_portraits.includes(p.id);
           const active = character.portrait === p.id;
           return (
-            <div key={p.id} className={`border ${borderCls} p-1.5 text-center`}>
+            <div key={p.id} className={`border ${borderCls} p-1.5 text-center`} style={panelStyle}>
               <div className={`mb-1 ${owned ? "" : "opacity-40 grayscale"}`}>
                 <PortraitDisplay portraitId={p.id} size={56} />
               </div>
@@ -156,8 +158,8 @@ function ShopContent({ character, error, busy, run, ink }: {
         })}
       </div>
 
-      <p className={`font-serif text-sm tracking-[0.16em] uppercase mb-2 ${headingCls}`} style={textStyle}>Pouvoir</p>
-      <div className={`border ${borderCls} px-3 py-3 mb-2`}>
+      <p className={`font-serif text-sm tracking-[0.16em] uppercase font-bold mb-2 ${headingCls}`} style={textStyle}>Pouvoir</p>
+      <div className={`border ${borderCls} px-3 py-3 mb-2`} style={panelStyle}>
         <p className="text-sm mb-1" style={textStyle}>Multiclassage</p>
         <p className="text-xs mb-2" style={mutedStyle}>
           Apprend, à vie, une capacité d'une autre vocation. Prochain coût : {Math.round(multiclassCost)} or.
@@ -204,7 +206,7 @@ function BoutiquePage() {
               }}
             >
               <div className="flex items-baseline justify-between mb-2">
-                <h1 className="font-serif text-lg tracking-[0.12em] uppercase" style={{ color: INK }}>Boutique</h1>
+                <h1 className="font-serif text-lg tracking-[0.12em] uppercase font-bold" style={{ color: INK }}>Boutique</h1>
                 <span className="text-sm font-mono flex-shrink-0 ml-2" style={{ color: PRICE }}>{Math.round(character.personal_gold)} or</span>
               </div>
               <ShopContent character={character} error={error} busy={busy} run={run} ink />
