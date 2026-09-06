@@ -24,10 +24,10 @@ const MULTICLASS_BASE = 800;
 const MULTICLASS_MULT = 3;
 const PORTRAIT_COST = 250;
 
-const INK = "#1a0f04";
-const INK_MUTED = "#3d2a16";
-const PRICE = "#7a4a00";
-const PANEL_BG = "rgba(250, 238, 208, 0.55)"; // fond clair et uniforme posé sur le parchemin, pour un contraste constant malgré les taches de la texture photo
+const INK = "#f2e4c8";
+const INK_MUTED = "#c9b896";
+const PRICE = "#f0c14b";
+const PANEL_BG = "rgba(18, 13, 6, 0.72)"; // panneau sombre posé sur le parchemin, texte clair par-dessus — même principe que le reste de l'app
 
 function useShopState() {
   const navigate = useNavigate();
@@ -78,12 +78,13 @@ function ShopContent({ character, error, busy, run, ink }: {
   );
   const multiclassCost = MULTICLASS_BASE * Math.pow(MULTICLASS_MULT, character.multiclass_vocations.length);
 
-  const textStyle = ink ? { color: INK, fontWeight: 600 } : undefined;
-  const mutedStyle = ink ? { color: INK_MUTED } : undefined;
-  const priceStyle = ink ? { color: PRICE, fontWeight: 700 } : undefined;
+  const shadowStyle = ink ? { textShadow: "0 1px 3px rgba(0,0,0,0.9)" } : {};
+  const textStyle = ink ? { color: INK, fontWeight: 600, ...shadowStyle } : undefined;
+  const mutedStyle = ink ? { color: INK_MUTED, ...shadowStyle } : undefined;
+  const priceStyle = ink ? { color: PRICE, fontWeight: 700, ...shadowStyle } : undefined;
   const borderCls = ink ? "" : "border-border/30";
   const headingCls = ink ? "" : "text-primary";
-  const panelStyle = ink ? { background: PANEL_BG, border: "1px solid rgba(43,29,14,0.4)" } : undefined;
+  const panelStyle = ink ? { background: PANEL_BG, border: "1px solid rgba(242,228,200,0.2)" } : undefined;
 
   return (
     <>
@@ -196,6 +197,16 @@ function BoutiquePage() {
           texte du cadre précédemment). */}
       <div className="hidden md:block w-full px-4 py-8" style={{ background: "#0d0c0a" }}>
         <div className="mx-auto w-full" style={{ maxWidth: 1800 }}>
+          <div className="flex justify-between mb-3">
+            <button onClick={() => navigate({ to: "/" })}
+              className="text-sm uppercase tracking-[0.1em] border border-primary/40 text-primary px-4 py-2 hover:bg-primary/10">
+              ← Ma guilde
+            </button>
+            <button onClick={() => navigate({ to: "/carte" })}
+              className="text-sm uppercase tracking-[0.1em] border border-primary/40 text-primary px-4 py-2 hover:bg-primary/10">
+              Carte des guildes →
+            </button>
+          </div>
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
             <img src="/boutique_frame.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
             <div
@@ -210,7 +221,6 @@ function BoutiquePage() {
                 <span className="text-sm font-mono flex-shrink-0 ml-2" style={{ color: PRICE }}>{Math.round(character.personal_gold)} or</span>
               </div>
               <ShopContent character={character} error={error} busy={busy} run={run} ink />
-              <button onClick={() => navigate({ to: "/" })} className="mt-2 text-xs underline" style={{ color: INK_MUTED }}>Retour</button>
             </div>
           </div>
         </div>
@@ -223,7 +233,10 @@ function BoutiquePage() {
           <LedgerCard title="Boutique" subtitle={`Or personnel : ${Math.round(character.personal_gold)}`}>
             <img src="/boutique_frame.webp" alt="" className="w-full rounded-sm mb-4 object-cover" style={{ maxHeight: 160 }} />
             <ShopContent character={character} error={error} busy={busy} run={run} />
-            <TextLink onClick={() => navigate({ to: "/" })}>Retour</TextLink>
+            <div className="flex gap-2 mt-2">
+              <TextLink onClick={() => navigate({ to: "/" })} className="!mt-0">Ma guilde</TextLink>
+              <TextLink onClick={() => navigate({ to: "/carte" })} className="!mt-0">Carte des guildes</TextLink>
+            </div>
           </LedgerCard>
         </LedgerPage>
       </div>
