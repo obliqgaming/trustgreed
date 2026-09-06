@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { LedgerPage, LedgerError } from "@/components/ledger";
-import { Frame } from "@/components/frame";
+import { LedgerPage, LedgerCard, LedgerError, TextLink } from "@/components/ledger";
 import { PORTRAITS, PortraitDisplay } from "@/components/portraits";
 import { VOCATIONS } from "@/components/vocations";
 
@@ -25,14 +24,11 @@ const MULTICLASS_BASE = 800;
 const MULTICLASS_MULT = 3;
 const PORTRAIT_COST = 250;
 
-// Palette pensée pour du texte lisible sur le parchemin clair du cadre
-// (contrairement au reste de l'app, pensé pour du texte clair sur fond sombre).
-const INK = "text-[#2b1d0e]";
-const INK_MUTED = "text-[#5c4022]";
-const INK_BORDER = "border-[#5c4022]/35";
-const PRICE = "text-amber-800";
+const INK = "#2b1d0e";
+const INK_MUTED = "#5c4022";
+const PRICE = "#8a5a00";
 
-function BoutiquePage() {
+function useShopState() {
   const navigate = useNavigate();
   const [character, setCharacter] = useState<CharacterRow | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,16 +55,14 @@ function BoutiquePage() {
     setBusy(null);
   }
 
-  if (!character) {
-    return (
-      <LedgerPage maxWidthClass="max-w-6xl">
-        <Frame variant="boutique" contentClassName="!flex-col !items-center !justify-center">
-          <p className={INK}>Chargement…</p>
-        </Frame>
-      </LedgerPage>
-    );
-  }
+  return { character, error, busy, run, navigate };
+}
 
+function ShopContent({ character, error, busy, run, ink }: {
+  character: CharacterRow; error: string | null; busy: string | null;
+  run: (id: string, fn: () => PromiseLike<{ error: any }>) => void;
+  ink?: boolean;
+}) {
   const soulStoneEffectiveUses = character.vocation === "Miracule" && character.miracle_used && character.death_reroll_uses === 0
     ? 1 : character.death_reroll_uses;
   const soulStoneCost = SOUL_STONE_BASE * Math.pow(SOUL_STONE_MULT, soulStoneEffectiveUses);
@@ -83,110 +77,154 @@ function BoutiquePage() {
   );
   const multiclassCost = MULTICLASS_BASE * Math.pow(MULTICLASS_MULT, character.multiclass_vocations.length);
 
+  const textStyle = ink ? { color: INK } : undefined;
+  const mutedStyle = ink ? { color: INK_MUTED } : undefined;
+  const priceStyle = ink ? { color: PRICE } : undefined;
+  const borderCls = ink ? "border-black/20" : "border-border/30";
+  const headingCls = ink ? "" : "text-primary";
+
   return (
-    <LedgerPage maxWidthClass="max-w-6xl">
-      <Frame variant="boutique" contentClassName="!flex-col !items-stretch !justify-start text-left [text-shadow:none] w-full min-w-0">
-        <div className="flex items-baseline justify-between mb-3 min-w-0">
-          <h1 className={`font-serif text-lg tracking-[0.12em] uppercase ${INK} truncate`}>Boutique</h1>
-          <span className={`text-sm font-mono ${PRICE} flex-shrink-0 ml-2`}>{Math.round(character.personal_gold)} or personnel</span>
+    <>
+      <LedgerError message={error} />
+
+      <p className={`font-serif text-sm tracking-[0.16em] uppercase mt-2 mb-2 ${headingCls}`} style={textStyle}>Destin</p>
+
+      <div className={`border ${borderCls} px-3 py-3 mb-3`}>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="text-sm" style={textStyle}>Pierre d'âme</p>
+          <span className="text-xs font-mono flex-shrink-0" style={priceStyle}>{Math.round(soulStoneCost)} or</span>
         </div>
-
-        <LedgerError message={error} />
-
-        {/* Rayon Destin */}
-        <p className={`font-serif text-sm tracking-[0.16em] uppercase ${INK} mt-2 mb-2`}>Destin</p>
-
-        <div className={`border ${INK_BORDER} px-3 py-3 mb-3 min-w-0`}>
-          <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
-            <p className={`text-sm ${INK} truncate`}>Pierre d'âme</p>
-            <span className={`text-xs font-mono ${PRICE} flex-shrink-0`}>{Math.round(soulStoneCost)} or</span>
-          </div>
-          <p className={`text-xs ${INK_MUTED} mb-2`}>
-            Charges en réserve : {character.soul_stone_charges}. Consommée automatiquement si tu es désigné·e pour mourir.
-            {soulStoneLocked && <span className="block text-red-800/80 mt-1">Verrouillée : ta vocation Miraculé doit d'abord épuiser son propre sauvetage gratuit.</span>}
-          </p>
-          <button disabled={soulStoneLocked || busy === "soul" || character.personal_gold < soulStoneCost}
-            onClick={() => run("soul", () => supabase.rpc("buy_soul_stone" as any, { p_character_id: character.id }))}
-            className={`text-xs uppercase border border-amber-800/50 ${PRICE} px-3 py-1.5 hover:bg-amber-800/10 disabled:opacity-30`}>
-            {busy === "soul" ? "…" : "Acheter une charge"}
-          </button>
-        </div>
-
-        <div className={`border ${INK_BORDER} px-3 py-3 mb-4 min-w-0`}>
-          <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
-            <p className={`text-sm ${INK} truncate`}>Sceau d'héritage</p>
-            {!legacyMaxed && <span className={`text-xs font-mono ${PRICE} flex-shrink-0`}>{Math.round(legacyCost)} or</span>}
-          </div>
-          <p className={`text-xs ${INK_MUTED} mb-2`}>
-            Actuellement : {legacyCurrentPct}% de ton or personnel transmis à ton prochain personnage si tu meurs.
-            {legacyMaxed ? " Palier maximum atteint." : ` Prochain palier : ${legacyCurrentPct + 10}%.`}
-          </p>
-          {!legacyMaxed && (
-            <button disabled={busy === "legacy" || character.personal_gold < legacyCost}
-              onClick={() => run("legacy", () => supabase.rpc("buy_legacy_tier" as any, { p_character_id: character.id }))}
-              className={`text-xs uppercase border border-amber-800/50 ${PRICE} px-3 py-1.5 hover:bg-amber-800/10 disabled:opacity-30`}>
-              {busy === "legacy" ? "…" : "Augmenter le palier"}
-            </button>
-          )}
-        </div>
-
-        {/* Rayon Apparence — 3 colonnes fixes : le cadre est plus étroit qu'une
-            page normale, 6 colonnes y déborderaient horizontalement. */}
-        <p className={`font-serif text-sm tracking-[0.16em] uppercase ${INK} mb-2`}>Apparence</p>
-        <div className="grid grid-cols-3 gap-2 mb-4 min-w-0">
-          {PORTRAITS.filter(p => p.premium).map((p) => {
-            const owned = character.unlocked_portraits.includes(p.id);
-            const active = character.portrait === p.id;
-            return (
-              <div key={p.id} className={`border ${INK_BORDER} p-1.5 text-center min-w-0`}>
-                <div className={`mb-1 ${owned ? "" : "opacity-40 grayscale"}`}>
-                  <PortraitDisplay portraitId={p.id} size={56} />
-                </div>
-                <p className={`text-[9px] ${INK_MUTED} mb-1 truncate`}>{p.label}</p>
-                {owned ? (
-                  <button disabled={active || busy === p.id}
-                    onClick={() => run(p.id, () => supabase.from("characters" as any).update({ portrait: p.id }).eq("id", character.id))}
-                    className={`w-full text-[9px] uppercase border ${active ? "border-emerald-800/50 text-emerald-800" : `${INK_BORDER} ${INK}`} px-1 py-1 hover:bg-black/5 disabled:opacity-60`}>
-                    {active ? "Actif" : busy === p.id ? "…" : "Utiliser"}
-                  </button>
-                ) : (
-                  <button disabled={busy === p.id || character.personal_gold < PORTRAIT_COST}
-                    onClick={() => run(p.id, () => supabase.rpc("buy_portrait" as any, { p_character_id: character.id, p_portrait_id: p.id, p_cost: PORTRAIT_COST }))}
-                    className={`w-full text-[9px] uppercase border border-amber-800/50 ${PRICE} px-1 py-1 hover:bg-amber-800/10 disabled:opacity-30`}>
-                    {busy === p.id ? "…" : `${PORTRAIT_COST} or`}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Rayon Pouvoir */}
-        <p className={`font-serif text-sm tracking-[0.16em] uppercase ${INK} mb-2`}>Pouvoir</p>
-        <div className={`border ${INK_BORDER} px-3 py-3 mb-2 min-w-0`}>
-          <p className={`text-sm ${INK} mb-1`}>Multiclassage</p>
-          <p className={`text-xs ${INK_MUTED} mb-2`}>
-            Apprend, à vie, une capacité d'une autre vocation. Prochain coût : {Math.round(multiclassCost)} or.
-          </p>
-          {character.multiclass_vocations.length > 0 && (
-            <p className={`text-xs ${PRICE} mb-2`}>Déjà appris : {character.multiclass_vocations.join(", ")}</p>
-          )}
-          <div className="flex flex-wrap gap-1.5 min-w-0">
-            {availableMulticlass.map((v) => (
-              <button key={v.id} disabled={busy === `mc-${v.id}` || character.personal_gold < multiclassCost}
-                onClick={() => run(`mc-${v.id}`, () => supabase.rpc("buy_multiclass" as any, { p_character_id: character.id, p_vocation: v.id }))}
-                className={`text-[10px] uppercase border border-amber-800/50 ${PRICE} px-2 py-1 hover:bg-amber-800/10 disabled:opacity-30`}>
-                {busy === `mc-${v.id}` ? "…" : v.label}
-              </button>
-            ))}
-            {availableMulticlass.length === 0 && <p className={`text-xs ${INK_MUTED} italic`}>Toutes les vocations sont déjà apprises.</p>}
-          </div>
-        </div>
-
-        <button onClick={() => navigate({ to: "/" })} className={`mt-2 text-xs underline ${INK_MUTED}`}>
-          Retour
+        <p className="text-xs mb-2" style={mutedStyle}>
+          Charges en réserve : {character.soul_stone_charges}. Consommée automatiquement si tu es désigné·e pour mourir.
+          {soulStoneLocked && <span className="block mt-1" style={{ color: "#8a2020" }}>Verrouillée : ta vocation Miraculé doit d'abord épuiser son propre sauvetage gratuit.</span>}
+        </p>
+        <button disabled={soulStoneLocked || busy === "soul" || character.personal_gold < soulStoneCost}
+          onClick={() => run("soul", () => supabase.rpc("buy_soul_stone" as any, { p_character_id: character.id }))}
+          className="text-xs uppercase px-3 py-1.5 disabled:opacity-30"
+          style={{ border: `1px solid ${PRICE}80`, color: PRICE }}>
+          {busy === "soul" ? "…" : "Acheter une charge"}
         </button>
-      </Frame>
-    </LedgerPage>
+      </div>
+
+      <div className={`border ${borderCls} px-3 py-3 mb-4`}>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <p className="text-sm" style={textStyle}>Sceau d'héritage</p>
+          {!legacyMaxed && <span className="text-xs font-mono flex-shrink-0" style={priceStyle}>{Math.round(legacyCost)} or</span>}
+        </div>
+        <p className="text-xs mb-2" style={mutedStyle}>
+          Actuellement : {legacyCurrentPct}% de ton or personnel transmis à ton prochain personnage si tu meurs.
+          {legacyMaxed ? " Palier maximum atteint." : ` Prochain palier : ${legacyCurrentPct + 10}%.`}
+        </p>
+        {!legacyMaxed && (
+          <button disabled={busy === "legacy" || character.personal_gold < legacyCost}
+            onClick={() => run("legacy", () => supabase.rpc("buy_legacy_tier" as any, { p_character_id: character.id }))}
+            className="text-xs uppercase px-3 py-1.5 disabled:opacity-30"
+            style={{ border: `1px solid ${PRICE}80`, color: PRICE }}>
+            {busy === "legacy" ? "…" : "Augmenter le palier"}
+          </button>
+        )}
+      </div>
+
+      <p className={`font-serif text-sm tracking-[0.16em] uppercase mb-2 ${headingCls}`} style={textStyle}>Apparence</p>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {PORTRAITS.filter(p => p.premium).map((p) => {
+          const owned = character.unlocked_portraits.includes(p.id);
+          const active = character.portrait === p.id;
+          return (
+            <div key={p.id} className={`border ${borderCls} p-1.5 text-center`}>
+              <div className={`mb-1 ${owned ? "" : "opacity-40 grayscale"}`}>
+                <PortraitDisplay portraitId={p.id} size={56} />
+              </div>
+              <p className="text-[9px] mb-1 truncate" style={mutedStyle}>{p.label}</p>
+              {owned ? (
+                <button disabled={active || busy === p.id}
+                  onClick={() => run(p.id, () => supabase.from("characters" as any).update({ portrait: p.id }).eq("id", character.id))}
+                  className="w-full text-[9px] uppercase px-1 py-1 disabled:opacity-60"
+                  style={active ? { border: "1px solid #2f7d4f80", color: "#2f7d4f" } : { border: `1px solid ${ink ? "#00000030" : "rgba(255,255,255,0.2)"}`, color: ink ? INK : undefined }}>
+                  {active ? "Actif" : busy === p.id ? "…" : "Utiliser"}
+                </button>
+              ) : (
+                <button disabled={busy === p.id || character.personal_gold < PORTRAIT_COST}
+                  onClick={() => run(p.id, () => supabase.rpc("buy_portrait" as any, { p_character_id: character.id, p_portrait_id: p.id, p_cost: PORTRAIT_COST }))}
+                  className="w-full text-[9px] uppercase px-1 py-1 disabled:opacity-30"
+                  style={{ border: `1px solid ${PRICE}80`, color: PRICE }}>
+                  {busy === p.id ? "…" : `${PORTRAIT_COST} or`}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className={`font-serif text-sm tracking-[0.16em] uppercase mb-2 ${headingCls}`} style={textStyle}>Pouvoir</p>
+      <div className={`border ${borderCls} px-3 py-3 mb-2`}>
+        <p className="text-sm mb-1" style={textStyle}>Multiclassage</p>
+        <p className="text-xs mb-2" style={mutedStyle}>
+          Apprend, à vie, une capacité d'une autre vocation. Prochain coût : {Math.round(multiclassCost)} or.
+        </p>
+        {character.multiclass_vocations.length > 0 && (
+          <p className="text-xs mb-2" style={priceStyle}>Déjà appris : {character.multiclass_vocations.join(", ")}</p>
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          {availableMulticlass.map((v) => (
+            <button key={v.id} disabled={busy === `mc-${v.id}` || character.personal_gold < multiclassCost}
+              onClick={() => run(`mc-${v.id}`, () => supabase.rpc("buy_multiclass" as any, { p_character_id: character.id, p_vocation: v.id }))}
+              className="text-[10px] uppercase px-2 py-1 disabled:opacity-30"
+              style={{ border: `1px solid ${PRICE}80`, color: PRICE }}>
+              {busy === `mc-${v.id}` ? "…" : v.label}
+            </button>
+          ))}
+          {availableMulticlass.length === 0 && <p className="text-xs italic" style={mutedStyle}>Toutes les vocations sont déjà apprises.</p>}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function BoutiquePage() {
+  const { character, error, busy, run, navigate } = useShopState();
+
+  if (!character) return <LedgerPage><LedgerCard title="Boutique">Chargement…</LedgerCard></LedgerPage>;
+
+  return (
+    <>
+      {/* Bureau : cadre décoratif quasi plein écran — positionnement en style
+          inline direct, aucune classe Tailwind empilée avec !important qui
+          pourrait échouer silencieusement (c'est ce qui faisait sortir le
+          texte du cadre précédemment). */}
+      <div className="hidden md:block w-full px-4 py-8" style={{ background: "#0d0c0a" }}>
+        <div className="mx-auto w-full" style={{ maxWidth: 1800 }}>
+          <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
+            <img src="/boutique_frame.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
+            <div
+              className="absolute [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              style={{
+                top: "29%", right: "22%", bottom: "19%", left: "34%",
+                overflowY: "auto", overflowX: "hidden", padding: "12px",
+              }}
+            >
+              <div className="flex items-baseline justify-between mb-2">
+                <h1 className="font-serif text-lg tracking-[0.12em] uppercase" style={{ color: INK }}>Boutique</h1>
+                <span className="text-sm font-mono flex-shrink-0 ml-2" style={{ color: PRICE }}>{Math.round(character.personal_gold)} or</span>
+              </div>
+              <ShopContent character={character} error={error} busy={busy} run={run} ink />
+              <button onClick={() => navigate({ to: "/" })} className="mt-2 text-xs underline" style={{ color: INK_MUTED }}>Retour</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile : le cadre décoratif devient illisible en dessous d'une
+          certaine largeur — repli sur la mise en page standard de l'app. */}
+      <div className="block md:hidden">
+        <LedgerPage maxWidthClass="max-w-2xl">
+          <LedgerCard title="Boutique" subtitle={`Or personnel : ${Math.round(character.personal_gold)}`}>
+            <img src="/boutique_frame.webp" alt="" className="w-full rounded-sm mb-4 object-cover" style={{ maxHeight: 160 }} />
+            <ShopContent character={character} error={error} busy={busy} run={run} />
+            <TextLink onClick={() => navigate({ to: "/" })}>Retour</TextLink>
+          </LedgerCard>
+        </LedgerPage>
+      </div>
+    </>
   );
 }
