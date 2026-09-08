@@ -22,6 +22,9 @@ type Step = {
   resolved: boolean; deaths_count: number; description: string | null; risk_revealed: boolean;
   resolving: boolean; resolution_deadline: string | null; was_retreat: boolean;
   resolved_at: string | null;
+  third_option_kind: string | null; third_option_label: string | null;
+  third_option_loot_min: number | null; third_option_loot_max: number | null; third_option_cost: number | null;
+  resolution_type: string | null; required_vocation: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[] };
@@ -177,7 +180,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -320,10 +323,10 @@ function VotePage() {
     return () => clearInterval(interval);
   }, [step?.id, step?.vote_deadline, step?.resolved]);
 
-  async function castVote(vote: "continuer" | "rentrer") {
+  async function castVote(vote: "continuer" | "rentrer" | "troisieme") {
     if (!step || !character || myVote) return;
     setError(null); setBusy(true);
-    if (vote === "continuer") soundVoteContinuer(); else soundVoteRentrer();
+    if (vote === "continuer") soundVoteContinuer(); else if (vote === "rentrer") soundVoteRentrer(); else soundVoteEnregistre();
     const { error: rpcError } = await supabase.rpc("cast_vote", {
       p_step_id: step.id, p_character_id: character.id, p_vote: vote,
     });
@@ -363,6 +366,24 @@ function VotePage() {
     setVocationBusy(null);
   }
 
+  async function useMartyrProvocation() {
+    if (!step || !character) return;
+    setVocationError(null); setVocationBusy("martyr_provocation");
+    const { error: rpcError } = await supabase.rpc("trigger_martyr_provocation" as any, { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setVocationError(rpcError.message);
+    else { setUsedAbilities(prev => new Set(prev).add("martyr_provocation")); await fetchStep(); }
+    setVocationBusy(null);
+  }
+
+  async function useTraitreVente() {
+    if (!step || !character) return;
+    setVocationError(null); setVocationBusy("traitre_vente");
+    const { error: rpcError } = await supabase.rpc("trigger_traitre_vente" as any, { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setVocationError(rpcError.message);
+    else setUsedAbilities(prev => new Set(prev).add("traitre_vente"));
+    setVocationBusy(null);
+  }
+
   async function useInspect(targetId: string) {
     if (!character) return;
     setVocationError(null); setVocationBusy(`inspect-${targetId}`); setInspectResult(null);
@@ -399,8 +420,9 @@ function VotePage() {
 
   async function showStepResult(stepId: string, eventType: string, deathsCountHint: number, isRetreat: boolean = false) {
     const { data: resolvedStep } = await supabase
-      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded").eq("id", stepId).maybeSingle();
+      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded, resolution_type").eq("id", stepId).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
+    const resolutionType = resolvedStep?.resolution_type ?? null;
 
     const { data: deadChars } = await supabase
       .from("characters").select("name")
@@ -429,6 +451,26 @@ function VotePage() {
     let cinematicText: string;
     if (isRetreat) {
       cinematicText = "Pris·es d'un élan de sagesse, vous décidez de rentrer à la guilde.";
+    } else if (resolutionType === "ignorer") {
+      cinematicText = "Vous laissez le coffre fermé, tel que vous l'avez trouvé. Ce qu'il contenait reste un mystère.";
+    } else if (resolutionType === "interpreter") {
+      cinematicText = "Votre Éclaireur lit les traces sans l'ombre d'un doute. La voie est sûre — mais elle ne mène à rien de plus que la sécurité elle-même.";
+    } else if (resolutionType === "martyr_provocation") {
+      cinematicText = deaths > 0 || myDied
+        ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué — mais ce silence a un prix."
+        : "Un seul d'entre vous s'est avancé pour réveiller le gardien, et l'a emporté. Le reste du groupe passe sans une égratignure.";
+    } else if (resolutionType === "marchand_achete") {
+      cinematicText = "Le marchand empoche son dû et vous glisse une amulette froide. « Ça tiendra deux étapes. Pas une de plus. »";
+    } else if (resolutionType === "marchand_refuse") {
+      cinematicText = "La guilde n'a pas les moyens. Le marchand hausse les épaules et vous regarde partir sans un mot.";
+    } else if (resolutionType === "pillage") {
+      cinematicText = deaths > 0 || myDied
+        ? "La tentative tourne mal — ça se débat, ça crie, et le prix à payer n'est pas seulement en or."
+        : "L'affaire est vite faite. Vous repartez plus riches, et un peu plus lourds sur la conscience.";
+    } else if (resolutionType === "discretion") {
+      cinematicText = deaths > 0 || myDied
+        ? "Le gardien remue dans son sommeil — trop tard pour reculer. La discrétion ne suffit plus."
+        : "Vous passez presque sans un bruit, laissant le gardien à son sommeil. Prudent — mais les mains vides.";
     } else {
       cinematicText = getCinematic(eventType, deaths > 0 || myDied);
       const { data: interventionRows } = await supabase
@@ -806,6 +848,15 @@ function VotePage() {
                 {usedAbilities.has("martyr") && (
                   <p className="text-xs text-red-400/70 italic">Ton sacrifice est promis pour cette étape.</p>
                 )}
+                {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
+                  <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"}
+                    className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
+                    {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
+                  </button>
+                )}
+                {usedAbilities.has("martyr_provocation") && (
+                  <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée — le résultat arrive.</p>
+                )}
                 {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
                   <button onClick={useGambit} disabled={vocationBusy === "gambit"}
                     className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
@@ -815,20 +866,46 @@ function VotePage() {
                 {usedAbilities.has("traitre_gambit") && (
                   <p className="text-xs text-amber-400/70 italic">La mise est lancée pour cette étape.</p>
                 )}
+                {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
+                  <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"}
+                    className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
+                    {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
+                  </button>
+                )}
+                {usedAbilities.has("traitre_vente") && (
+                  <p className="text-xs text-amber-400/70 italic">Personne ne sait ce que tu as fait. Pour l'instant.</p>
+                )}
                 <LedgerError message={vocationError} />
               </div>
             )}
 
             {!myVote ? (
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <button onClick={() => castVote("continuer")} disabled={busy}
-                  className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
-                  Continuer
-                </button>
-                <button onClick={() => castVote("rentrer")} disabled={busy}
-                  className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30">
-                  Rentrer
-                </button>
+              <div className="mb-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => castVote("continuer")} disabled={busy}
+                    className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
+                    Continuer
+                  </button>
+                  <button onClick={() => castVote("rentrer")} disabled={busy}
+                    className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30">
+                    Rentrer
+                  </button>
+                </div>
+                {step.third_option_kind && step.third_option_label && (
+                  step.required_vocation && myVocation !== step.required_vocation ? (
+                    <p className="w-full mt-2 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
+                      {step.third_option_label} — réservé à un personnage {step.required_vocation}
+                    </p>
+                  ) : (
+                    <button onClick={() => castVote("troisieme")} disabled={busy}
+                      className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
+                      {step.third_option_label}
+                      {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde)`}
+                      {step.third_option_kind === "pillage" && step.third_option_loot_min != null && step.third_option_loot_max != null &&
+                        ` — ${step.third_option_loot_min}–${step.third_option_loot_max} or, risque propre`}
+                    </button>
+                  )
+                )}
               </div>
             ) : (
               <div className="mb-4 px-3 py-3 border border-border/40 text-sm text-muted-foreground text-center">
