@@ -926,10 +926,13 @@ function VotePage() {
                   <p className="text-xs text-red-400/70 italic">Ton sacrifice est promis pour cette étape.</p>
                 )}
                 {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
-                  <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"}
-                    className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
-                    {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
-                  </button>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
+                    <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"}
+                      className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
+                      {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
+                    </button>
+                  </div>
                 )}
                 {usedAbilities.has("martyr_provocation") && (
                   <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée — le résultat arrive.</p>
@@ -944,10 +947,13 @@ function VotePage() {
                   <p className="text-xs text-amber-400/70 italic">La mise est lancée pour cette étape.</p>
                 )}
                 {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
-                  <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"}
-                    className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
-                    {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
-                  </button>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Traître</p>
+                    <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"}
+                      className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
+                      {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
+                    </button>
+                  </div>
                 )}
                 {usedAbilities.has("traitre_vente") && (
                   <p className="text-xs text-amber-400/70 italic">Personne ne sait ce que tu as fait. Pour l'instant.</p>
@@ -969,12 +975,13 @@ function VotePage() {
                 {step.third_option_kind && step.third_option_label && (
                   step.required_vocation && myVocation !== step.required_vocation ? (
                     <p className="w-full mt-2 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
-                      {step.third_option_label} — réservé à un personnage {step.required_vocation}
+                      {step.third_option_label} — réservé à un personnage {vocationLabel(step.required_vocation)}
                     </p>
                   ) : (
                     <button onClick={() => castVote("troisieme")} disabled={busy}
                       className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
                       {step.third_option_label}
+                      {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
                       {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde)`}
                       {step.third_option_kind === "pillage" && step.third_option_loot_min != null && step.third_option_loot_max != null &&
                         ` — ${step.third_option_loot_min}–${step.third_option_loot_max} or, risque propre`}
