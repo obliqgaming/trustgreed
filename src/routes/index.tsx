@@ -33,6 +33,7 @@ function Index() {
   const [profileMissing, setProfileMissing] = useState(false);
   const [character, setCharacter] = useState<Character | null>(null);
   const [guild, setGuild] = useState<Guild | null>(null);
+  const [guildTier, setGuildTier] = useState<number | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [myVocation, setMyVocation] = useState<VocationId | null | undefined>(undefined);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -82,7 +83,7 @@ function Index() {
     // Vague 2 : tout ce qui dépend du personnage, mais pas les uns des
     // autres — vocation et (si en guilde) guilde/membres/historique/expédition
     // active partent tous en même temps.
-    const [vocRes, guildRes, membersRes, historyRes, expRes] = await Promise.all([
+    const [vocRes, guildRes, membersRes, historyRes, expRes, tierRes] = await Promise.all([
       supabase.rpc("get_my_vocation", { p_character_id: char.id }),
       char.guild_id
         ? supabase.from("guilds").select("id, name, gold, founder_profile_id, banner_symbol, banner_color, banner_bg").eq("id", char.guild_id).maybeSingle()
@@ -96,12 +97,15 @@ function Index() {
       char.guild_id
         ? supabase.from("expeditions").select("id, status").eq("guild_id", char.guild_id).in("status", ["waiting", "active"]).maybeSingle()
         : Promise.resolve({ data: null }),
+      char.guild_id
+        ? supabase.rpc("get_guild_building_tiers")
+        : Promise.resolve({ data: null }),
     ]);
 
     setMyVocation((vocRes.data as VocationId | null) ?? null);
 
     if (!char.guild_id) {
-      setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null);
+      setGuild(null); setMembers([]); setHistory([]); setActiveExpedition(null); setGuildTier(null);
       setReady(true);
       return;
     }
@@ -109,6 +113,8 @@ function Index() {
     setGuild(guildRes.data ?? null);
     setMembers(((membersRes.data as any[]) ?? []).map((row: any) => ({ id: row.id, name: row.name, level: row.level, portrait: row.portrait, declared_vocation: row.declared_vocation, last_seen_at: row.profiles?.last_seen_at ?? null })));
     setHistory((historyRes.data as any) ?? []);
+    const myTierRow = ((tierRes.data as any[]) ?? []).find((t) => t.guild_id === char.guild_id);
+    setGuildTier(myTierRow?.tier ?? null);
 
     const exp = expRes.data as any;
     if (exp) {
@@ -198,7 +204,8 @@ function Index() {
           <div className="min-w-0 flex-1">
             <h1 className="font-serif text-2xl tracking-[0.12em] text-primary uppercase truncate">{guild?.name ?? "Guilde"}</h1>
             <p className="text-sm text-muted-foreground">
-              Trésor : {Math.round(guild?.gold ?? 0)} or · {members.length} membre{members.length > 1 ? "s" : ""} · il faut 3 membres pour partir en expédition
+              Trésor : {Math.round(guild?.gold ?? 0)} or · {members.length} membre{members.length > 1 ? "s" : ""}
+              {guildTier !== null && <> · palier {guildTier}/5</>} · il faut 3 membres pour partir en expédition
             </p>
             {guild && session?.user?.id === guild.founder_profile_id && (
               <GuildBannerEditor guildId={guild.id} characterId={character.id} currentSymbol={guild.banner_symbol ?? null} currentColor={guild.banner_color ?? null} onDone={refresh} />
@@ -206,13 +213,14 @@ function Index() {
           </div>
           <div className="flex-shrink-0 flex gap-2">
             <button onClick={() => navigate({ to: "/boutique" })}
-              className="flex items-center gap-1.5 font-serif tracking-[0.12em] uppercase border-2 border-amber-500/50 text-amber-300 px-4 py-2.5 hover:bg-amber-500/10 hover:border-amber-400 transition-colors rounded-sm text-sm">
-              <Coins size={16} />
-              Boutique
+              style={{ backgroundImage: "url(/barre3.webp)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
+              className="flex items-center gap-1.5 font-serif tracking-[0.12em] uppercase px-4 py-2.5 transition-opacity hover:opacity-90 rounded-sm text-sm text-[#f2e4c8]">
+              <span style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }} className="flex items-center gap-1.5"><Coins size={16} /> Boutique</span>
             </button>
             <button onClick={() => navigate({ to: "/carte" })}
-              className="font-serif tracking-[0.12em] uppercase border-2 border-primary/60 text-primary px-4 py-2.5 hover:bg-primary/10 hover:border-primary transition-colors rounded-sm text-sm shadow-[0_0_12px_rgba(201,162,75,0.15)]">
-              Carte des guildes →
+              style={{ backgroundImage: "url(/barre3.webp)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
+              className="font-serif tracking-[0.12em] uppercase px-4 py-2.5 transition-opacity hover:opacity-90 rounded-sm text-sm text-[#f2e4c8]">
+              <span style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>Carte des guildes →</span>
             </button>
           </div>
         </div>
@@ -267,14 +275,13 @@ function Index() {
               </div>
             )}
 
-            {/* Stats perso — le cadre l'ancre visuellement comme "ton personnage",
-                pas la guilde, qui a déjà son propre bloc au-dessus. */}
+            {/* Stats perso */}
             <FramedBox frame={4} className="mb-2">
               <div className="p-3">
-                <div className="flex items-baseline justify-between mb-2">
-                  <span className="text-xs tracking-[0.14em] uppercase opacity-80">Ton personnage — niveau {character.level}</span>
+                <div className="font-serif text-lg uppercase tracking-[0.08em] mb-0.5">{character.name}</div>
+                <div className="text-xs tracking-[0.1em] uppercase opacity-80 mb-2">
+                  Niveau {character.level} · {getTitleForLevel(character.level)}
                 </div>
-                <div className="font-serif text-xl uppercase tracking-[0.08em] mb-2">{getTitleForLevel(character.level)}</div>
                 <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
                   <div className="h-full bg-current opacity-70 rounded-full" style={{ width: `${Math.round(getTitleProgress(character.level) * 100)}%` }} />
                 </div>

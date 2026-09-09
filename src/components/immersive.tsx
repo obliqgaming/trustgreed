@@ -54,7 +54,8 @@ export function ImmersiveButton({
       className={`relative py-4 font-serif tracking-[0.14em] uppercase transition-opacity disabled:opacity-30 hover:opacity-90 ${className}`}
       style={{
         backgroundImage: `url(/boutonimmersif${isSombre ? "1" : "2"}.webp)`,
-        backgroundSize: "100% 100%",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         color: isSombre ? "#e8dcc0" : "#1a140a",
         textShadow: isSombre ? "0 1px 3px rgba(0,0,0,0.9)" : "0 1px 2px rgba(255,255,255,0.4)",
