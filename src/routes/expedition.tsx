@@ -277,7 +277,7 @@ function ExpeditionPage() {
     <LedgerPage>
       {!expedition ? (
         <>
-          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.webp)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.6}} />
+          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.webp)",backgroundSize:"cover",backgroundPosition:"center",zIndex:0,opacity:0.6}} />
           <LedgerCard title="Nouvelle expédition" subtitle="Choisis combien de membres peuvent rejoindre. Plus le groupe est grand, plus le butin est élevé — et plus la trahison est possible.">
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Taille cible</p>
@@ -324,7 +324,7 @@ function ExpeditionPage() {
         </>
       ) : (
         <>
-          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.webp)",backgroundSize:"cover",backgroundPosition:"center",zIndex:-1,opacity:0.6}} />
+          <div style={{position:"fixed",inset:0,backgroundImage:"url(/expedition_staging.webp)",backgroundSize:"cover",backgroundPosition:"center",zIndex:0,opacity:0.6}} />
           <LedgerCard
             title="Salle d'attente"
             subtitle={`${participants.length} / ${expedition.target_size} inscrits · en attente que chacun rejoigne depuis la page guilde`}
