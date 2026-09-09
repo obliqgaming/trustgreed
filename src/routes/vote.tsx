@@ -6,6 +6,7 @@ import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 import { Frame, DecorativeBorder } from "@/components/frame";
+import { ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -940,14 +941,12 @@ function VotePage() {
             {!myVote ? (
               <div className="mb-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => castVote("continuer")} disabled={busy}
-                    className="py-4 border border-primary/60 text-primary font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-primary/10 disabled:opacity-30">
+                  <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy}>
                     Continuer
-                  </button>
-                  <button onClick={() => castVote("rentrer")} disabled={busy}
-                    className="py-4 border border-border/60 text-muted-foreground font-serif tracking-[0.14em] uppercase rounded-sm hover:bg-border/10 disabled:opacity-30">
+                  </ImmersiveButton>
+                  <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy}>
                     Rentrer
-                  </button>
+                  </ImmersiveButton>
                 </div>
                 {step.third_option_kind && step.third_option_label && (
                   step.required_vocation && myVocation !== step.required_vocation ? (

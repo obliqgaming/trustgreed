@@ -9,9 +9,10 @@ import { GuildBanner, BannerPicker } from "@/components/banners";
 import { Frame, MemberFrame, DecorativeBorder } from "@/components/frame";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { GuildChatBox } from "@/components/guildChat";
-import { getTitleForLevel, getNextTitleThreshold } from "@/lib/titles";
+import { getTitleForLevel, getNextTitleThreshold, getTitleProgress } from "@/lib/titles";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 import { Coins } from "lucide-react";
+import { FramedBox, ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -266,23 +267,22 @@ function Index() {
               </div>
             )}
 
-            {/* Stats perso */}
-            <div className="grid grid-cols-2 gap-3 mb-2">
-              <div className="border border-border/60 p-3">
-                <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Niveau</dt>
-                <dd className="mt-1 font-mono text-xl text-primary">{character.level}</dd>
+            {/* Stats perso — le cadre l'ancre visuellement comme "ton personnage",
+                pas la guilde, qui a déjà son propre bloc au-dessus. */}
+            <FramedBox frame={4} className="mb-2">
+              <div className="p-3">
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-xs tracking-[0.14em] uppercase opacity-80">Ton personnage — niveau {character.level}</span>
+                </div>
+                <div className="font-serif text-xl uppercase tracking-[0.08em] mb-2">{getTitleForLevel(character.level)}</div>
+                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                  <div className="h-full bg-current opacity-70 rounded-full" style={{ width: `${Math.round(getTitleProgress(character.level) * 100)}%` }} />
+                </div>
+                {getNextTitleThreshold(character.level) !== null && (
+                  <div className="text-[10px] mt-1 opacity-70">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
+                )}
               </div>
-              <div className="border border-border/60 p-3">
-                <dt className="text-xs tracking-[0.14em] text-muted-foreground uppercase">XP</dt>
-                <dd className="mt-1 font-mono text-xl text-primary">{character.xp}</dd>
-              </div>
-            </div>
-            <div className="mb-4 text-xs text-muted-foreground">
-              Titre : <span className="text-primary uppercase tracking-[0.06em]">{getTitleForLevel(character.level)}</span>
-              {getNextTitleThreshold(character.level) !== null && (
-                <span> · prochain palier au niveau {getNextTitleThreshold(character.level)}</span>
-              )}
-            </div>
+            </FramedBox>
 
             <div className="w-full mb-4 flex items-center justify-between border border-amber-500/40 px-3 py-2">
               <span className="text-xs uppercase tracking-[0.1em] text-amber-300 flex items-center gap-1.5"><Coins size={14} /> Or personnel</span>
@@ -305,10 +305,9 @@ function Index() {
                 <p className="text-xs text-muted-foreground text-center mb-1.5">
                   {members.length} membre{members.length > 1 ? "s" : ""} vivant{members.length > 1 ? "s" : ""} dans la guilde
                 </p>
-                <button onClick={() => navigate({ to: "/expedition" })}
-                  className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
+                <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/expedition" })} className="w-full">
                   Partir en expédition
-                </button>
+                </ImmersiveButton>
               </div>
             )}
 

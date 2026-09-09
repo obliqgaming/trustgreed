@@ -8,6 +8,7 @@ import {
   SealButton,
   TextLink,
 } from "@/components/ledger";
+import { ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/expedition")({
   ssr: false,
@@ -405,10 +406,9 @@ function ExpeditionPage() {
             </button>
           )}
           {isLeader && (
-            <button onClick={startExpedition} disabled={!canStart || busy}
-              className="mt-3 w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed border-primary/60 text-primary hover:bg-primary/10">
+            <ImmersiveButton variant="clair" onClick={startExpedition} disabled={!canStart || busy} className="mt-3 w-full">
               {canStart ? "Lancer l'expédition" : `En attente (${participants.length}/3 min.)`}
-            </button>
+            </ImmersiveButton>
           )}
           {canCancel && !confirmCancel && (
             <button onClick={() => setConfirmCancel(true)} disabled={busy}

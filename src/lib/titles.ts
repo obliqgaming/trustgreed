@@ -29,6 +29,17 @@ export function getTitleForLevel(level: number): string {
   return current;
 }
 
+export function getTitleProgress(level: number): number {
+  let floor = TITLE_TIERS[0]!.minLevel;
+  let ceiling: number | null = null;
+  for (const tier of TITLE_TIERS) {
+    if (level >= tier.minLevel) floor = tier.minLevel;
+    else { ceiling = tier.minLevel; break; }
+  }
+  if (ceiling === null) return 1; // déjà Légende
+  return Math.min(1, Math.max(0, (level - floor) / (ceiling - floor)));
+}
+
 export function getNextTitleThreshold(level: number): number | null {
   for (const tier of TITLE_TIERS) {
     if (level < tier.minLevel) return tier.minLevel;
