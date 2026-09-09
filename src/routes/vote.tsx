@@ -25,6 +25,7 @@ type Step = {
   third_option_kind: string | null; third_option_label: string | null;
   third_option_loot_min: number | null; third_option_loot_max: number | null; third_option_cost: number | null;
   resolution_type: string | null; required_vocation: string | null;
+  required_flag_sentiment: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[] };
@@ -180,7 +181,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -459,6 +460,8 @@ function VotePage() {
       cinematicText = deaths > 0 || myDied
         ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué — mais ce silence a un prix."
         : "Un seul d'entre vous s'est avancé pour réveiller le gardien, et l'a emporté. Le reste du groupe passe sans une égratignure.";
+    } else if (resolutionType === "payer_passage") {
+      cinematicText = "La guilde paie sans discuter. Le passage s'ouvre, tranquille — et le butin, lui, reste entier.";
     } else if (resolutionType === "marchand_achete") {
       cinematicText = "Le marchand empoche son dû et vous glisse une amulette froide. « Ça tiendra deux étapes. Pas une de plus. »";
     } else if (resolutionType === "marchand_refuse") {
@@ -471,6 +474,14 @@ function VotePage() {
       cinematicText = deaths > 0 || myDied
         ? "Le gardien remue dans son sommeil — trop tard pour reculer. La discrétion ne suffit plus."
         : "Vous passez presque sans un bruit, laissant le gardien à son sommeil. Prudent — mais les mains vides.";
+    } else if (resolutionType === "couper_terrain") {
+      cinematicText = deaths > 0 || myDied
+        ? "Le raccourci se referme mal sur vous. Le terrain ne pardonne pas l'impatience."
+        : "Le détour paie : vous coupez à travers l'accidenté et ressortez plus loin, plus vite, plus riches.";
+    } else if (resolutionType === "etudier") {
+      cinematicText = deaths > 0 || myDied
+        ? "Vous auriez dû laisser ça tranquille. Ce que vous avez réveillé en l'étudiant ne se rendort pas si facilement."
+        : "L'examen minutieux paie — ce que vous avez trouvé valait plus que ce qu'un simple coup d'œil aurait laissé croire.";
     } else {
       cinematicText = getCinematic(eventType, deaths > 0 || myDied);
       const { data: interventionRows } = await supabase
@@ -814,7 +825,19 @@ function VotePage() {
 
             {step.description && (
               <Frame variant="journal" contentClassName="!items-center !justify-center" className="mb-4">
-                <p className="text-sm italic leading-relaxed text-center">{step.description}</p>
+                <div className="text-center">
+                  {step.required_flag_sentiment && (
+                    <p className={`text-[10px] uppercase tracking-[0.14em] mb-1.5 ${step.required_flag_sentiment === "positif" ? "text-emerald-400" : "text-red-400"}`}>
+                      Conséquence d'un choix passé
+                    </p>
+                  )}
+                  <p className={`text-sm italic leading-relaxed ${
+                    step.required_flag_sentiment === "positif" ? "text-emerald-300" :
+                    step.required_flag_sentiment === "negatif" ? "text-red-300" : ""
+                  }`}>
+                    {step.description}
+                  </p>
+                </div>
               </Frame>
             )}
             <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
