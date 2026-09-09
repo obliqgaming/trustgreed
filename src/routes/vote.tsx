@@ -53,33 +53,38 @@ const EVENT_IMAGES: Record<string, string[]> = {
 // Variantes supplémentaires selon le palier de risque — s'ajoutent au pool
 // ci-dessus, ne le remplacent jamais.
 const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string>>>> = {
-  coffre: { faible: "/event_coffre_faible.webp", eleve: "/event_coffre_eleve.webp" },
-  gardien: { faible: "/event_gardien_faible.webp", eleve: "/event_gardien_eleve.webp" },
-  porte: { faible: "/event_porte_faible.webp", eleve: "/event_porte_eleve.webp" },
-  passage: { faible: "/event_passage_faible.webp", eleve: "/event_passage_eleve.webp" },
+  coffre: { faible: "/event_coffre_faible.webp", moyen: "/event_coffre_moyen.webp", eleve: "/event_coffre_eleve.webp" },
+  gardien: { faible: "/event_gardien_faible.webp", moyen: "/event_gardien_moyen.webp", eleve: "/event_gardien_eleve.webp" },
+  porte: { faible: "/event_porte_faible.webp", moyen: "/event_porte_moyen.webp", eleve: "/event_porte_eleve.webp" },
+  passage: { faible: "/event_passage_faible.webp", moyen: "/event_passage_moyen.webp", eleve: "/event_passage_eleve.webp" },
 };
 // Callbacks avec une image dédiée plutôt que le pool générique de leur type.
 const CALLBACK_IMAGES: Record<string, string> = {
   objet_maudit: "/callback_objet_maudit.webp",
   chest_undisturbed: "/callback_chest_undisturbed.webp",
+  pillaged_npc: "/callback_pillaged_npc.webp",
+  equipement_perdu: "/callback_equipement_perdu.webp",
+  martyr_legende: "/callback_martyr_legende.webp",
+  traitre_vendu: "/callback_traitre_vendu.webp",
 };
 function pickEventBg(step: { id: string; event_type: string; risk_level: string; required_flag?: string | null }): string {
-  if (step.required_flag && CALLBACK_IMAGES[step.required_flag]) return CALLBACK_IMAGES[step.required_flag];
+  const callbackImg = step.required_flag ? CALLBACK_IMAGES[step.required_flag] : undefined;
+  if (callbackImg) return callbackImg;
   const pool = [...(EVENT_IMAGES[step.event_type] ?? [])];
   const riskVariant = EVENT_IMAGES_BY_RISK[step.event_type]?.[step.risk_level];
   if (riskVariant) pool.push(riskVariant);
   if (pool.length === 0) return "";
   const idx = step.id.charCodeAt(0) % pool.length;
-  return pool[idx];
+  return pool[idx] ?? pool[0] ?? "";
 }
 const STEP_RESULT_SUCCESS = "/step_success.png.webp";
 const STEP_RESULT_FAIL = "/step_fail.webp";
-const DEATH_SCREEN = "/death_screen.png";
-const RETURN_SUCCESS = "/return_success.png";
-const RETURN_WIPE = "/return_wipe.png";
+const DEATH_SCREEN = "/death_screen.webp";
+const RETURN_SUCCESS_IMGS = ["/return_success.webp", "/rentrer_safe.webp"];
+const RETURN_WIPE = "/return_wipe.webp";
 const CINEMATIC_TPK_IMG = "/cinematic_wipe.webp";
-const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde
-const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.png", "/cinematic_survive_bis.png"];
+const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde
+const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.webp", "/cinematic_survive_bis.webp"];
 const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
 const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
 const MARCHAND_ACHETE_IMGS = ["/marchand_protection_achetee.webp", "/marchand_protection_achetee_bis.webp"];
@@ -725,18 +730,19 @@ function VotePage() {
     if (result.iDied) {
       resultBg = DEATH_SCREEN;
     } else if (result.resolutionType === "marchand_achete") {
-      resultBg = resultImageVariant < 0.5 ? MARCHAND_ACHETE_IMGS[0] : MARCHAND_ACHETE_IMGS[1];
+      resultBg = (resultImageVariant < 0.5 ? MARCHAND_ACHETE_IMGS[0] : MARCHAND_ACHETE_IMGS[1]) ?? MARCHAND_ACHETE_IMGS[0]!;
     } else if (result.resolutionType === "marchand_refuse") {
       resultBg = MARCHAND_REFUSE_IMG;
     } else if (result.resolutionType === "pillage") {
       resultBg = result.deaths > 0 ? PILLAGE_FAIL_IMG : PILLAGE_SUCCESS_IMG;
     } else if (result.ended) {
-      resultBg = isWipe ? CINEMATIC_TPK_IMG : result.deadNames.length > 0 ? RETURN_WIPE : RETURN_SUCCESS;
+      resultBg = isWipe ? CINEMATIC_TPK_IMG : result.deadNames.length > 0 ? RETURN_WIPE
+        : ((resultImageVariant < 0.5 ? RETURN_SUCCESS_IMGS[0] : RETURN_SUCCESS_IMGS[1]) ?? RETURN_SUCCESS_IMGS[0]!);
     } else if (result.deaths > 0) {
-      resultBg = resultImageVariant < 0.5 ? CINEMATIC_DEATH_IMGS[0] : CINEMATIC_DEATH_IMGS[1];
+      resultBg = CINEMATIC_DEATH_IMGS[Math.floor(resultImageVariant * CINEMATIC_DEATH_IMGS.length)] ?? CINEMATIC_DEATH_IMGS[0]!;
     } else {
       resultBg = resultImageVariant < 0.34 ? STEP_RESULT_SUCCESS
-        : resultImageVariant < 0.67 ? CINEMATIC_SURVIVE_IMGS[0] : CINEMATIC_SURVIVE_IMGS[1];
+        : (resultImageVariant < 0.67 ? CINEMATIC_SURVIVE_IMGS[0] : CINEMATIC_SURVIVE_IMGS[1]) ?? CINEMATIC_SURVIVE_IMGS[0]!;
     }
     const title = result.iDied ? "Tu es mort."
       : isWipe ? "Expédition anéantie"
