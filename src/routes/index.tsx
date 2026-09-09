@@ -12,7 +12,7 @@ import { GuildChatBox } from "@/components/guildChat";
 import { getTitleForLevel, getNextTitleThreshold, getTitleProgress } from "@/lib/titles";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 import { Coins } from "lucide-react";
-import { FramedBox, ImmersiveButton } from "@/components/immersive";
+import { ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -213,14 +213,13 @@ function Index() {
           </div>
           <div className="flex-shrink-0 flex gap-2">
             <button onClick={() => navigate({ to: "/boutique" })}
-              style={{ backgroundImage: "url(/barre3.webp)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
-              className="flex items-center gap-1.5 font-serif tracking-[0.12em] uppercase px-4 py-2.5 transition-opacity hover:opacity-90 rounded-sm text-sm text-[#f2e4c8]">
-              <span style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }} className="flex items-center gap-1.5"><Coins size={16} /> Boutique</span>
+              className="flex items-center gap-1.5 font-serif tracking-[0.12em] uppercase border-2 border-amber-500/50 text-amber-300 px-6 py-3 hover:bg-amber-500/10 hover:border-amber-400 transition-colors rounded-sm text-sm">
+              <Coins size={16} />
+              Boutique
             </button>
             <button onClick={() => navigate({ to: "/carte" })}
-              style={{ backgroundImage: "url(/barre3.webp)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
-              className="font-serif tracking-[0.12em] uppercase px-4 py-2.5 transition-opacity hover:opacity-90 rounded-sm text-sm text-[#f2e4c8]">
-              <span style={{ textShadow: "0 1px 3px rgba(0,0,0,0.9)" }}>Carte des guildes →</span>
+              className="font-serif tracking-[0.12em] uppercase border-2 border-primary/60 text-primary px-6 py-3 hover:bg-primary/10 hover:border-primary transition-colors rounded-sm text-sm shadow-[0_0_12px_rgba(201,162,75,0.15)]">
+              Carte des guildes →
             </button>
           </div>
         </div>
@@ -276,20 +275,18 @@ function Index() {
             )}
 
             {/* Stats perso */}
-            <FramedBox frame={4} className="mb-2">
-              <div className="p-3">
-                <div className="font-serif text-lg uppercase tracking-[0.08em] mb-0.5">{character.name}</div>
-                <div className="text-xs tracking-[0.1em] uppercase opacity-80 mb-2">
-                  Niveau {character.level} · {getTitleForLevel(character.level)}
-                </div>
-                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
-                  <div className="h-full bg-current opacity-70 rounded-full" style={{ width: `${Math.round(getTitleProgress(character.level) * 100)}%` }} />
-                </div>
-                {getNextTitleThreshold(character.level) !== null && (
-                  <div className="text-[10px] mt-1 opacity-70">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
-                )}
+            <div className="border border-border/60 p-3 mb-2">
+              <div className="font-serif text-lg uppercase tracking-[0.08em] mb-0.5 text-primary">{character.name}</div>
+              <div className="text-xs tracking-[0.1em] uppercase text-muted-foreground mb-2">
+                Niveau {character.level} · {getTitleForLevel(character.level)}
               </div>
-            </FramedBox>
+              <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                <div className="h-full bg-primary/70 rounded-full" style={{ width: `${Math.round(getTitleProgress(character.level) * 100)}%` }} />
+              </div>
+              {getNextTitleThreshold(character.level) !== null && (
+                <div className="text-[10px] mt-1 text-muted-foreground">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
+              )}
+            </div>
 
             <div className="w-full mb-4 flex items-center justify-between border border-amber-500/40 px-3 py-2">
               <span className="text-xs uppercase tracking-[0.1em] text-amber-300 flex items-center gap-1.5"><Coins size={14} /> Or personnel</span>

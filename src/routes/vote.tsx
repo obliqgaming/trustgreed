@@ -27,6 +27,7 @@ type Step = {
   third_option_loot_min: number | null; third_option_loot_max: number | null; third_option_cost: number | null;
   resolution_type: string | null; required_vocation: string | null;
   required_flag_sentiment: string | null; required_flag: string | null;
+  death_percentage: number; third_option_death_pct: number | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null };
@@ -84,7 +85,7 @@ const DEATH_SCREEN = "/death_screen.webp";
 const RETURN_SUCCESS_IMGS = ["/return_success.webp", "/rentrer_safe.webp"];
 const RETURN_WIPE = "/return_wipe.webp";
 const CINEMATIC_TPK_IMG = "/cinematic_wipe.webp";
-const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde
+const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde — cinematic_death.webp retirée : c'est une vue d'ambiance sans lien visuel avec une mort
 const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.webp", "/cinematic_survive_bis.webp"];
 const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
 const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
@@ -211,7 +212,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag, death_percentage, third_option_death_pct")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -657,6 +658,16 @@ function VotePage() {
 
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
+  const eventBg = step ? pickEventBg(step) || null : null;
+  const bgFilter = step?.risk_level === "eleve"
+    ? "brightness(0.30) sepia(0.35)"
+    : step?.risk_level === "moyen"
+    ? "brightness(0.34) sepia(0.12)"
+    : "brightness(0.38)";
+  const resolvingRisk = step?.resolution_type && step.resolution_type !== "continuer"
+    ? step.third_option_death_pct ?? step.death_percentage
+    : step?.death_percentage;
+
   // Fenêtre de résolution active : jauge + interventions, avant le vrai résultat
   if ((step?.resolving || revealingOutcome) && !result) {
     const secondsLeft = step?.resolution_deadline
@@ -667,7 +678,18 @@ function VotePage() {
       : [];
     return (
       <LedgerPage>
+        {eventBg && (
+          <div style={{
+            position:"fixed", inset:0, zIndex:0,
+            backgroundImage:`url(${eventBg})`,
+            backgroundSize:"cover", backgroundPosition:"center",
+            filter: bgFilter,
+          }} />
+        )}
         <LedgerCard title={revealingOutcome ? "Le verdict tombe…" : "Résolution en cours…"} subtitle="Le sort du groupe se joue maintenant.">
+          {resolvingRisk != null && (
+            <p className="text-center text-sm text-red-400 mb-3">Risque de cette étape : {Math.round(resolvingRisk * 100)}%</p>
+          )}
           <div className="mb-6">
             <div className="h-4 border border-border/60 relative overflow-hidden">
               <div
@@ -742,8 +764,11 @@ function VotePage() {
     } else if (result.deaths > 0) {
       resultBg = CINEMATIC_DEATH_IMGS[Math.floor(resultImageVariant * CINEMATIC_DEATH_IMGS.length)] ?? CINEMATIC_DEATH_IMGS[0]!;
     } else {
-      resultBg = resultImageVariant < 0.34 ? STEP_RESULT_SUCCESS
-        : (resultImageVariant < 0.67 ? CINEMATIC_SURVIVE_IMGS[0] : CINEMATIC_SURVIVE_IMGS[1]) ?? CINEMATIC_SURVIVE_IMGS[0]!;
+      // L'image de l'étape elle-même rejoint le pool générique, pour que
+      // "étape franchie" garde un vrai lien visuel avec ce qui vient de se
+      // passer plutôt que d'être toujours déconnecté de l'événement.
+      const successPool = eventBg ? [eventBg, STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS] : [STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS];
+      resultBg = successPool[Math.floor(resultImageVariant * successPool.length)] ?? successPool[0]!;
     }
     const title = result.iDied ? "Tu es mort."
       : isWipe ? "Expédition anéantie"
@@ -758,7 +783,7 @@ function VotePage() {
       <LedgerPage maxWidthClass="max-w-2xl">
         <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title={title} subtitle={subtitle}>
-          <p className="text-sm text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
+          <p className="text-lg md:text-xl text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
 
           {!result.iDied && !result.ended && result.stepLoot > 0 && (
             <div className="flex justify-center mb-5">
@@ -832,13 +857,6 @@ function VotePage() {
     );
   }
 
-  const eventBg = step ? pickEventBg(step) || null : null;
-  const bgFilter = step?.risk_level === "eleve"
-    ? "brightness(0.18) sepia(0.4)"
-    : step?.risk_level === "moyen"
-    ? "brightness(0.22) sepia(0.15)"
-    : "brightness(0.25)";
-
   return (
     <LedgerPage>
       {eventBg && (
@@ -867,7 +885,7 @@ function VotePage() {
                       Conséquence d'un choix passé
                     </p>
                   )}
-                  <p className={`text-sm italic leading-relaxed ${
+                  <p className={`text-lg md:text-xl italic leading-relaxed ${
                     step.required_flag_sentiment === "positif" ? "text-emerald-300" :
                     step.required_flag_sentiment === "negatif" ? "text-red-300" : ""
                   }`}>
