@@ -25,10 +25,10 @@ type Step = {
   third_option_kind: string | null; third_option_label: string | null;
   third_option_loot_min: number | null; third_option_loot_max: number | null; third_option_cost: number | null;
   resolution_type: string | null; required_vocation: string | null;
-  required_flag_sentiment: string | null;
+  required_flag_sentiment: string | null; required_flag: string | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[] };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 
@@ -40,18 +40,38 @@ function formatCountdown(totalSeconds: number): string {
   const remMin = minutes % 60;
   return remMin > 0 ? `${hours}h ${remMin}min` : `${hours}h`;
 }
-const EVENT_IMAGES: Record<string, string> = {
-  coffre: "/event_coffre.webp",
-  porte: "/event_porte.webp",
-  gardien: "/event_gardien.webp",
-  passage: "/event_passage.webp",
-  rencontre: "/event_rencontre.webp",
-  decouverte: "/event_decouverte.webp",
-  traces: "/event_traces.webp",
+const EVENT_IMAGES: Record<string, string[]> = {
+  coffre: ["/event_coffre.webp"],
+  porte: ["/event_porte.webp"],
+  gardien: ["/event_gardien.webp"],
+  passage: ["/event_passage.webp"],
+  rencontre: ["/event_rencontre.webp", "/event_rencontre_bis.webp"],
+  decouverte: ["/event_decouverte.webp"],
+  traces: ["/event_traces.webp"],
+  marchand: ["/event_marchand.webp", "/event_marchand_bis.webp"],
 };
-const EVENT_IMAGES_ALT: Partial<Record<string, string>> = {
-  rencontre: "/event_rencontre_bis.webp", // 2 variantes pour éviter la redondance visuelle
+// Variantes supplémentaires selon le palier de risque — s'ajoutent au pool
+// ci-dessus, ne le remplacent jamais.
+const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string>>>> = {
+  coffre: { faible: "/event_coffre_faible.webp", eleve: "/event_coffre_eleve.webp" },
+  gardien: { faible: "/event_gardien_faible.webp", eleve: "/event_gardien_eleve.webp" },
+  porte: { faible: "/event_porte_faible.webp", eleve: "/event_porte_eleve.webp" },
+  passage: { faible: "/event_passage_faible.webp", eleve: "/event_passage_eleve.webp" },
 };
+// Callbacks avec une image dédiée plutôt que le pool générique de leur type.
+const CALLBACK_IMAGES: Record<string, string> = {
+  objet_maudit: "/callback_objet_maudit.webp",
+  chest_undisturbed: "/callback_chest_undisturbed.webp",
+};
+function pickEventBg(step: { id: string; event_type: string; risk_level: string; required_flag?: string | null }): string {
+  if (step.required_flag && CALLBACK_IMAGES[step.required_flag]) return CALLBACK_IMAGES[step.required_flag];
+  const pool = [...(EVENT_IMAGES[step.event_type] ?? [])];
+  const riskVariant = EVENT_IMAGES_BY_RISK[step.event_type]?.[step.risk_level];
+  if (riskVariant) pool.push(riskVariant);
+  if (pool.length === 0) return "";
+  const idx = step.id.charCodeAt(0) % pool.length;
+  return pool[idx];
+}
 const STEP_RESULT_SUCCESS = "/step_success.png.webp";
 const STEP_RESULT_FAIL = "/step_fail.webp";
 const DEATH_SCREEN = "/death_screen.png";
@@ -60,6 +80,10 @@ const RETURN_WIPE = "/return_wipe.png";
 const CINEMATIC_TPK_IMG = "/cinematic_wipe.webp";
 const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde
 const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.png", "/cinematic_survive_bis.png"];
+const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
+const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
+const MARCHAND_ACHETE_IMGS = ["/marchand_protection_achetee.webp", "/marchand_protection_achetee_bis.webp"];
+const MARCHAND_REFUSE_IMG = "/marchand_protection_refusee.webp";
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
 const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
@@ -181,7 +205,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -511,6 +535,7 @@ function VotePage() {
       totalSoFar: Math.round(exp?.total_loot_earned ?? 0),
       xpAwarded: resolvedStep?.xp_awarded ?? 0,
       survivorNames,
+      resolutionType,
     });
   }
 
@@ -699,6 +724,12 @@ function VotePage() {
     let resultBg: string;
     if (result.iDied) {
       resultBg = DEATH_SCREEN;
+    } else if (result.resolutionType === "marchand_achete") {
+      resultBg = resultImageVariant < 0.5 ? MARCHAND_ACHETE_IMGS[0] : MARCHAND_ACHETE_IMGS[1];
+    } else if (result.resolutionType === "marchand_refuse") {
+      resultBg = MARCHAND_REFUSE_IMG;
+    } else if (result.resolutionType === "pillage") {
+      resultBg = result.deaths > 0 ? PILLAGE_FAIL_IMG : PILLAGE_SUCCESS_IMG;
     } else if (result.ended) {
       resultBg = isWipe ? CINEMATIC_TPK_IMG : result.deadNames.length > 0 ? RETURN_WIPE : RETURN_SUCCESS;
     } else if (result.deaths > 0) {
@@ -794,9 +825,7 @@ function VotePage() {
     );
   }
 
-  const eventBg = step
-    ? (step.id.charCodeAt(0) % 2 === 0 && EVENT_IMAGES_ALT[step.event_type]) || EVENT_IMAGES[step.event_type]
-    : null;
+  const eventBg = step ? pickEventBg(step) || null : null;
   const bgFilter = step?.risk_level === "eleve"
     ? "brightness(0.18) sepia(0.4)"
     : step?.risk_level === "moyen"
