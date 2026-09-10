@@ -146,7 +146,7 @@ function ShopContent({ character, error, busy, run, ink }: {
               <p className="text-[9px] mb-1 truncate" style={mutedStyle}>{p.label}</p>
               {owned ? (
                 <button disabled={active || busy === p.id}
-                  onClick={() => run(p.id, () => supabase.from("characters" as any).update({ portrait: p.id }).eq("id", character.id).select())}
+                  onClick={() => run(p.id, () => supabase.rpc("use_portrait" as any, { p_character_id: character.id, p_portrait_id: p.id }))}
                   className="w-full text-[9px] uppercase px-1 py-1 disabled:opacity-60"
                   style={active ? { border: "1px solid #2f7d4f80", color: "#2f7d4f" } : { border: `1px solid ${ink ? "#00000030" : "rgba(255,255,255,0.2)"}`, color: ink ? INK : undefined }}>
                   {active ? "Actif" : busy === p.id ? "…" : "Utiliser"}

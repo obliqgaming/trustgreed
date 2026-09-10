@@ -747,7 +747,8 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
     const { data: char, error: rpcError } = await supabase.rpc("create_character", { p_name: trimmedName });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
     if (char) {
-      await supabase.from("characters").update({ portrait }).eq("id", (char as any).id);
+      const { error: portraitError } = await supabase.rpc("use_portrait" as any, { p_character_id: (char as any).id, p_portrait_id: portrait });
+      if (portraitError) console.error("[portrait création]", portraitError.message);
       const { error: vocError } = await supabase.rpc("choose_vocation", { p_character_id: (char as any).id, p_vocation: vocation });
       if (vocError) { setError(vocError.message); setBusy(false); return; }
     }
