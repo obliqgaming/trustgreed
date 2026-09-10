@@ -274,7 +274,7 @@ function Index() {
 
             {/* Stats perso */}
             <div className="border border-border/60 p-3 mb-2 flex items-center gap-3">
-              <PortraitDisplay portraitId={character.portrait ?? "capuche"} size={56} />
+              <PortraitDisplay portraitId={character.portrait ?? "capuche"} size={72} />
               <div className="min-w-0 flex-1">
                 <div className="font-serif text-lg uppercase tracking-[0.08em] mb-0.5 text-primary truncate">{character.name}</div>
                 <div className="text-xs tracking-[0.1em] uppercase text-muted-foreground mb-2">

@@ -141,7 +141,7 @@ function ShopContent({ character, error, busy, run, ink }: {
           return (
             <div key={p.id} className={`border ${borderCls} p-1.5 text-center`} style={panelStyle}>
               <div className={`mb-1 ${owned ? "" : "opacity-40 grayscale"}`}>
-                <PortraitDisplay portraitId={p.id} size={56} />
+                <PortraitDisplay portraitId={p.id} size={64} />
               </div>
               <p className="text-[9px] mb-1 truncate" style={mutedStyle}>{p.label}</p>
               {owned ? (
