@@ -564,8 +564,11 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
       </div>
       {tab === "create" ? (
         <form onSubmit={createGuild} noValidate>
-          <div className="mb-3 border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/90">
-            ⚠ Une expédition demande au moins 3 membres. En fondant seul, il te faudra convaincre 2 autres aventuriers de te rejoindre avant de pouvoir partir. Si une guilde existe déjà (voir "Guildes actives" plus bas), envisage plutôt de la rejoindre.
+          <div className="mb-3 border-2 border-red-500/70 bg-red-500/10 px-3 py-3">
+            <p className="text-sm font-bold uppercase tracking-[0.1em] text-red-400 mb-1">⚠ Attention</p>
+            <p className="text-xs text-red-200/90">
+              Une expédition demande au moins 3 membres. En fondant seul, il te faudra convaincre 2 autres aventuriers de te rejoindre avant de pouvoir partir.
+            </p>
           </div>
           <Field label="Nom de la guilde" required value={guildName} onChange={(e) => setGuildName(e.target.value)} />
 
