@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { LedgerPage, LedgerCard, LedgerError, TextLink } from "@/components/ledger";
 import { PORTRAITS, PortraitDisplay } from "@/components/portraits";
 import { VOCATIONS } from "@/components/vocations";
+import { ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/boutique")({
   ssr: false,
@@ -48,11 +49,15 @@ function useShopState() {
 
   useEffect(() => { void load(); }, []);
 
-  async function run(id: string, fn: () => PromiseLike<{ error: any }>) {
+  async function run(id: string, fn: () => PromiseLike<{ error: any; data?: any }>) {
     setBusy(id); setError(null);
-    const { error: rpcError } = await fn();
+    const { error: rpcError, data } = await fn();
     if (rpcError) setError(rpcError.message);
-    else await load();
+    else if (Array.isArray(data) && data.length === 0) {
+      // La requête n'a levé aucune erreur mais n'a modifié aucune ligne —
+      // signe classique d'une policy RLS qui filtre la ligne en silence.
+      setError("Aucune ligne modifiée (policy RLS ?) — id " + id);
+    } else await load();
     setBusy(null);
   }
 
@@ -141,7 +146,7 @@ function ShopContent({ character, error, busy, run, ink }: {
               <p className="text-[9px] mb-1 truncate" style={mutedStyle}>{p.label}</p>
               {owned ? (
                 <button disabled={active || busy === p.id}
-                  onClick={() => run(p.id, () => supabase.from("characters" as any).update({ portrait: p.id }).eq("id", character.id))}
+                  onClick={() => run(p.id, () => supabase.from("characters" as any).update({ portrait: p.id }).eq("id", character.id).select())}
                   className="w-full text-[9px] uppercase px-1 py-1 disabled:opacity-60"
                   style={active ? { border: "1px solid #2f7d4f80", color: "#2f7d4f" } : { border: `1px solid ${ink ? "#00000030" : "rgba(255,255,255,0.2)"}`, color: ink ? INK : undefined }}>
                   {active ? "Actif" : busy === p.id ? "…" : "Utiliser"}
@@ -197,15 +202,13 @@ function BoutiquePage() {
           texte du cadre précédemment). */}
       <div className="hidden md:block w-full px-4 py-8" style={{ background: "#0d0c0a" }}>
         <div className="mx-auto w-full" style={{ maxWidth: 1800 }}>
-          <div className="flex justify-between mb-3">
-            <button onClick={() => navigate({ to: "/" })}
-              className="text-sm uppercase tracking-[0.1em] border border-primary/40 text-primary px-4 py-2 hover:bg-primary/10">
+          <div className="flex justify-between gap-3 mb-3">
+            <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="!py-2 text-sm">
               ← Ma guilde
-            </button>
-            <button onClick={() => navigate({ to: "/carte" })}
-              className="text-sm uppercase tracking-[0.1em] border border-primary/40 text-primary px-4 py-2 hover:bg-primary/10">
+            </ImmersiveButton>
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="!py-2 text-sm">
               Carte des guildes →
-            </button>
+            </ImmersiveButton>
           </div>
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
             <img src="/boutique_frame.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />

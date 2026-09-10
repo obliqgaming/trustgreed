@@ -9,6 +9,7 @@ import {
   TextLink,
 } from "@/components/ledger";
 import { ImmersiveButton } from "@/components/immersive";
+import { GuildChatBox } from "@/components/guildChat";
 
 export const Route = createFileRoute("/expedition")({
   ssr: false,
@@ -352,6 +353,12 @@ function ExpeditionPage() {
           </ul>
 
           <LedgerError message={error} />
+
+          {character?.guild_id && (
+            <div className="mb-4">
+              <GuildChatBox guildId={character.guild_id} characterId={character.id} />
+            </div>
+          )}
 
           {isParticipant && (
             <div className="mb-4 border border-border/30 px-3 py-3">

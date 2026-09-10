@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerPage } from "@/components/ledger";
 import { GuildBanner } from "@/components/banners";
+import { ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/carte")({
   ssr: false,
@@ -184,15 +185,13 @@ function CartePage() {
           </div>
           <div className="flex gap-3">
             {!myGuildId && (
-              <button onClick={() => navigate({ to: "/" })}
-                className="text-xs tracking-[0.12em] uppercase border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-colors">
+              <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/" })} className="!py-2 text-xs">
                 Rejoindre
-              </button>
+              </ImmersiveButton>
             )}
-            <button onClick={() => navigate({ to: "/" })}
-              className="text-xs tracking-[0.12em] uppercase text-muted-foreground hover:text-primary transition-colors">
+            <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="!py-2 text-xs">
               {myGuildId ? "Retour" : "Connexion"}
-            </button>
+            </ImmersiveButton>
           </div>
         </div>
 
