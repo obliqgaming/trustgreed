@@ -5,6 +5,8 @@ import { LedgerPage, LedgerCard, LedgerError, TextLink } from "@/components/ledg
 import { PORTRAITS, PortraitDisplay } from "@/components/portraits";
 import { VOCATIONS } from "@/components/vocations";
 import { ImmersiveButton } from "@/components/immersive";
+import { DecorativeBorder } from "@/components/frame";
+import fondwild from "@/assets/fondwild2.webp.asset.json";
 
 export const Route = createFileRoute("/boutique")({
   ssr: false,
@@ -200,13 +202,22 @@ function BoutiquePage() {
           inline direct, aucune classe Tailwind empilée avec !important qui
           pourrait échouer silencieusement (c'est ce qui faisait sortir le
           texte du cadre précédemment). */}
-      <div className="hidden md:block w-full px-4 py-8" style={{ background: "#0d0c0a" }}>
-        <div className="mx-auto w-full" style={{ maxWidth: 1800 }}>
+      <div
+        className="hidden md:block w-full px-4 py-8"
+        style={{
+          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(${fondwild.url})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundAttachment: "fixed",
+        }}
+      >
+        <div className="relative mx-auto w-full px-6 py-8" style={{ maxWidth: 1800 }}>
+          <DecorativeBorder variant="square" />
           <div className="flex justify-between gap-3 mb-3">
             <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="px-6 !py-3 text-sm">
               ← Ma guilde
             </ImmersiveButton>
-            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 text-sm">
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="pl-9 pr-6 !py-3 text-sm">
               Carte des guildes
             </ImmersiveButton>
           </div>

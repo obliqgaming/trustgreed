@@ -216,7 +216,7 @@ function Index() {
               <Coins size={16} />
               Boutique
             </ImmersiveButton>
-            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="pl-9 pr-6 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
               Carte des guildes
             </ImmersiveButton>
           </div>
