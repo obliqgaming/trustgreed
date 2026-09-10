@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null; personal_gold?: number };
+type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null; personal_gold?: number; portrait?: string | null };
 type Guild = { id: string; name: string; gold: number; founder_profile_id?: string; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
 type Member = { id: string; name: string; level: number; portrait?: string | null; last_seen_at?: string | null; declared_vocation?: string | null };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
@@ -67,7 +67,7 @@ function Index() {
     // identiques sur la même ligne)
     const [profileRes, charRes] = await Promise.all([
       supabase.from("profiles").select("id, is_admin").eq("id", session.user.id).maybeSingle(),
-      supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle(),
+      supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold, portrait").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle(),
     ]);
     setProfileMissing(!profileRes.data);
     setIsAdmin(!!profileRes.data?.is_admin);
@@ -212,15 +212,13 @@ function Index() {
             )}
           </div>
           <div className="flex-shrink-0 flex gap-2">
-            <button onClick={() => navigate({ to: "/boutique" })}
-              className="flex items-center gap-1.5 font-serif tracking-[0.12em] uppercase border-2 border-amber-500/50 text-amber-300 px-6 py-3 hover:bg-amber-500/10 hover:border-amber-400 transition-colors rounded-sm text-sm">
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/boutique" })} className="px-6 !py-3 flex items-center gap-1.5 text-sm">
               <Coins size={16} />
               Boutique
-            </button>
-            <button onClick={() => navigate({ to: "/carte" })}
-              className="font-serif tracking-[0.12em] uppercase border-2 border-primary/60 text-primary px-6 py-3 hover:bg-primary/10 hover:border-primary transition-colors rounded-sm text-sm shadow-[0_0_12px_rgba(201,162,75,0.15)]">
+            </ImmersiveButton>
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 text-sm">
               Carte des guildes →
-            </button>
+            </ImmersiveButton>
           </div>
         </div>
 
@@ -275,17 +273,20 @@ function Index() {
             )}
 
             {/* Stats perso */}
-            <div className="border border-border/60 p-3 mb-2">
-              <div className="font-serif text-lg uppercase tracking-[0.08em] mb-0.5 text-primary">{character.name}</div>
-              <div className="text-xs tracking-[0.1em] uppercase text-muted-foreground mb-2">
-                Niveau {character.level} · {getTitleForLevel(character.level)}
+            <div className="border border-border/60 p-3 mb-2 flex items-center gap-3">
+              <PortraitDisplay portraitId={character.portrait ?? "capuche"} size={56} />
+              <div className="min-w-0 flex-1">
+                <div className="font-serif text-lg uppercase tracking-[0.08em] mb-0.5 text-primary truncate">{character.name}</div>
+                <div className="text-xs tracking-[0.1em] uppercase text-muted-foreground mb-2">
+                  Niveau {character.level} · {getTitleForLevel(character.level)}
+                </div>
+                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary/70 rounded-full" style={{ width: `${Math.round(getTitleProgress(character.level) * 100)}%` }} />
+                </div>
+                {getNextTitleThreshold(character.level) !== null && (
+                  <div className="text-[10px] mt-1 text-muted-foreground">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
+                )}
               </div>
-              <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
-                <div className="h-full bg-primary/70 rounded-full" style={{ width: `${Math.round(getTitleProgress(character.level) * 100)}%` }} />
-              </div>
-              {getNextTitleThreshold(character.level) !== null && (
-                <div className="text-[10px] mt-1 text-muted-foreground">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
-              )}
             </div>
 
             <div className="w-full mb-4 flex items-center justify-between border border-amber-500/40 px-3 py-2">

@@ -185,11 +185,11 @@ function CartePage() {
           </div>
           <div className="flex gap-3">
             {!myGuildId && (
-              <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/" })} className="!py-2 text-xs">
+              <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/" })} className="px-5 !py-2.5 text-xs">
                 Rejoindre
               </ImmersiveButton>
             )}
-            <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="!py-2 text-xs">
+            <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="px-5 !py-2.5 text-xs">
               {myGuildId ? "Retour" : "Connexion"}
             </ImmersiveButton>
           </div>

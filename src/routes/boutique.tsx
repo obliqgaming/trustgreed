@@ -203,10 +203,10 @@ function BoutiquePage() {
       <div className="hidden md:block w-full px-4 py-8" style={{ background: "#0d0c0a" }}>
         <div className="mx-auto w-full" style={{ maxWidth: 1800 }}>
           <div className="flex justify-between gap-3 mb-3">
-            <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="!py-2 text-sm">
+            <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="px-6 !py-3 text-sm">
               ← Ma guilde
             </ImmersiveButton>
-            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="!py-2 text-sm">
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 text-sm">
               Carte des guildes →
             </ImmersiveButton>
           </div>
