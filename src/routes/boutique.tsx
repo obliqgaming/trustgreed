@@ -207,7 +207,7 @@ function BoutiquePage() {
               ← Ma guilde
             </ImmersiveButton>
             <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 text-sm">
-              Carte des guildes →
+              Carte des guildes
             </ImmersiveButton>
           </div>
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
