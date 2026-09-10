@@ -212,11 +212,11 @@ function Index() {
             )}
           </div>
           <div className="flex-shrink-0 flex gap-2">
-            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/boutique" })} className="px-6 !py-3 flex items-center gap-1.5 text-sm">
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/boutique" })} className="px-6 !py-3 shrink-0 inline-flex items-center justify-center gap-1.5 whitespace-nowrap text-sm">
               <Coins size={16} />
               Boutique
             </ImmersiveButton>
-            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 text-sm">
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="px-6 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
               Carte des guildes →
             </ImmersiveButton>
           </div>
