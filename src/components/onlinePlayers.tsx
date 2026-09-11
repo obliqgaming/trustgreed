@@ -87,7 +87,7 @@ export function OnlinePlayersPanel({ guildName, guildId }: { guildName?: string 
                   <span className={`h-1.5 w-1.5 rounded-full ${isOnline(p.last_seen_at) ? "bg-green-500" : "bg-muted-foreground/30"}`} aria-hidden />
                   {p.characterName ?? p.username}{p.id === myProfileId ? " (toi)" : ""}
                 </span>
-                {p.id !== myProfileId && !alreadyInMyGuild && (
+                {p.id !== myProfileId && !!guildId && !alreadyInMyGuild && (
                   <button
                     onClick={() => sendInvite(p.id)}
                     disabled={sendingTo === p.id}
