@@ -155,8 +155,8 @@ function VotePage() {
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
   const [revealingOutcome, setRevealingOutcome] = useState(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const resultImageVariant = useMemo(() => Math.random(), [result]);
+  // Déterministe à partir de l'id de l'étape (pas Math.random()) : tout le
+  // groupe doit voir exactement la même image de résultat, pas une par client.
   const finalizeAttemptedRef = useRef(false);
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -177,6 +177,16 @@ function VotePage() {
   const characterIdRef = useRef<string | null>(null);
   const stepIdRef = useRef<string | null>(null);
   const resultShownRef = useRef(false);
+
+  // Déterministe à partir de l'id de l'étape (pas Math.random()) : tout le
+  // groupe doit voir exactement la même image de résultat, pas une par client.
+  function hashToUnit(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+    return (h >>> 0) / 4294967295;
+  }
+  const resultImageVariant = useMemo(() => hashToUnit(stepIdRef.current ?? ""), [result]);
+
 
   // Charge participants avec leur statut vivant/mort en temps réel
   const fetchParticipants = useCallback(async () => {
@@ -521,7 +531,7 @@ function VotePage() {
     } else {
       cinematicText = getCinematic(eventType, deaths > 0 || myDied);
       const { data: interventionRows } = await supabase
-        .from("step_interventions").select("character:characters(name)").eq("step_id", stepId);
+        .from("step_interventions").select("character:characters(name)").eq("step_id", stepId).eq("action", "aide");
       const intervenerNames = (interventionRows as any[] ?? []).map(r => r.character?.name).filter(Boolean);
       if (intervenerNames.length > 0) {
         const names = intervenerNames.join(", ");
@@ -629,7 +639,7 @@ function VotePage() {
       setMySearched(!!mine && (mine as any).action === "fouille");
     }
     const { data: rows } = await supabase
-      .from("step_interventions").select("character:characters(name)").eq("step_id", step.id);
+      .from("step_interventions").select("character:characters(name)").eq("step_id", step.id).eq("action", "aide");
     setIntervenerNames((rows as any[] ?? []).map(r => r.character?.name).filter(Boolean));
   }, [step, expeditionId, character]);
 
@@ -741,17 +751,17 @@ function VotePage() {
                   : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour cette expédition)`}
               </button>
               <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-                Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
+                Réduit le risque de cette étape. Pool partagé avec "Fouiller" — une fois épuisé, il ne revient pas.
               </p>
 
               <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                className="w-full text-xs uppercase tracking-[0.12em] border border-amber-400/50 text-amber-300 px-3 py-3 mt-2 hover:bg-amber-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 mt-2 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                 {mySearched ? "Fouille déjà tentée sur cette étape"
                   : !interventionsRemaining ? "Plus d'intervention disponible"
-                  : searchBusy ? "…" : "Fouiller pour toi-même (consomme le même pool)"}
+                  : searchBusy ? "…" : "Fouiller pour toi-même"}
               </button>
               <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-                N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose. Prend le même slot que "Intervenir".
+                N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose (même ressource).
               </p>
               {searchResult && (
                 <p className={`text-xs text-center mt-2 ${searchResult.found ? "text-amber-300" : "text-muted-foreground"}`}>
@@ -1153,7 +1163,7 @@ function LarcenyButton({ expeditionId, character }: { expeditionId: string; char
 
   if (!confirm) return (
     <button onClick={() => setConfirm(true)}
-      className="w-full mt-2 text-xs uppercase tracking-[0.1em] text-muted-foreground/60 hover:text-amber-400 transition-colors">
+      className="w-full mt-2 text-xs uppercase tracking-[0.1em] border border-border/30 text-muted-foreground/70 px-3 py-2 hover:border-amber-500/40 hover:text-amber-400 transition-colors">
       Tenter un larcin (secret, une fois par expédition)
     </button>
   );
