@@ -3,7 +3,6 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerPage, LedgerCard, LedgerError } from "@/components/ledger";
 import { ImmersiveButton } from "@/components/immersive";
-import { DecorativeBorder } from "@/components/frame";
 import fondwild from "@/assets/fondwild2.webp.asset.json";
 
 export const Route = createFileRoute("/cabinet")({
@@ -205,7 +204,6 @@ function CabinetPage() {
 
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
             <img src="/cabinetcuriosite.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
-            <DecorativeBorder variant="square" />
 
             {/* Objets sur les étagères */}
             {inventory.slice(0, SHELF_SLOTS.length).map((item, i) => {
