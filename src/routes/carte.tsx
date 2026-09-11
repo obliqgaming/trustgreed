@@ -203,11 +203,17 @@ function CartePage() {
             const scale = TIER_SCALE[g.tier] ?? 1;
             const width = BASE_BUILDING_WIDTH * scale;
             const isMyGuild = g.id === myGuildId;
+            // Marge de 10% sur chaque bord : les positions brutes (0-1) sont
+            // resserrées vers le centre pour éviter que des guildes tombent
+            // dans l'eau ou trop près du cadre. Purement visuel, ne touche
+            // pas aux valeurs stockées en base.
+            const displayX = 0.1 + g.map_x * 0.8;
+            const displayY = 0.1 + g.map_y * 0.8;
             return (
               <div
                 key={g.id}
                 className="absolute flex flex-col items-center -translate-x-1/2 -translate-y-full"
-                style={{ left: `${g.map_x * 100}%`, top: `${g.map_y * 100}%` }}
+                style={{ left: `${displayX * 100}%`, top: `${displayY * 100}%` }}
                 title={`${g.name} — ${Math.round(g.gold)} or · #${g.rank}`}
               >
                 <div className="flex items-center gap-1 mb-0.5 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-sm whitespace-nowrap">

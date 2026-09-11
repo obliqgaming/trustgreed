@@ -219,6 +219,9 @@ function Index() {
             <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="pl-9 pr-6 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
               Carte des guildes
             </ImmersiveButton>
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/cabinet" })} className="px-6 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
+              Cabinet
+            </ImmersiveButton>
           </div>
         </div>
 
@@ -296,7 +299,7 @@ function Index() {
 
             {/* Vocation (petite carte compacte) */}
             {myVocation && (
-              <VocationPanel vocationId={myVocation} characterId={character.id} />
+              <VocationPanel vocationId={myVocation} characterId={character.id} declaredVocation={members.find(m => m.id === character.id)?.declared_vocation ?? null} />
             )}
 
             {/* Panneau admin : compagnons de test */}
@@ -961,18 +964,21 @@ function RetroVocationPicker({ characterId, onDone }: { characterId: string; onD
   );
 }
 
-function VocationPanel({ vocationId, characterId }: { vocationId: VocationId; characterId: string }) {
+function VocationPanel({ vocationId, characterId, declaredVocation }: { vocationId: VocationId; characterId: string; declaredVocation: VocationId | null }) {
   const [declaring, setDeclaring] = useState(false);
   const [lie, setLie] = useState<VocationId | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [currentDeclared, setCurrentDeclared] = useState<VocationId | null>(declaredVocation);
+
+  useEffect(() => { setCurrentDeclared(declaredVocation); }, [declaredVocation]);
 
   async function submitLie() {
     if (!lie) return;
     setError(null); setBusy(true);
     const { error: rpcError } = await supabase.rpc("declare_vocation", { p_character_id: characterId, p_declared_vocation: lie });
-    if (rpcError) setError(rpcError.message); else { setNotice("Vocation déclarée mise à jour."); setDeclaring(false); }
+    if (rpcError) setError(rpcError.message); else { setNotice("Vocation déclarée mise à jour."); setDeclaring(false); setCurrentDeclared(lie); }
     setBusy(false);
   }
 
@@ -984,6 +990,10 @@ function VocationPanel({ vocationId, characterId }: { vocationId: VocationId; ch
 
       {vocationId === "Traitre" && (
         <div className="mt-3 pt-3 border-t border-border/20">
+          <p className="text-xs text-muted-foreground mb-2">
+            Vocation actuellement déclarée publiquement : <span className="text-primary font-serif">{currentDeclared ? vocationLabel(currentDeclared) : vocationLabel(vocationId)}</span>
+            {currentDeclared && currentDeclared !== vocationId && <span className="text-amber-400"> (mensonge actif)</span>}
+          </p>
           {!declaring ? (
             <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-white/5">
               Mentir sur ma vocation déclarée
