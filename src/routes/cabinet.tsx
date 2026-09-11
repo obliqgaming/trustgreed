@@ -231,24 +231,26 @@ function CabinetPage() {
               <p className="text-[10px] uppercase tracking-[0.14em] text-primary/90 mb-1 bg-black/50 px-2 py-0.5 rounded-sm">
                 {selected.length}/3 sélectionnés
               </p>
-              <button
+              <ImmersiveButton
+                variant="clair"
                 onClick={combine}
                 disabled={selected.length !== 3 || busy}
-                className="text-xs uppercase tracking-[0.14em] px-4 py-2 border border-amber-400/70 text-amber-200 bg-black/50 hover:bg-amber-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-5 !py-2 text-xs"
               >
                 {busy ? "…" : "Tenter le procédé"}
-              </button>
+              </ImmersiveButton>
             </div>
 
             {/* La boîte aux lettres */}
             <div className="absolute flex flex-col items-center justify-end pb-2" style={MAILBOX_ZONE}>
-              <button
+              <ImmersiveButton
+                variant="clair"
                 onClick={claim}
                 disabled={claimedToday || busy}
-                className="text-xs uppercase tracking-[0.14em] px-4 py-2 border border-primary/60 text-primary bg-black/50 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="px-5 !py-2 text-xs"
               >
                 {claimedToday ? "Déjà réclamé" : busy ? "…" : "Réclamer"}
-              </button>
+              </ImmersiveButton>
             </div>
           </div>
 
@@ -262,13 +264,9 @@ function CabinetPage() {
         <LedgerPage maxWidthClass="max-w-2xl">
           <LedgerCard title="Cabinet de curiosités" subtitle={`${inventory.length} curiosité${inventory.length > 1 ? "s" : ""} en réserve`}>
             <img src="/cabinetcuriosite.webp" alt="" className="w-full rounded-sm mb-4 object-cover" style={{ maxHeight: 160 }} />
-            <button
-              onClick={claim}
-              disabled={claimedToday || busy}
-              className="w-full mb-4 text-xs uppercase tracking-[0.14em] border border-primary/60 text-primary px-4 py-2.5 hover:bg-primary/10 disabled:opacity-30"
-            >
+            <ImmersiveButton variant="clair" onClick={claim} disabled={claimedToday || busy} className="w-full mb-4 !py-2.5 text-xs">
               {claimedToday ? "Déjà réclamé aujourd'hui" : busy ? "…" : "Réclamer la curiosité du jour"}
-            </button>
+            </ImmersiveButton>
 
             <div className="grid grid-cols-4 gap-2 mb-4">
               {inventory.map((item) => {
@@ -289,13 +287,9 @@ function CabinetPage() {
               )}
             </div>
 
-            <button
-              onClick={combine}
-              disabled={selected.length !== 3 || busy}
-              className="w-full text-xs uppercase tracking-[0.14em] px-4 py-2.5 border border-amber-400/70 text-amber-200 hover:bg-amber-500/20 disabled:opacity-30"
-            >
+            <ImmersiveButton variant="clair" onClick={combine} disabled={selected.length !== 3 || busy} className="w-full !py-2.5 text-xs">
               {busy ? "…" : `Tenter le procédé (${selected.length}/3)`}
-            </button>
+            </ImmersiveButton>
 
             <LedgerError message={error} />
           </LedgerCard>
