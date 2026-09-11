@@ -603,7 +603,7 @@ function VotePage() {
     setInterventionBusy(false);
   }
 
-  async function useSearch() {
+  async function searchForCuriosity() {
     if (!step || !character || searchBusy) return;
     setSearchBusy(true); setError(null);
     const { data, error: rpcError } = await supabase.rpc("use_search" as any, { p_step_id: step.id, p_character_id: character.id });
@@ -744,7 +744,7 @@ function VotePage() {
                 Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
               </p>
 
-              <button onClick={useSearch} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+              <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
                 className="w-full text-xs uppercase tracking-[0.12em] border border-amber-400/50 text-amber-300 px-3 py-3 mt-2 hover:bg-amber-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
                 {mySearched ? "Fouille déjà tentée sur cette étape"
                   : !interventionsRemaining ? "Plus d'intervention disponible"
