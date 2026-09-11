@@ -148,6 +148,9 @@ function VotePage() {
   const [ackCount, setAckCount] = useState<{ done: number; total: number } | null>(null);
   const [interventionsRemaining, setInterventionsRemaining] = useState<number | null>(null);
   const [myIntervened, setMyIntervened] = useState(false);
+  const [mySearched, setMySearched] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchResult, setSearchResult] = useState<{ found: boolean; name?: string; flavor_text?: string } | null>(null);
   const [intervenerNames, setIntervenerNames] = useState<string[]>([]);
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
@@ -231,6 +234,8 @@ function VotePage() {
         resultShownRef.current = false;
         setInterventionsRemaining(null);
         setMyIntervened(false);
+        setMySearched(false);
+        setSearchResult(null);
         setGaugeWobble(50);
       } else {
         stepIdRef.current = data.id;
@@ -598,14 +603,30 @@ function VotePage() {
     setInterventionBusy(false);
   }
 
+  async function useSearch() {
+    if (!step || !character || searchBusy) return;
+    setSearchBusy(true); setError(null);
+    const { data, error: rpcError } = await supabase.rpc("use_search" as any, { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setError(rpcError.message);
+    else {
+      setMySearched(true);
+      const row = (data as any)?.[0];
+      setSearchResult(row ?? { found: false });
+      await refreshInterventionState();
+      soundRevealClick();
+    }
+    setSearchBusy(false);
+  }
+
   const refreshInterventionState = useCallback(async () => {
     if (!step) return;
     const { data: exp } = await supabase.from("expeditions").select("interventions_remaining").eq("id", expeditionId).maybeSingle();
     setInterventionsRemaining(exp?.interventions_remaining ?? null);
     if (character) {
       const { data: mine } = await supabase.from("step_interventions")
-        .select("character_id").eq("step_id", step.id).eq("character_id", character.id).maybeSingle();
-      setMyIntervened(!!mine);
+        .select("character_id, action").eq("step_id", step.id).eq("character_id", character.id).maybeSingle();
+      setMyIntervened(!!mine && (mine as any).action === "aide");
+      setMySearched(!!mine && (mine as any).action === "fouille");
     }
     const { data: rows } = await supabase
       .from("step_interventions").select("character:characters(name)").eq("step_id", step.id);
@@ -713,7 +734,7 @@ function VotePage() {
 
               <LedgerError message={error} />
 
-              <button onClick={useIntervention} disabled={interventionBusy || myIntervened || !interventionsRemaining}
+              <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
                 className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                 {myIntervened ? "Intervention déjà utilisée sur cette étape"
                   : !interventionsRemaining ? "Plus d'intervention disponible"
@@ -722,6 +743,21 @@ function VotePage() {
               <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
                 Réduit le risque de cette étape. Pool partagé par toute l'expédition — une fois épuisé, il ne revient pas.
               </p>
+
+              <button onClick={useSearch} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                className="w-full text-xs uppercase tracking-[0.12em] border border-amber-400/50 text-amber-300 px-3 py-3 mt-2 hover:bg-amber-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                {mySearched ? "Fouille déjà tentée sur cette étape"
+                  : !interventionsRemaining ? "Plus d'intervention disponible"
+                  : searchBusy ? "…" : "Fouiller pour toi-même (consomme le même pool)"}
+              </button>
+              <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+                N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose. Prend le même slot que "Intervenir".
+              </p>
+              {searchResult && (
+                <p className={`text-xs text-center mt-2 ${searchResult.found ? "text-amber-300" : "text-muted-foreground"}`}>
+                  {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
+                </p>
+              )}
               {intervenerNames.length > 0 && (
                 <p className="text-xs text-amber-400/90 text-center mt-2">
                   Intervenu·e{intervenerNames.length > 1 ? "s" : ""} sur cette étape : {intervenerNames.join(", ")}
