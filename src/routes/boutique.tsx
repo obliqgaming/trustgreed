@@ -218,7 +218,7 @@ function BoutiquePage() {
               ← Ma guilde
             </ImmersiveButton>
             <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="pl-9 pr-6 !py-3 text-sm">
-              Carte des guildes
+              Carte
             </ImmersiveButton>
           </div>
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
@@ -249,7 +249,7 @@ function BoutiquePage() {
             <ShopContent character={character} error={error} busy={busy} run={run} />
             <div className="flex gap-2 mt-2">
               <TextLink onClick={() => navigate({ to: "/" })} className="!mt-0">Ma guilde</TextLink>
-              <TextLink onClick={() => navigate({ to: "/carte" })} className="!mt-0">Carte des guildes</TextLink>
+              <TextLink onClick={() => navigate({ to: "/carte" })} className="!mt-0">Carte</TextLink>
             </div>
           </LedgerCard>
         </LedgerPage>
