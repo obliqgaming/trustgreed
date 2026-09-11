@@ -219,7 +219,18 @@ function BoutiquePage() {
               Carte
             </ImmersiveButton>
           </div>
-          <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
+          <div
+            style={{
+              position: "relative",
+              // Largeur bornée par la place horizontale ET par ce qui tient
+              // en hauteur — comme un object-fit: contain appliqué à tout
+              // le bloc (nav + cadre), pas juste à l'image. Évite le scroll
+              // vertical quel que soit le format de la fenêtre.
+              width: "min(100%, calc((100vh - 160px) * 1536 / 1024))",
+              aspectRatio: "1536 / 1024",
+              margin: "0 auto",
+            }}
+          >
             <img src="/boutique_frame.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
             <div
               className="absolute [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"

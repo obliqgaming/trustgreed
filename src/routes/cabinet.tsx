@@ -202,7 +202,14 @@ function CabinetPage() {
             </ImmersiveButton>
           </div>
 
-          <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
+          <div
+            style={{
+              position: "relative",
+              width: "min(100%, calc((100vh - 160px) * 1536 / 1024))",
+              aspectRatio: "1536 / 1024",
+              margin: "0 auto",
+            }}
+          >
             <img src="/cabinetcuriosite.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
 
             {/* Objets sur les étagères */}
