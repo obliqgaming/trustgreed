@@ -20,7 +20,7 @@ type Character = { id: string; name: string; level: number; guild_id: string | n
 type Expedition = { id: string; status: string; target_size: number; created_by_character_id: string; vote_window_seconds: number };
 
 const VOTE_WINDOW_LABEL: Record<number, string> = { 180: "3 min", 3600: "1h", 21600: "6h", 86400: "24h" };
-type Participant = { character_id: string; character: { name: string; level: number } };
+type Participant = { character_id: string; ready: boolean; character: { name: string; level: number } };
 
 const STAKES: { id: "forge" | "infirmerie" | "eclaireurs"; label: string; cost: number; description: string }[] = [
   { id: "forge", label: "Forge", cost: 4000, description: "+25% de butin sur toute l'expédition." },
@@ -38,6 +38,7 @@ function ExpeditionPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [readyBusy, setReadyBusy] = useState(false);
   const [guildGold, setGuildGold] = useState<number | null>(null);
   const [guildFounderId, setGuildFounderId] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
@@ -52,7 +53,7 @@ function ExpeditionPage() {
   const loadParticipants = useCallback(async (expeditionId: string) => {
     const { data } = await supabase
       .from("expedition_participants")
-      .select("character_id, character:characters(name, level)")
+      .select("character_id, ready, character:characters(name, level)")
       .eq("expedition_id", expeditionId);
     setParticipants((data as any) ?? []);
   }, []);
@@ -194,12 +195,23 @@ function ExpeditionPage() {
     setBusy(false);
   }
 
+  async function toggleReady(nextReady: boolean) {
+    if (!expedition || !character) return;
+    setError(null); setReadyBusy(true);
+    const { error: rpcError } = await supabase.rpc("set_expedition_ready" as any, {
+      p_expedition_id: expedition.id, p_character_id: character.id, p_ready: nextReady,
+    });
+    if (rpcError) setError(rpcError.message);
+    else await loadParticipants(expedition.id);
+    setReadyBusy(false);
+  }
+
   async function addBotToExpedition(botId: string) {
     if (!expedition) return;
     setBotAddBusy(botId); setError(null);
     const { error: insertError } = await supabase
       .from("expedition_participants")
-      .insert({ expedition_id: expedition.id, character_id: botId });
+      .insert({ expedition_id: expedition.id, character_id: botId, ready: true });
     if (insertError) setError(insertError.message);
     else {
       await loadParticipants(expedition.id);
@@ -268,7 +280,9 @@ function ExpeditionPage() {
 
   const isLeader = expedition?.created_by_character_id === character?.id;
   const isParticipant = participants.some((p) => p.character_id === character?.id);
-  const canStart = isLeader && participants.length >= 3;
+  const myParticipant = participants.find((p) => p.character_id === character?.id);
+  const allReady = participants.length > 0 && participants.every((p) => p.ready);
+  const canStart = isLeader && participants.length >= 3 && allReady;
   const isGuildFounder = !!myUserId && !!guildFounderId && myUserId === guildFounderId;
   const canCancel = isLeader || isGuildFounder;
 
@@ -342,15 +356,31 @@ function ExpeditionPage() {
           </div>
           <ul className="space-y-1 mb-4">
             {participants.map((p) => (
-              <li key={p.character_id} className={`flex justify-between px-3 py-2 text-sm border ${p.character_id === character?.id ? "border-primary/60 text-primary" : "border-border/30"}`}>
+              <li key={p.character_id} className={`flex justify-between items-center px-3 py-2 text-sm border ${p.character_id === character?.id ? "border-primary/60 text-primary" : "border-border/30"}`}>
                 <span>{(p.character as any)?.name ?? "—"}{p.character_id === character?.id ? " (toi)" : ""}</span>
-                <span className="font-mono text-xs text-muted-foreground">niv. {(p.character as any)?.level}</span>
+                <span className="flex items-center gap-2">
+                  <span className={`text-[10px] uppercase tracking-[0.1em] ${p.ready ? "text-green-400" : "text-muted-foreground/50"}`}>
+                    {p.ready ? "✓ Prêt" : "En attente"}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">niv. {(p.character as any)?.level}</span>
+                </span>
               </li>
             ))}
             {Array.from({ length: Math.max(0, expedition.target_size - participants.length) }).map((_, i) => (
               <li key={`empty-${i}`} className="px-3 py-2 text-sm border border-border/20 text-muted-foreground/40 italic">En attente…</li>
             ))}
           </ul>
+
+          {isParticipant && (
+            <ImmersiveButton
+              variant={myParticipant?.ready ? "sombre" : "clair"}
+              onClick={() => toggleReady(!myParticipant?.ready)}
+              disabled={readyBusy}
+              className="w-full mb-4 !py-2.5 text-sm"
+            >
+              {myParticipant?.ready ? "Annuler — je ne suis plus prêt" : "Je suis prêt"}
+            </ImmersiveButton>
+          )}
 
           <LedgerError message={error} />
 
@@ -414,7 +444,7 @@ function ExpeditionPage() {
           )}
           {isLeader && (
             <ImmersiveButton variant="clair" onClick={startExpedition} disabled={!canStart || busy} className="mt-3 w-full">
-              {canStart ? "Lancer l'expédition" : `En attente (${participants.length}/3 min.)`}
+              {participants.length < 3 ? `En attente (${participants.length}/3 min.)` : !allReady ? "En attente que tout le monde soit prêt" : "Lancer l'expédition"}
             </ImmersiveButton>
           )}
           {canCancel && !confirmCancel && (
