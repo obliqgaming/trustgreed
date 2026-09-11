@@ -212,7 +212,6 @@ function BoutiquePage() {
         }}
       >
         <div className="relative mx-auto w-full px-6 py-8" style={{ maxWidth: 1800 }}>
-          <DecorativeBorder variant="square" />
           <div className="flex justify-between gap-3 mb-3">
             <ImmersiveButton variant="sombre" onClick={() => navigate({ to: "/" })} className="px-6 !py-3 text-sm">
               ← Ma guilde
@@ -223,6 +222,7 @@ function BoutiquePage() {
           </div>
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
             <img src="/boutique_frame.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
+            <DecorativeBorder variant="square" />
             <div
               className="absolute [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               style={{

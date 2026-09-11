@@ -3,6 +3,8 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerPage, LedgerCard, LedgerError } from "@/components/ledger";
 import { ImmersiveButton } from "@/components/immersive";
+import { DecorativeBorder } from "@/components/frame";
+import fondwild from "@/assets/fondwild2.webp.asset.json";
 
 export const Route = createFileRoute("/cabinet")({
   ssr: false,
@@ -185,7 +187,15 @@ function CabinetPage() {
       {result && <ResultOverlay result={result} effectImg={effectImg} onClose={closeResult} />}
 
       {/* Bureau */}
-      <div className="hidden md:block w-full px-4 py-8" style={{ background: "#0d0c0a" }}>
+      <div
+        className="hidden md:block w-full px-4 py-8"
+        style={{
+          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(${fondwild.url})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundAttachment: "fixed",
+        }}
+      >
         <div className="mx-auto w-full" style={{ maxWidth: 1800 }}>
           <div className="flex justify-between gap-3 mb-3">
             <ImmersiveButton variant="sombre" onClick={() => state.navigate({ to: "/" })} className="px-6 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
@@ -195,6 +205,7 @@ function CabinetPage() {
 
           <div style={{ position: "relative", width: "100%", aspectRatio: "1536 / 1024" }}>
             <img src="/cabinetcuriosite.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
+            <DecorativeBorder variant="square" />
 
             {/* Objets sur les étagères */}
             {inventory.slice(0, SHELF_SLOTS.length).map((item, i) => {
