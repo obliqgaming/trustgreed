@@ -230,11 +230,11 @@ function BoutiquePage() {
               margin: "0 auto",
             }}
           >
-            <img src="/boutique_frame.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
+            <img src="/boutique_frame.webp" alt="" className="absolute pointer-events-none select-none" style={{ top: "4%", left: "4%", right: "4%", bottom: "4%", width: "92%", height: "92%", objectFit: "fill" }} />
             <div
               className="absolute [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
               style={{
-                top: "29%", right: "22%", bottom: "19%", left: "34%",
+                top: "30.68%", right: "24.24%", bottom: "21.48%", left: "35.28%",
                 overflowY: "auto", overflowX: "hidden", padding: "12px",
               }}
             >

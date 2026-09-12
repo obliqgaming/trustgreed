@@ -26,23 +26,23 @@ type CombineResult = { tier: "banal" | "inhabituel" | "incroyable"; result_label
 // méthode que les coordonnées % de la Boutique).
 const SHELF_SLOTS: { left: string; top: string; width: string; height: string }[] = [
   // Étagère du haut (5)
-  { left: "27.0%", top: "16.5%", width: "7.3%", height: "10.6%" },
-  { left: "37.1%", top: "18.1%", width: "7.0%", height: "9.0%" },
-  { left: "46.8%", top: "17.5%", width: "5.0%", height: "7.4%" },
-  { left: "56.8%", top: "17.5%", width: "5.0%", height: "7.4%" },
-  { left: "63.5%", top: "18.1%", width: "5.0%", height: "7.4%" },
+  { left: "28.84%", top: "19.18%", width: "6.72%", height: "9.75%" },
+  { left: "38.13%", top: "20.65%", width: "6.44%", height: "8.28%" },
+  { left: "47.06%", top: "20.1%", width: "4.6%", height: "6.81%" },
+  { left: "56.26%", top: "20.1%", width: "4.6%", height: "6.81%" },
+  { left: "62.42%", top: "20.65%", width: "4.6%", height: "6.81%" },
   // Étagère du milieu (3)
-  { left: "29.7%", top: "30.3%", width: "7.3%", height: "8.0%" },
-  { left: "44.1%", top: "30.8%", width: "5.0%", height: "6.9%" },
-  { left: "53.4%", top: "31.4%", width: "7.3%", height: "6.9%" },
+  { left: "31.32%", top: "31.88%", width: "6.72%", height: "7.36%" },
+  { left: "44.57%", top: "32.34%", width: "4.6%", height: "6.35%" },
+  { left: "53.13%", top: "32.89%", width: "6.72%", height: "6.35%" },
   // Étagère du bas (3)
-  { left: "30.1%", top: "41.4%", width: "6.3%", height: "8.0%" },
-  { left: "41.4%", top: "42.0%", width: "4.7%", height: "6.9%" },
-  { left: "51.4%", top: "42.5%", width: "5.0%", height: "5.8%" },
+  { left: "31.69%", top: "42.09%", width: "5.8%", height: "7.36%" },
+  { left: "42.09%", top: "42.64%", width: "4.32%", height: "6.35%" },
+  { left: "51.29%", top: "43.1%", width: "4.6%", height: "5.34%" },
 ];
 
-const CAULDRON_ZONE = { left: "8.7%", top: "60%", width: "30%", height: "36.7%" };
-const MAILBOX_ZONE = { left: "72.1%", top: "62.2%", width: "16.7%", height: "21.8%" };
+const CAULDRON_ZONE = { left: "12.0%", top: "59.2%", width: "27.6%", height: "33.76%" };
+const MAILBOX_ZONE = { left: "70.33%", top: "61.22%", width: "15.36%", height: "20.06%" };
 
 const TIER_EFFECTS: Record<CombineResult["tier"], string[]> = {
   banal: ["/effets_revelation/banal_1.png", "/effets_revelation/banal_2.png", "/effets_revelation/banal_3.png"],
@@ -209,7 +209,7 @@ function CabinetPage() {
               margin: "0 auto",
             }}
           >
-            <img src="/cabinetcuriosite.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
+            <img src="/cabinetcuriosite.webp" alt="" className="absolute pointer-events-none select-none" style={{ top: "4%", left: "4%", right: "4%", bottom: "4%", width: "92%", height: "92%", objectFit: "fill" }} />
 
             {/* Objets sur les étagères */}
             {inventory.slice(0, SHELF_SLOTS.length).map((item, i) => {
