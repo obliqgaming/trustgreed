@@ -186,9 +186,9 @@ function CabinetPage() {
 
       {/* Bureau */}
       <div
-        className="hidden md:block w-full px-4 py-8"
+        className="hidden md:flex md:flex-col md:justify-center w-full min-h-screen px-4 py-8"
         style={{
-          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(/fondcabinet.webp)`,
+          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(/fondpourdeux.webp)`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundAttachment: "fixed",
