@@ -131,6 +131,7 @@ function ExpeditionPage() {
 
       // Poll de 8 secondes — fallback si Realtime manque un participant
       pollInterval = setInterval(async () => {
+        await loadParticipants(exp.id);
         const fresh = await loadExpedition(char.guild_id!);
         if (fresh?.status === "active") {
           navigate({ to: "/vote", search: { expedition: fresh.id } });

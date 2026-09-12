@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { LedgerCard, LedgerError, LedgerPage } from "@/components/ledger";
+import { LedgerCard, LedgerError, LedgerPage, TextLink } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
@@ -135,6 +135,7 @@ function VotePage() {
   const { expedition: expeditionId } = useSearch({ from: "/vote" });
 
   const [character, setCharacter] = useState<Character | null>(null);
+  const [myDeathScreen, setMyDeathScreen] = useState(false);
   const [step, setStep] = useState<Step | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [votedIds, setVotedIds] = useState<string[]>([]);
@@ -328,9 +329,15 @@ function VotePage() {
       if (!session) { navigate({ to: "/" }); return; }
 
       const { data: char } = await supabase
-        .from("characters").select("id, name, guild_id")
-        .eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle();
+        .from("characters").select("id, name, guild_id, is_alive, died_in_expedition_id")
+        .eq("profile_id", session.user.id).eq("is_bot", false)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (!char) { navigate({ to: "/" }); return; }
+      if (!char.is_alive) {
+        setMyDeathScreen(char.died_in_expedition_id === expeditionId);
+        if (char.died_in_expedition_id !== expeditionId) { navigate({ to: "/" }); return; }
+        return;
+      }
       setCharacter(char);
       characterIdRef.current = char.id;
 
@@ -687,6 +694,18 @@ function VotePage() {
   useEffect(() => { if (allVoted && !prevAllVoted.current) soundAllVoted(); prevAllVoted.current = allVoted; }, [allVoted]);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
+  if (myDeathScreen) {
+    return (
+      <LedgerPage>
+        <LedgerCard title="Tu es mort">
+          <p className="text-sm text-muted-foreground mb-4">
+            Ton personnage n'a pas survécu à cette expédition. Le reste du groupe continue sans toi.
+          </p>
+          <TextLink onClick={() => navigate({ to: "/" })}>Retour à ta guilde</TextLink>
+        </LedgerCard>
+      </LedgerPage>
+    );
+  }
   if (!ready) return <LedgerPage><p className="text-center text-sm text-muted-foreground">Chargement…</p></LedgerPage>;
 
   const eventBg = step ? pickEventBg(step) || null : null;
@@ -1065,6 +1084,7 @@ function VotePage() {
                 {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
               </button>
             )}
+            <ChatBox expeditionId={expeditionId} character={character} />
             <div className="relative mt-4 pt-8 px-6 pb-6">
               <DecorativeBorder variant="wide" />
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
@@ -1117,7 +1137,6 @@ function VotePage() {
                 ))}
               </ul>
             </div>
-            <ChatBox expeditionId={expeditionId} character={character} />
           </>
         )}
       </LedgerCard>
