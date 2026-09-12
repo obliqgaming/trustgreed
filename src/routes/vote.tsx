@@ -99,7 +99,7 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
     die: ["Le piège se déclenche avant que quiconque ait pu réagir.", "Le coffre était piégé. Quelqu'un l'a appris trop tard.", "Un mécanisme invisible. Une fraction de seconde. Trop tard."],
   },
   gardien: {
-    survive: ["Le combat est court. Brutal. Le groupe continue, essoufflé.", "Il tombe. Vous passez. On ne regarde pas en arrière.", "Il n'était pas seul. Mais vous, si. Vous repartez quand même."],
+    survive: ["Le combat est court. Brutal. Le groupe continue, essoufflé.", "Il tombe. Vous passez. On ne regarde pas en arrière.", "Il n'était pas seul — ses gardes tombent avec lui. Vous repartez quand même."],
     die: ["Le gardien était plus rapide qu'il n'en avait l'air.", "La formation s'effondre. L'un d'eux ne se relève pas.", "Il n'a fallu qu'une ouverture. Une seule."],
   },
   passage: {
@@ -137,6 +137,7 @@ function VotePage() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [myDeathScreen, setMyDeathScreen] = useState(false);
   const [step, setStep] = useState<Step | null>(null);
+  const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
@@ -359,7 +360,18 @@ function VotePage() {
       if (!partCheck) { navigate({ to: "/" }); return; }
 
       await fetchParticipants();
-      const currentStep = await fetchStep();
+      let currentStep = await fetchStep();
+      // Course possible : la page peut se monter une fraction de seconde
+      // avant que generate_next_step (déclenché par "Lancer") n'ait fini
+      // d'écrire l'étape 1. Deux relances rapprochées avant de retomber sur
+      // le poll normal de 5s, plutôt que de laisser l'écran bloqué.
+      if (!currentStep) {
+        for (const delay of [800, 1600]) {
+          await new Promise(r => setTimeout(r, delay));
+          currentStep = await fetchStep();
+          if (currentStep) break;
+        }
+      }
       if (currentStep) stepIdRef.current = currentStep.id;
       setReady(true);
       startPoll();
@@ -445,7 +457,7 @@ function VotePage() {
       p_caller_character_id: character.id, p_target_character_id: targetId,
     });
     if (rpcError) setVocationError(rpcError.message);
-    else setInspectResult({ id: targetId, honest: !!data });
+    else { setInspectResult({ id: targetId, honest: !!data }); setUsedAbilities(prev => new Set(prev).add("inquisiteur_inspect")); }
     setVocationBusy(null);
   }
 
@@ -595,9 +607,12 @@ function VotePage() {
     if (bs) {
       setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec sa fenêtre pleine
       if (bs.resolved) {
-        // Tout le monde a voté rentrer : résolu instantanément côté serveur, aucune jauge.
+        // Résolu instantanément côté serveur (rentrer, ignorer, interpreter,
+        // marchand_ward...), aucune jauge. was_retreat distingue le vrai
+        // retour des autres issues instantanées — ne jamais le déduire du
+        // simple fait que resolved soit déjà true.
         resultShownRef.current = true;
-        await showStepResult(bs.id, bs.event_type, bs.deaths_count, true);
+        await showStepResult(bs.id, bs.event_type, bs.deaths_count, !!bs.was_retreat);
       }
     }
     setBusy(false);
@@ -666,9 +681,37 @@ function VotePage() {
   // Participants vivants = ceux qui comptent pour le vote
   const aliveParticipants = participants.filter(p => p.is_alive);
   const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
+
+  // Totaux affichés avant de voter : or de guilde déjà engrangé cette
+  // expédition, et XP déjà gagnée. Pas d'or personnel affiché ici — sous le
+  // système actuel, il n'est versé qu'en une fois au retour, donc on montre
+  // plutôt une projection ("si tu rentres maintenant").
+  useEffect(() => {
+    if (!step || step.resolving || step.resolved) return;
+    void (async () => {
+      const [{ data: exp }, { data: steps }] = await Promise.all([
+        supabase.from("expeditions").select("total_loot_earned").eq("id", expeditionId).maybeSingle(),
+        supabase.from("expedition_steps").select("xp_awarded").eq("expedition_id", expeditionId),
+      ]);
+      const xp = (steps ?? []).reduce((sum: number, s: any) => sum + (s.xp_awarded ?? 0), 0);
+      setRunningTotals({ guildGold: Math.round(exp?.total_loot_earned ?? 0), xp });
+    })();
+  }, [step?.id, step?.resolving, step?.resolved, expeditionId]);
   const deadlineExpired = timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !step.resolving && !busy;
   const prevAllVoted = useRef(false);
+  const autoResolveAttempted = useRef<string | null>(null);
+
+  // Dès que tout le monde a voté (ou le délai passé), on résout tout seul —
+  // plus besoin qu'un joueur clique "Révéler le résultat" pour faire avancer
+  // les autres. Un seul appel par étape (peu importe qui a le focus quand ça
+  // se déclenche, begin_resolution est sans danger si appelée en double).
+  useEffect(() => {
+    if (!canResolve || !step) return;
+    if (autoResolveAttempted.current === step.id) return;
+    autoResolveAttempted.current = step.id;
+    void resolveStep();
+  }, [canResolve, step]);
 
   // Pendant l'écran de résultat (hors fin d'expédition / mort perso), affiche
   // en direct combien de joueurs ont déjà validé pour passer à la suite.
@@ -942,6 +985,13 @@ function VotePage() {
               </span>
             </Frame>
 
+            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
+              ⚠ Risque {RISK_LABEL[step.risk_level]}
+              <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
+              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
+              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort exact — connu de toi seul)</span>}
+            </p>
+
             {step.description && (
               <Frame variant="journal" contentClassName="!items-center !justify-center" className="mb-4">
                 <div className="text-center">
@@ -965,12 +1015,6 @@ function VotePage() {
                 {timeLeft !== null ? fmt(timeLeft) : "—"}
               </span>
             </div>
-            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
-              ⚠ Risque {RISK_LABEL[step.risk_level]}
-              <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
-              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
-              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort exact — connu de toi seul)</span>}
-            </p>
 
             {/* Pouvoirs de vocation actifs pendant le vote */}
             {myVocation && !myVote && (
@@ -1029,6 +1073,12 @@ function VotePage() {
 
             {!myVote ? (
               <div className="mb-4">
+                {runningTotals && (
+                  <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
+                    <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
+                    <p className="text-[10px] opacity-70">Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.round(runningTotals.guildGold * 0.01)} or.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy}>
                     Continuer
@@ -1071,10 +1121,10 @@ function VotePage() {
               </div>
             </div>
             <LedgerError message={error} />
-            {canResolve && (
+            {canResolve && error && (
               <button onClick={resolveStep} disabled={busy}
                 className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
-                {busy ? "Résolution…" : "Révéler le résultat"}
+                {busy ? "Résolution…" : "Réessayer"}
               </button>
             )}
             <LarcenyButton expeditionId={expeditionId} character={character} />
@@ -1121,7 +1171,7 @@ function VotePage() {
                         <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
                           {inspectResult.honest ? "Honnête" : "Traître"}
                         </span>
-                      ) : (
+                      ) : usedAbilities.has("inquisiteur_inspect") ? null : (
                         <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
                           className="text-[10px] uppercase tracking-[0.08em] border border-border/40 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
                           {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}

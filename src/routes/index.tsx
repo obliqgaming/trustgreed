@@ -146,7 +146,11 @@ function Index() {
       .on("postgres_changes", { event: "*", schema: "public", table: "guild_history_events", filter: `guild_id=eq.${guild.id}` }, () => void refresh())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "guilds", filter: `id=eq.${guild.id}` }, () => void refresh())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    // Poll de secours toutes les 10s : Realtime peut manquer un événement
+    // silencieusement (coupure de websocket sans reconnexion visible), ce
+    // qui laissait une salle d'attente déjà ouverte invisible sans F5.
+    const pollFallback = setInterval(() => void refresh(), 10000);
+    return () => { supabase.removeChannel(channel); clearInterval(pollFallback); };
   }, [guild?.id, refresh]);
 
   useEffect(() => { void refresh(); }, [refresh]);

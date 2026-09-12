@@ -175,12 +175,9 @@ function ExpeditionPage() {
       p_guild_id: character.guild_id,
       p_character_id: character.id,
       p_target_size: targetSize,
+      p_vote_window_seconds: voteWindow,
     });
     if (rpcError) { setError(rpcError.message); setBusy(false); return; }
-    const expId = (data as any).id;
-    // Sauvegarder la durée choisie
-    await supabase.from("expeditions").update({ vote_window_seconds: voteWindow }).eq("id", expId);
-    await supabase.from("expedition_participants").insert({ expedition_id: expId, character_id: character.id });
     await loadExpedition(character.guild_id);
     setBusy(false);
   }
