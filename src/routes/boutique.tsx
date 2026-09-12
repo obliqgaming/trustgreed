@@ -5,7 +5,6 @@ import { LedgerPage, LedgerCard, LedgerError, TextLink } from "@/components/ledg
 import { PORTRAITS, PortraitDisplay } from "@/components/portraits";
 import { VOCATIONS } from "@/components/vocations";
 import { ImmersiveButton } from "@/components/immersive";
-import fondwild from "@/assets/fondwild2.webp.asset.json";
 
 export const Route = createFileRoute("/boutique")({
   ssr: false,
@@ -204,7 +203,7 @@ function BoutiquePage() {
       <div
         className="hidden md:block w-full px-4 py-8"
         style={{
-          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(${fondwild.url})`,
+          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(/fondboutique.webp)`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundAttachment: "fixed",

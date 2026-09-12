@@ -3,7 +3,6 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LedgerPage, LedgerCard, LedgerError } from "@/components/ledger";
 import { ImmersiveButton } from "@/components/immersive";
-import fondwild from "@/assets/fondwild2.webp.asset.json";
 
 export const Route = createFileRoute("/cabinet")({
   ssr: false,
@@ -189,7 +188,7 @@ function CabinetPage() {
       <div
         className="hidden md:block w-full px-4 py-8"
         style={{
-          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(${fondwild.url})`,
+          backgroundImage: `linear-gradient(rgba(13,12,10,0.55), rgba(13,12,10,0.7)), url(/fondcabinet.webp)`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundAttachment: "fixed",
