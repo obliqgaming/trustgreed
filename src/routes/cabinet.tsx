@@ -267,6 +267,7 @@ function CabinetPage() {
                 {claimedToday ? "Déjà réclamé" : busy ? "…" : "Réclamer"}
               </ImmersiveButton>
             </div>
+            <img src="/cadre_ornemental.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
           </div>
 
           <LedgerError message={error} />

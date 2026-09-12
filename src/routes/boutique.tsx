@@ -244,6 +244,7 @@ function BoutiquePage() {
               </div>
               <ShopContent character={character} error={error} busy={busy} run={run} ink />
             </div>
+            <img src="/cadre_ornemental.webp" alt="" className="absolute inset-0 w-full h-full pointer-events-none select-none" style={{ objectFit: "fill" }} />
           </div>
         </div>
       </div>
