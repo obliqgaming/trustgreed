@@ -168,6 +168,7 @@ function VotePage() {
   const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
   const [visibleRisk, setVisibleRisk] = useState<number | null>(null);
   const [myPrivateRisk, setMyPrivateRisk] = useState<number | null>(null);
+  const [hasRiskReserveEffect, setHasRiskReserveEffect] = useState(false);
   const [vocationBusy, setVocationBusy] = useState<string | null>(null);
   const [vocationError, setVocationError] = useState<string | null>(null);
   const [inspectTarget, setInspectTarget] = useState<string | null>(null);
@@ -413,9 +414,27 @@ function VotePage() {
     setVocationError(null); setVocationBusy("reveal");
     const { data, error: rpcError } = await supabase.rpc("reveal_risk", { p_step_id: step.id, p_character_id: character.id });
     if (rpcError) setVocationError(rpcError.message);
-    else { setUsedAbilities(prev => new Set(prev).add("eclaireur_reveal")); setMyPrivateRisk(data as number); }
+    else {
+      if (myVocation === "Eclaireur") setUsedAbilities(prev => new Set(prev).add("eclaireur_reveal"));
+      setMyPrivateRisk(data as number);
+      void refreshRiskReserveEffect();
+    }
     setVocationBusy(null);
   }
+
+  const refreshRiskReserveEffect = useCallback(async () => {
+    if (!character) return;
+    const { data } = await supabase
+      .from("character_reserve_effects")
+      .select("id")
+      .eq("character_id", character.id)
+      .in("effect_type", ["oeil_ouvert", "oeil_trouble"])
+      .is("consumed_at", null)
+      .limit(1);
+    setHasRiskReserveEffect((data ?? []).length > 0);
+  }, [character]);
+
+  useEffect(() => { void refreshRiskReserveEffect(); }, [refreshRiskReserveEffect]);
 
   async function useMartyr() {
     if (!step || !character) return;
@@ -1018,7 +1037,7 @@ function VotePage() {
               ⚠ Risque {RISK_LABEL[step.risk_level]}
               <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
               {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
-              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort exact — connu de toi seul)</span>}
+              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort — connu de toi seul)</span>}
             </p>
 
             {step.description && (
@@ -1048,10 +1067,10 @@ function VotePage() {
             {/* Pouvoirs de vocation actifs pendant le vote */}
             {myVocation && !myVote && (
               <div className="mb-4 space-y-2">
-                {myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") && (
+                {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
                   <button onClick={useReveal} disabled={vocationBusy === "reveal"}
                     className="w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-2 hover:bg-primary/10 disabled:opacity-30">
-                    {vocationBusy === "reveal" ? "…" : "Révéler le risque exact (à toi seul)"}
+                    {vocationBusy === "reveal" ? "…" : "Révéler le risque (à toi seul)"}
                   </button>
                 )}
                 {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
