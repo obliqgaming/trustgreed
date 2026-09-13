@@ -136,6 +136,7 @@ function VotePage() {
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [myDeathScreen, setMyDeathScreen] = useState(false);
+  const [myDeathInheritance, setMyDeathInheritance] = useState<number>(0);
   const [step, setStep] = useState<Step | null>(null);
   const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -337,6 +338,8 @@ function VotePage() {
       if (!char.is_alive) {
         setMyDeathScreen(char.died_in_expedition_id === expeditionId);
         if (char.died_in_expedition_id !== expeditionId) { navigate({ to: "/" }); return; }
+        const { data: profileRow } = await supabase.from("profiles").select("banked_gold").eq("id", session.user.id).maybeSingle();
+        setMyDeathInheritance(Math.round((profileRow as any)?.banked_gold ?? 0));
         return;
       }
       setCharacter(char);
@@ -508,6 +511,13 @@ function VotePage() {
       const { data: charData } = await supabase
         .from("characters").select("is_alive").eq("id", character.id).maybeSingle();
       myDied = !!charData && !charData.is_alive;
+      if (myDied) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: profileRow } = await supabase.from("profiles").select("banked_gold").eq("id", session.user.id).maybeSingle();
+          setMyDeathInheritance(Math.round((profileRow as any)?.banked_gold ?? 0));
+        }
+      }
     }
 
     const { data: exp } = await supabase
@@ -752,6 +762,11 @@ function VotePage() {
           <p className="text-sm text-muted-foreground mb-4">
             Ton personnage n'a pas survécu à cette expédition. Le reste du groupe continue sans toi.
           </p>
+          {myDeathInheritance > 0 && (
+            <p className="text-sm text-primary mb-4">
+              Il laisse un héritage : ton prochain personnage commencera avec <span className="font-mono">{myDeathInheritance} or</span> personnel.
+            </p>
+          )}
           <TextLink onClick={() => navigate({ to: "/" })}>Retour à ta guilde</TextLink>
         </LedgerCard>
       </LedgerPage>
@@ -933,6 +948,11 @@ function VotePage() {
               <p className="text-sm text-red-400/80 leading-relaxed">
                 Le sort t'a désigné. Ton histoire s'arrête ici. Ton nom restera dans l'historique de la guilde.
               </p>
+              {myDeathInheritance > 0 && (
+                <p className="text-sm text-primary mt-2">
+                  Il laisse un héritage : ton prochain personnage commencera avec <span className="font-mono">{myDeathInheritance} or</span> personnel.
+                </p>
+              )}
             </div>
           )}
 

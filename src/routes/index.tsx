@@ -724,6 +724,7 @@ function CreateProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
 
 function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [hasDied, setHasDied] = useState<boolean | null>(null);
+  const [inheritedGold, setInheritedGold] = useState<number>(0);
   const [name, setName] = useState("");
   const [portrait, setPortrait] = useState("ombre");
   const [vocation, setVocation] = useState<VocationId | null>(null);
@@ -744,6 +745,8 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
         .limit(1)
         .maybeSingle();
       setHasDied(!!data);
+      const { data: profileRow } = await supabase.from("profiles").select("banked_gold").eq("id", session.user.id).maybeSingle();
+      setInheritedGold(Math.round((profileRow as any)?.banked_gold ?? 0));
     })();
   }, []);
 
@@ -775,6 +778,11 @@ function CreateOrReviveScreen({ onDone }: { onDone: () => Promise<void> }) {
       {hasDied && (
         <div className="mb-4 px-3 py-3 border border-red-400/30 text-xs text-red-400/70">
           Ton personnage ne reviendra pas. Tu peux en créer un nouveau et rejoindre ou fonder une nouvelle guilde.
+        </div>
+      )}
+      {inheritedGold > 0 && (
+        <div className="mb-4 px-3 py-3 border border-primary/30 bg-primary/5 text-xs text-primary">
+          Ton personnage précédent laisse un héritage : ce nouveau personnage commencera avec <span className="font-mono">{inheritedGold} or</span> personnel.
         </div>
       )}
       <form onSubmit={submit} noValidate>
