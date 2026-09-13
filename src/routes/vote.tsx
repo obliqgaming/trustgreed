@@ -99,7 +99,7 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
     die: ["Le piège se déclenche avant que quiconque ait pu réagir.", "Le coffre était piégé. Quelqu'un l'a appris trop tard.", "Un mécanisme invisible. Une fraction de seconde. Trop tard."],
   },
   gardien: {
-    survive: ["Le combat est court. Brutal. Le groupe continue, essoufflé.", "Il tombe. Vous passez. On ne regarde pas en arrière.", "Il n'était pas seul — ses gardes tombent avec lui. Vous repartez quand même."],
+    survive: ["Le combat est court. Brutal. Le groupe continue, essoufflé.", "Il tombe. Vous passez. On ne regarde pas en arrière.", "Il n'était pas seul : ses gardes tombent aussi. Vous repartez quand même."],
     die: ["Le gardien était plus rapide qu'il n'en avait l'air.", "La formation s'effondre. L'un d'eux ne se relève pas.", "Il n'a fallu qu'une ouverture. Une seule."],
   },
   passage: {
