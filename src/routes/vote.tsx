@@ -520,25 +520,25 @@ function VotePage() {
     } else if (resolutionType === "ignorer") {
       cinematicText = "Vous laissez le coffre fermé, tel que vous l'avez trouvé. Ce qu'il contenait reste un mystère.";
     } else if (resolutionType === "interpreter") {
-      cinematicText = "Votre Éclaireur lit les traces sans l'ombre d'un doute. La voie est sûre — mais elle ne mène à rien de plus que la sécurité elle-même.";
+      cinematicText = "Votre Éclaireur lit les traces sans l'ombre d'un doute. La voie est sûre, mais elle ne mène à rien de plus que la sécurité elle-même.";
     } else if (resolutionType === "martyr_provocation") {
       cinematicText = deaths > 0 || myDied
-        ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué — mais ce silence a un prix."
+        ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué, mais ce silence a un prix."
         : "Un seul d'entre vous s'est avancé pour réveiller le gardien, et l'a emporté. Le reste du groupe passe sans une égratignure.";
     } else if (resolutionType === "payer_passage") {
-      cinematicText = "La guilde paie sans discuter. Le passage s'ouvre, tranquille — et le butin, lui, reste entier.";
+      cinematicText = "La guilde paie sans discuter. Le passage s'ouvre, tranquille, et le butin reste entier.";
     } else if (resolutionType === "marchand_achete") {
       cinematicText = "Le marchand empoche son dû et vous glisse une amulette froide. « Ça tiendra deux étapes. Pas une de plus. »";
     } else if (resolutionType === "marchand_refuse") {
       cinematicText = "La guilde n'a pas les moyens. Le marchand hausse les épaules et vous regarde partir sans un mot.";
     } else if (resolutionType === "pillage") {
       cinematicText = deaths > 0 || myDied
-        ? "La tentative tourne mal — ça se débat, ça crie, et le prix à payer n'est pas seulement en or."
+        ? "La tentative tourne mal : ça se débat, ça crie, et le prix à payer n'est pas seulement en or."
         : "L'affaire est vite faite. Vous repartez plus riches, et un peu plus lourds sur la conscience.";
     } else if (resolutionType === "discretion") {
       cinematicText = deaths > 0 || myDied
-        ? "Le gardien remue dans son sommeil — trop tard pour reculer. La discrétion ne suffit plus."
-        : "Vous passez presque sans un bruit, laissant le gardien à son sommeil. Prudent — mais les mains vides.";
+        ? "Le gardien remue dans son sommeil, trop tard pour reculer. La discrétion ne suffit plus."
+        : "Vous passez presque sans un bruit, laissant le gardien à son sommeil. Prudent, mais les mains vides.";
     } else if (resolutionType === "couper_terrain") {
       cinematicText = deaths > 0 || myDied
         ? "Le raccourci se referme mal sur vous. Le terrain ne pardonne pas l'impatience."
@@ -546,7 +546,7 @@ function VotePage() {
     } else if (resolutionType === "etudier") {
       cinematicText = deaths > 0 || myDied
         ? "Vous auriez dû laisser ça tranquille. Ce que vous avez réveillé en l'étudiant ne se rendort pas si facilement."
-        : "L'examen minutieux paie — ce que vous avez trouvé valait plus que ce qu'un simple coup d'œil aurait laissé croire.";
+        : "L'examen minutieux paie : ce que vous avez trouvé valait plus que ce qu'un simple coup d'œil aurait laissé croire.";
     } else {
       cinematicText = getCinematic(eventType, deaths > 0 || myDied);
       const { data: interventionRows } = await supabase
@@ -1225,7 +1225,7 @@ function LarcenyButton({ expeditionId, character }: { expeditionId: string; char
   if (result) {
     return (
       <p className={`text-xs text-center mt-2 ${result.success ? "text-amber-400" : "text-red-400"}`}>
-        {result.success ? `Larcin réussi — +${Math.round(result.amount)} or personnel, en silence.` : "Larcin raté — la guilde le sait maintenant."}
+        {result.success ? `Larcin réussi, +${Math.round(result.amount)} or personnel, en silence.` : "Larcin raté : la guilde le sait maintenant."}
       </p>
     );
   }
