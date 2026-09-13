@@ -382,6 +382,47 @@ function ExpeditionPage() {
 
           <LedgerError message={error} />
 
+          {isLeader && (
+            <ImmersiveButton variant="clair" onClick={startExpedition} disabled={!canStart || busy} className="mt-3 w-full">
+              {participants.length < 3 ? `En attente (${participants.length}/3 min.)` : !allReady ? "En attente que tout le monde soit prêt" : "Lancer l'expédition"}
+            </ImmersiveButton>
+          )}
+          {canCancel && !confirmCancel && (
+            <button onClick={() => setConfirmCancel(true)} disabled={busy}
+              className="mt-2 w-full text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5">
+              Annuler l'expédition{isGuildFounder && !isLeader ? " (en tant que fondateur)" : ""}
+            </button>
+          )}
+          {canCancel && confirmCancel && (
+            <div className="mt-2 border border-red-400/30 px-3 py-2">
+              <p className="text-xs text-red-400/70 mb-2">
+                {stakes.length > 0
+                  ? `Les mises engagées (${stakes.reduce((sum, s) => sum + s.cost, 0)} or) seront intégralement remboursées à la guilde. Cette action est irréversible.`
+                  : "Cette action est irréversible."}
+              </p>
+              <div className="flex gap-2">
+                <button onClick={cancelExpedition} disabled={busy}
+                  className="flex-1 text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
+                  {busy ? "Annulation…" : "Confirmer"}
+                </button>
+                <button onClick={() => setConfirmCancel(false)} disabled={busy}
+                  className="flex-1 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground py-1.5 hover:bg-border/10">
+                  Retour
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isLeader && isParticipant && (
+            <div className="mt-3 text-center">
+              <p className="text-xs text-muted-foreground mb-2">En attente que le chef lance l'expédition. Les autres membres de ta guilde peuvent encore rejoindre depuis leur page guilde.</p>
+              <button onClick={leaveExpedition} disabled={busy}
+                className="text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5 disabled:opacity-30">
+                {busy ? "…" : "Quitter l'expédition"}
+              </button>
+            </div>
+          )}
+
           {character?.guild_id && (
             <div className="mb-4">
               <GuildChatBox guildId={character.guild_id} characterId={character.id} />
@@ -439,46 +480,6 @@ function ExpeditionPage() {
               className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
               {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
             </button>
-          )}
-          {isLeader && (
-            <ImmersiveButton variant="clair" onClick={startExpedition} disabled={!canStart || busy} className="mt-3 w-full">
-              {participants.length < 3 ? `En attente (${participants.length}/3 min.)` : !allReady ? "En attente que tout le monde soit prêt" : "Lancer l'expédition"}
-            </ImmersiveButton>
-          )}
-          {canCancel && !confirmCancel && (
-            <button onClick={() => setConfirmCancel(true)} disabled={busy}
-              className="mt-2 w-full text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5">
-              Annuler l'expédition{isGuildFounder && !isLeader ? " (en tant que fondateur)" : ""}
-            </button>
-          )}
-          {canCancel && confirmCancel && (
-            <div className="mt-2 border border-red-400/30 px-3 py-2">
-              <p className="text-xs text-red-400/70 mb-2">
-                {stakes.length > 0
-                  ? `Les mises engagées (${stakes.reduce((sum, s) => sum + s.cost, 0)} or) seront intégralement remboursées à la guilde. Cette action est irréversible.`
-                  : "Cette action est irréversible."}
-              </p>
-              <div className="flex gap-2">
-                <button onClick={cancelExpedition} disabled={busy}
-                  className="flex-1 text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
-                  {busy ? "Annulation…" : "Confirmer"}
-                </button>
-                <button onClick={() => setConfirmCancel(false)} disabled={busy}
-                  className="flex-1 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground py-1.5 hover:bg-border/10">
-                  Retour
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!isLeader && isParticipant && (
-            <div className="mt-3 text-center">
-              <p className="text-xs text-muted-foreground mb-2">En attente que le chef lance l'expédition. Les autres membres de ta guilde peuvent encore rejoindre depuis leur page guilde.</p>
-              <button onClick={leaveExpedition} disabled={busy}
-                className="text-xs uppercase tracking-[0.1em] border border-red-400/30 text-red-400/70 hover:text-red-400 hover:border-red-400/50 transition-colors px-3 py-1.5 disabled:opacity-30">
-                {busy ? "…" : "Quitter l'expédition"}
-              </button>
-            </div>
           )}
 
           <TextLink onClick={() => navigate({ to: "/" })}>Retour à la guilde</TextLink>

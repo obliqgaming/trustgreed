@@ -119,7 +119,7 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
     die: ["L'objet n'était pas aussi inerte qu'il en avait l'air.", "Une dernière protection veillait encore sur la trouvaille.", "Ce qu'on a dérangé en le touchant ne l'était plus."],
   },
   traces: {
-    survive: ["Le groupe comprend ce qui s'est passé ici, et avance quand même.", "On ne s'attarde pas sur ce qu'on devine. On continue.", "Les traces racontent une histoire. Ce n'est pas la vôtre. Pas encore."],
+    survive: ["Le groupe ne comprend pas ce qui s'est passé ici, et avance quand même.", "On ne s'attarde pas sur ce qu'on devine. On continue.", "Les traces racontent une histoire. Ce n'est pas la vôtre. Pas encore."],
     die: ["Ce qui a laissé ces traces n'était pas parti bien loin.", "L'histoire que racontaient les traces vient de rattraper le groupe.", "Ceux qui étaient passés avant n'avaient pas eu de chance non plus. Vous non plus."],
   },
 };
@@ -516,7 +516,7 @@ function VotePage() {
 
     let cinematicText: string;
     if (isRetreat) {
-      cinematicText = "Pris·es d'un élan de sagesse, vous décidez de rentrer à la guilde.";
+      cinematicText = "Pris d'un élan de sagesse, vous décidez de rentrer à la guilde.";
     } else if (resolutionType === "ignorer") {
       cinematicText = "Vous laissez le coffre fermé, tel que vous l'avez trouvé. Ce qu'il contenait reste un mystère.";
     } else if (resolutionType === "interpreter") {
@@ -706,12 +706,20 @@ function VotePage() {
   // plus besoin qu'un joueur clique "Révéler le résultat" pour faire avancer
   // les autres. Un seul appel par étape (peu importe qui a le focus quand ça
   // se déclenche, begin_resolution est sans danger si appelée en double).
+  // Petit délai de sécurité quand c'est le décompte qui expire (pas un vote
+  // complet) : l'horloge du client peut arriver à 0 une fraction de seconde
+  // avant celle du serveur, ce qui fait échouer la première tentative avec
+  // "la fenêtre de vote n'est pas encore écoulée".
   useEffect(() => {
     if (!canResolve || !step) return;
     if (autoResolveAttempted.current === step.id) return;
     autoResolveAttempted.current = step.id;
-    void resolveStep();
-  }, [canResolve, step]);
+    if (allVoted) {
+      void resolveStep();
+    } else {
+      setTimeout(() => void resolveStep(), 1500);
+    }
+  }, [canResolve, step, allVoted]);
 
   // Pendant l'écran de résultat (hors fin d'expédition / mort perso), affiche
   // en direct combien de joueurs ont déjà validé pour passer à la suite.
@@ -816,20 +824,21 @@ function VotePage() {
                 Réduit le risque de cette étape. Pool partagé avec "Fouiller" — une fois épuisé, il ne revient pas.
               </p>
 
-              <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 mt-2 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                {mySearched ? "Fouille déjà tentée sur cette étape"
-                  : !interventionsRemaining ? "Plus d'intervention disponible"
-                  : searchBusy ? "…" : "Fouiller pour toi-même"}
-              </button>
+              {mySearched && searchResult ? (
+                <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 mt-2 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
+                  {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
+                </p>
+              ) : (
+                <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                  className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 mt-2 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                  {mySearched ? "Fouille déjà tentée sur cette étape"
+                    : !interventionsRemaining ? "Plus d'intervention disponible"
+                    : searchBusy ? "…" : "Fouiller pour toi-même"}
+                </button>
+              )}
               <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
                 N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose (même ressource).
               </p>
-              {searchResult && (
-                <p className={`text-xs text-center mt-2 ${searchResult.found ? "text-amber-300" : "text-muted-foreground"}`}>
-                  {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
-                </p>
-              )}
               {intervenerNames.length > 0 && (
                 <p className="text-xs text-amber-400/90 text-center mt-2">
                   Intervenu·e{intervenerNames.length > 1 ? "s" : ""} sur cette étape : {intervenerNames.join(", ")}
@@ -979,13 +988,13 @@ function VotePage() {
       <LedgerCard>
         {step && !step.resolved && (
           <>
-            <Frame variant="bar" className="mb-4">
+            <Frame variant="bar" className="mb-2">
               <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold">
                 Étape {step.step_number} — {step.event_type}
               </span>
             </Frame>
 
-            <p className={`text-sm font-semibold mb-4 ${RISK_COLOR[step.risk_level]}`}>
+            <p className={`text-sm font-semibold mb-4 text-center ${RISK_COLOR[step.risk_level]}`}>
               ⚠ Risque {RISK_LABEL[step.risk_level]}
               <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
               {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
@@ -1080,10 +1089,10 @@ function VotePage() {
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
-                  <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy}>
+                  <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired}>
                     Continuer
                   </ImmersiveButton>
-                  <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy}>
+                  <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired}>
                     Rentrer
                   </ImmersiveButton>
                 </div>
@@ -1093,7 +1102,7 @@ function VotePage() {
                       {step.third_option_label} — réservé à un personnage {vocationLabel(step.required_vocation)}
                     </p>
                   ) : (
-                    <button onClick={() => castVote("troisieme")} disabled={busy}
+                    <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
                       className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
                       {step.third_option_label}
                       {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
