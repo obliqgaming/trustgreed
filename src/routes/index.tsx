@@ -300,6 +300,8 @@ function Index() {
               <span className="font-mono text-sm text-amber-300">{Math.round(character.personal_gold ?? 0)}</span>
             </div>
 
+            <ReserveEffectsPanel characterId={character.id} />
+
             {/* Vocation (petite carte compacte) */}
             {myVocation && (
               <VocationPanel vocationId={myVocation} characterId={character.id} declaredVocation={members.find(m => m.id === character.id)?.declared_vocation ?? null} />
@@ -971,6 +973,42 @@ function RetroVocationPicker({ characterId, onDone }: { characterId: string; onD
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+function ReserveEffectsPanel({ characterId }: { characterId: string }) {
+  const [effects, setEffects] = useState<{ id: string; effect_type: string; magnitude: number }[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("character_reserve_effects")
+        .select("id, effect_type, magnitude")
+        .eq("character_id", characterId)
+        .is("consumed_at", null);
+      setEffects((data as any) ?? []);
+    })();
+  }, [characterId]);
+
+  if (effects.length === 0) return null;
+
+  const LABELS: Record<string, (m: number) => string> = {
+    fortune_charognard: (m) => `Fortune du charognard : +${m}% de butin sur ta prochaine expédition`,
+    sursis: (m) => `Sursis : -${m}% de risque supplémentaire sur ton prochain jet de mort`,
+    oeil_ouvert: () => `Œil ouvert : le risque exact de ta prochaine étape te sera révélé`,
+    oeil_trouble: (m) => `Lueur trouble : une estimation approximative (±${m}%) de ta prochaine étape`,
+    legs_renforce: (m) => `Legs renforcé : +${m}% d'or personnel gardé si tu meurs à ta prochaine expédition`,
+  };
+
+  return (
+    <div className="w-full mb-4 border border-primary/30 bg-primary/5 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-primary/80 mb-1.5">Effets en réserve, à consommer lors de ta prochaine expédition</p>
+      {effects.map((e) => (
+        <p key={e.id} className="text-xs text-muted-foreground">
+          {(LABELS[e.effect_type] ?? (() => e.effect_type))(e.magnitude)}
+        </p>
+      ))}
     </div>
   );
 }
