@@ -105,12 +105,16 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
     die: ["Le gardien était plus rapide qu'il n'en avait l'air.", "La formation s'effondre. L'un d'eux ne se relève pas.", "Il n'a fallu qu'une ouverture. Une seule."],
   },
   passage: {
-    survive: ["Le passage est étroit, instable. Vous traversez. Tous.", "Le vide en dessous. Les mains qui s'agrippent. Ça tient.", "De l'autre côté, enfin. Le groupe reprend son souffle."],
-    die: ["Une planche cède. Un cri. Puis le silence.", "Le passage ne tenait qu'à un fil. Ce fil a rompu.", "On n'entend rien après la chute. On continue."],
+    survive: ["Le passage est étroit, instable. Vous traversez. Tous.", "Le vide en dessous. Les mains qui s'agrippent. Ça tient.", "De l'autre côté, enfin. Le groupe reprend son souffle.", "Un pas après l'autre, sans un mot. Personne ne regarde en bas.", "Le sol tient bon, contre toute attente. Vous êtes déjà loin quand vous osez y repenser."],
+    die: ["Une planche cède. Un cri. Puis le silence.", "Le passage ne tenait qu'à un fil. Ce fil a rompu.", "On n'entend rien après la chute. On continue.", "Le sol s'est dérobé sans prévenir. Trop tard pour rattraper qui que ce soit."],
   },
   porte: {
-    survive: ["La porte s'ouvre. Ce qu'il y a derrière valait le détour.", "Le verrou saute. La pièce est vide, sauf pour ce qu'on cherchait.", "On passe. La porte se referme derrière. On ne reviendra pas."],
+    survive: ["La porte s'ouvre. Ce qu'il y a derrière valait le détour.", "Le verrou cède après une lutte. Derrière, rien qui ne bouge plus.", "On passe. La porte se referme derrière. On ne reviendra pas."],
     die: ["Ce qui était derrière la porte n'attendait que ça.", "La porte s'est ouverte. Elle n'aurait pas dû.", "On pensait savoir. On avait tort."],
+  },
+  marchand: {
+    survive: ["Le marchand plie boutique aussi vite qu'il l'avait montée. L'échange s'est fait sans encombre.", "Quelques mots, un prix juste. Le marchand disparaît déjà dans l'ombre du couloir.", "Rien à redire sur cette rencontre. Le groupe reprend sa route, un peu plus léger en bourse."],
+    die: ["Le marchand n'en était pas un : des brigands l'utilisaient comme appât. Le groupe l'apprend à ses dépens.", "L'échange tourne mal. Des lames sortent de l'ombre avant que quiconque comprenne pourquoi.", "Le marchand recule d'un pas et siffle. Ses complices n'attendaient que ça."],
   },
   rencontre: {
     survive: ["L'inconnu s'efface, vous laisse passer. Personne ne baisse sa garde pour autant.", "On échange peu de mots. Ça suffit. Chacun repart de son côté.", "La rencontre se termine sans heurt. Un soulagement qu'on n'ose pas montrer."],
@@ -126,10 +130,17 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
   },
 };
 
+const lastCinematicIndex: Record<string, number> = {};
 function getCinematic(eventType: string, hasDeath: boolean): string {
   const options = CINEMATICS[eventType] ?? CINEMATICS.passage;
   const pool = hasDeath ? options.die : options.survive;
-  return pool[Math.floor(Math.random() * pool.length)];
+  const key = `${eventType}:${hasDeath}`;
+  let idx = Math.floor(Math.random() * pool.length);
+  if (pool.length > 1 && idx === lastCinematicIndex[key]) {
+    idx = (idx + 1) % pool.length;
+  }
+  lastCinematicIndex[key] = idx;
+  return pool[idx];
 }
 
 function VotePage() {
@@ -139,6 +150,7 @@ function VotePage() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [myDeathScreen, setMyDeathScreen] = useState(false);
   const [myDeathInheritance, setMyDeathInheritance] = useState<number>(0);
+  const [myDeathDetails, setMyDeathDetails] = useState<{ level: number; goldLost: number; highestStep: number | null; damageTaken: number } | null>(null);
   const [step, setStep] = useState<Step | null>(null);
   const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -225,6 +237,27 @@ function VotePage() {
     setParticipants(enriched);
     return enriched;
   }, [expeditionId]);
+
+  const fetchDeathDetails = useCallback(async (charId: string) => {
+    const { data: charRow } = await supabase
+      .from("characters")
+      .select("level, gold_lost_at_death, died_in_step_id, died_in_step:expedition_steps(step_number)")
+      .eq("id", charId).maybeSingle();
+    if (!charRow) return;
+    const highestStep = (charRow as any).died_in_step?.step_number ?? null;
+    let damageTaken = 0;
+    if ((charRow as any).died_in_step_id) {
+      const { data: dmgRow } = await supabase
+        .from("step_damage_log").select("damage").eq("step_id", (charRow as any).died_in_step_id).eq("character_id", charId).maybeSingle();
+      damageTaken = (dmgRow as any)?.damage ?? 0;
+    }
+    setMyDeathDetails({
+      level: (charRow as any).level ?? 1,
+      goldLost: Math.round((charRow as any).gold_lost_at_death ?? 0),
+      highestStep,
+      damageTaken,
+    });
+  }, []);
 
   const fetchFrontlineVotes = useCallback(async (stepId: string) => {
     const { data } = await supabase.from("step_frontline_votes").select("voter_character_id, target_character_id").eq("step_id", stepId);
@@ -398,6 +431,7 @@ function VotePage() {
         if (char.died_in_expedition_id !== expeditionId) { navigate({ to: "/" }); return; }
         const { data: profileRow } = await supabase.from("profiles").select("banked_gold").eq("id", session.user.id).maybeSingle();
         setMyDeathInheritance(Math.round((profileRow as any)?.banked_gold ?? 0));
+        void fetchDeathDetails(char.id);
         return;
       }
       setCharacter(char);
@@ -606,12 +640,18 @@ function VotePage() {
           const { data: profileRow } = await supabase.from("profiles").select("banked_gold").eq("id", session.user.id).maybeSingle();
           setMyDeathInheritance(Math.round((profileRow as any)?.banked_gold ?? 0));
         }
+        void fetchDeathDetails(character.id);
       }
     }
 
     const { data: exp } = await supabase
       .from("expeditions").select("status, total_loot_kept, total_loot_earned").eq("id", expeditionId).maybeSingle();
     const ended = exp?.status === "completed";
+
+    const { data: dmgRows } = await supabase
+      .from("step_damage_log").select("damage, character_id, character:characters(name)").eq("step_id", stepId).order("damage", { ascending: false });
+    const damageLog = ((dmgRows as any[]) ?? []).map((r) => ({ name: r.character?.name ?? "?", characterId: r.character_id, damage: r.damage })).filter((r) => r.damage > 0);
+    const wentWrong = deaths > 0 || myDied || damageLog.length > 0;
 
     let cinematicText: string;
     if (isRetreat) {
@@ -621,7 +661,7 @@ function VotePage() {
     } else if (resolutionType === "interpreter") {
       cinematicText = "Votre Éclaireur lit les traces sans l'ombre d'un doute. La voie est sûre, mais elle ne mène à rien de plus que la sécurité elle-même.";
     } else if (resolutionType === "martyr_provocation") {
-      cinematicText = deaths > 0 || myDied
+      cinematicText = wentWrong
         ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué, mais ce silence a un prix."
         : "Un seul d'entre vous s'est avancé pour réveiller le gardien, et l'a emporté. Le reste du groupe passe sans une égratignure.";
     } else if (resolutionType === "payer_passage") {
@@ -631,23 +671,23 @@ function VotePage() {
     } else if (resolutionType === "marchand_refuse") {
       cinematicText = "La guilde n'a pas les moyens. Le marchand hausse les épaules et vous regarde partir sans un mot.";
     } else if (resolutionType === "pillage") {
-      cinematicText = deaths > 0 || myDied
+      cinematicText = wentWrong
         ? "La tentative tourne mal : ça se débat, ça crie, et le prix à payer n'est pas seulement en or."
         : "L'affaire est vite faite. Vous repartez plus riches, et un peu plus lourds sur la conscience.";
     } else if (resolutionType === "discretion") {
-      cinematicText = deaths > 0 || myDied
+      cinematicText = wentWrong
         ? "Le gardien remue dans son sommeil, trop tard pour reculer. La discrétion ne suffit plus."
         : "Vous passez presque sans un bruit, laissant le gardien à son sommeil. Prudent, mais les mains vides.";
     } else if (resolutionType === "couper_terrain") {
-      cinematicText = deaths > 0 || myDied
+      cinematicText = wentWrong
         ? "Le raccourci se referme mal sur vous. Le terrain ne pardonne pas l'impatience."
         : "Le détour paie : vous coupez à travers l'accidenté et ressortez plus loin, plus vite, plus riches.";
     } else if (resolutionType === "etudier") {
-      cinematicText = deaths > 0 || myDied
+      cinematicText = wentWrong
         ? "Vous auriez dû laisser ça tranquille. Ce que vous avez réveillé en l'étudiant ne se rendort pas si facilement."
         : "L'examen minutieux paie : ce que vous avez trouvé valait plus que ce qu'un simple coup d'œil aurait laissé croire.";
     } else {
-      cinematicText = getCinematic(eventType, deaths > 0 || myDied);
+      cinematicText = getCinematic(eventType, wentWrong);
       const { data: interventionRows } = await supabase
         .from("step_interventions").select("character:characters(name)").eq("step_id", stepId).eq("action", "aide");
       const intervenerNames = (interventionRows as any[] ?? []).map(r => r.character?.name).filter(Boolean);
@@ -667,10 +707,6 @@ function VotePage() {
     else soundSurvived();
 
     if (ended && pollRef.current) clearInterval(pollRef.current);
-
-    const { data: dmgRows } = await supabase
-      .from("step_damage_log").select("damage, character_id, character:characters(name)").eq("step_id", stepId).order("damage", { ascending: false });
-    const damageLog = ((dmgRows as any[]) ?? []).map((r) => ({ name: r.character?.name ?? "?", characterId: r.character_id, damage: r.damage })).filter((r) => r.damage > 0);
 
     // Narration de la désignation "pousser devant" : qui a poussé qui, et ce que ça a donné.
     const nameById = new Map(participants.map((p) => [p.character_id, (p.character as any)?.name ?? "?"]));
@@ -913,10 +949,25 @@ function VotePage() {
   if (myDeathScreen) {
     return (
       <LedgerPage>
+        <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: `url(${DEATH_SCREEN})`, backgroundSize: "cover", backgroundPosition: "center", filter: "brightness(0.3)" }} />
         <LedgerCard title="Tu es mort">
           <p className="text-sm text-muted-foreground mb-4">
             Ton personnage n'a pas survécu à cette expédition. Le reste du groupe continue sans toi.
           </p>
+          {myDeathDetails && (
+            <div className="mb-4 px-3 py-3 border border-border/30 text-xs text-muted-foreground space-y-1">
+              <p>Niveau atteint : <span className="font-mono text-foreground">{myDeathDetails.level}</span></p>
+              {myDeathDetails.highestStep !== null && (
+                <p>Étape la plus haute atteinte : <span className="font-mono text-foreground">{myDeathDetails.highestStep}</span></p>
+              )}
+              {myDeathDetails.damageTaken > 0 && (
+                <p>Dégâts fatals : <span className="font-mono text-red-400">{myDeathDetails.damageTaken}</span></p>
+              )}
+              {myDeathDetails.goldLost > 0 && (
+                <p>Or personnel perdu : <span className="font-mono text-amber-400">{myDeathDetails.goldLost}</span></p>
+              )}
+            </div>
+          )}
           {myDeathInheritance > 0 && (
             <p className="text-sm text-primary mb-4">
               Il laisse un héritage : ton prochain personnage commencera avec <span className="font-mono">{myDeathInheritance} or</span> personnel.
@@ -1153,6 +1204,20 @@ function VotePage() {
               <p className="text-sm text-red-400/80 leading-relaxed">
                 Le sort t'a désigné. Ton histoire s'arrête ici. Ton nom restera dans l'historique de la guilde.
               </p>
+              {myDeathDetails && (
+                <div className="mt-3 pt-3 border-t border-red-400/20 text-xs text-muted-foreground space-y-1">
+                  <p>Niveau atteint : <span className="font-mono text-foreground">{myDeathDetails.level}</span></p>
+                  {myDeathDetails.highestStep !== null && (
+                    <p>Étape la plus haute atteinte : <span className="font-mono text-foreground">{myDeathDetails.highestStep}</span></p>
+                  )}
+                  {myDeathDetails.damageTaken > 0 && (
+                    <p>Dégâts fatals : <span className="font-mono text-red-400">{myDeathDetails.damageTaken}</span></p>
+                  )}
+                  {myDeathDetails.goldLost > 0 && (
+                    <p>Or personnel perdu : <span className="font-mono text-amber-400">{myDeathDetails.goldLost}</span></p>
+                  )}
+                </div>
+              )}
               {myDeathInheritance > 0 && (
                 <p className="text-sm text-primary mt-2">
                   Il laisse un héritage : ton prochain personnage commencera avec <span className="font-mono">{myDeathInheritance} or</span> personnel.

@@ -1,11 +1,11 @@
 export type VocationId = "Eclaireur" | "Tresorier" | "Miracule" | "Pingre" | "Martyr" | "Traitre" | "Inquisiteur";
 
 export const VOCATIONS: { id: VocationId; label: string; description: string }[] = [
-  { id: "Eclaireur", label: "Éclaireur", description: "Peut révéler à tout le groupe le vrai risque de mort de l'étape en cours (1×/expédition)." },
+  { id: "Eclaireur", label: "Éclaireur", description: "Peut se révéler à lui-même le vrai risque de mort de l'étape en cours (1×/expédition)." },
   { id: "Tresorier", label: "Trésorier", description: "Réduit la ponction sur le trésor commun en cas de mort pendant l'expédition." },
   { id: "Miracule", label: "Miraculé", description: "Échappe automatiquement au tirage au sort des morts, une seule fois dans sa vie." },
   { id: "Pingre", label: "Pingre", description: "Augmente le butin de l'expédition, mais s'expose davantage lui-même au tirage des morts." },
-  { id: "Martyr", label: "Martyr", description: "Peut garantir être le premier tiré au sort en cas de mort à l'étape en cours (1×/expédition)." },
+  { id: "Martyr", label: "Martyr", description: "Peut s'armer pour intercepter, à sa place, le plus gros coup qui aurait tué quelqu'un d'autre à l'étape en cours (1×/expédition)." },
   { id: "Traitre", label: "Traître", description: "Peut mentir sur sa vocation déclarée, et manigancer une mise trafiquée : plus de butin, mais plus de risque pour tout le groupe (1×/expédition)." },
   { id: "Inquisiteur", label: "Inquisiteur", description: "Peut vérifier en privé si la vocation déclarée d'un personnage est authentique." },
 ];
