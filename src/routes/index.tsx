@@ -9,7 +9,7 @@ import { GuildBanner, BannerPicker } from "@/components/banners";
 import { Frame, MemberFrame, DecorativeBorder } from "@/components/frame";
 import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { GuildChatBox } from "@/components/guildChat";
-import { getTitleForLevel, getNextTitleThreshold, getTitleProgress } from "@/lib/titles";
+import { getTitleForLevel, getNextTitleThreshold, getTitleProgress, getMaxHp } from "@/lib/titles";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
 import { Coins } from "lucide-react";
 import { ImmersiveButton } from "@/components/immersive";
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null; personal_gold?: number; portrait?: string | null };
+type Character = { id: string; name: string; level: number; xp: number; guild_id: string | null; personal_gold?: number; portrait?: string | null; hp?: number };
 type Guild = { id: string; name: string; gold: number; founder_profile_id?: string; banner_symbol?: string | null; banner_color?: string | null; banner_bg?: string | null };
 type Member = { id: string; name: string; level: number; portrait?: string | null; last_seen_at?: string | null; declared_vocation?: string | null };
 type HistoryEvent = { id: string; event_type: string; description: string; created_at: string };
@@ -67,7 +67,7 @@ function Index() {
     // identiques sur la même ligne)
     const [profileRes, charRes] = await Promise.all([
       supabase.from("profiles").select("id, is_admin").eq("id", session.user.id).maybeSingle(),
-      supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold, portrait").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle(),
+      supabase.from("characters").select("id, name, level, xp, guild_id, personal_gold, portrait, hp").eq("profile_id", session.user.id).eq("is_alive", true).eq("is_bot", false).maybeSingle(),
     ]);
     setProfileMissing(!profileRes.data);
     setIsAdmin(!!profileRes.data?.is_admin);
@@ -292,6 +292,19 @@ function Index() {
                 {getNextTitleThreshold(character.level) !== null && (
                   <div className="text-[10px] mt-1 text-muted-foreground">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
                 )}
+                <div className="flex items-center justify-between mt-2 mb-0.5">
+                  <span className="text-[10px] uppercase tracking-[0.1em] text-red-400/80">PV</span>
+                  <span className="text-[10px] font-mono text-red-400/80">{character.hp ?? getMaxHp(character.level)} / {getMaxHp(character.level)}</span>
+                </div>
+                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.round(((character.hp ?? getMaxHp(character.level)) / getMaxHp(character.level)) * 100)}%`,
+                      background: (character.hp ?? getMaxHp(character.level)) / getMaxHp(character.level) <= 0.3 ? "#ef4444" : (character.hp ?? getMaxHp(character.level)) / getMaxHp(character.level) <= 0.6 ? "#f59e0b" : "#22c55e",
+                    }}
+                  />
+                </div>
               </div>
             </div>
 

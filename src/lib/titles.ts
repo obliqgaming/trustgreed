@@ -46,3 +46,24 @@ export function getNextTitleThreshold(level: number): number | null {
   }
   return null; // déjà Légende, rien au-delà
 }
+
+// PV max par titre — même principe que TITLE_TIERS : montée rapide au
+// début (Frêle, déjà +2), puis régulière jusqu'à 50 à Légende. Reflète
+// exactement title_max_hp() côté SQL, pour un affichage sans aller-retour.
+export function getMaxHp(level: number): number {
+  if (level >= 200) return 50;
+  if (level >= 160) return 48;
+  if (level >= 136) return 45;
+  if (level >= 114) return 42;
+  if (level >= 94) return 39;
+  if (level >= 76) return 36;
+  if (level >= 60) return 33;
+  if (level >= 46) return 30;
+  if (level >= 34) return 27;
+  if (level >= 24) return 24;
+  if (level >= 16) return 21;
+  if (level >= 10) return 18;
+  if (level >= 6) return 15;
+  if (level >= 3) return 12;
+  return 10;
+}

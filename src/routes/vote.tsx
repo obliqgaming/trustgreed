@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getMaxHp } from "@/lib/titles";
 import { LedgerCard, LedgerError, LedgerPage, TextLink } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
@@ -16,7 +17,7 @@ export const Route = createFileRoute("/vote")({
   component: VotePage,
 });
 
-type Character = { id: string; name: string; guild_id?: string | null };
+type Character = { id: string; name: string; guild_id?: string | null; hp?: number; level?: number };
 type Step = {
   id: string; step_number: number; event_type: string; risk_level: string;
   loot_min: number; loot_max: number; vote_deadline: string;
@@ -29,7 +30,7 @@ type Step = {
   required_flag_sentiment: string | null; required_flag: string | null;
   death_percentage: number; third_option_death_pct: number | null;
 };
-type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean } };
+type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
@@ -169,6 +170,12 @@ function VotePage() {
   const [visibleRisk, setVisibleRisk] = useState<number | null>(null);
   const [myPrivateRisk, setMyPrivateRisk] = useState<number | null>(null);
   const [hasRiskReserveEffect, setHasRiskReserveEffect] = useState(false);
+  const [hasPotion, setHasPotion] = useState(false);
+  const [myDrunk, setMyDrunk] = useState(false);
+  const [drinkBusy, setDrinkBusy] = useState(false);
+  const [drinkResult, setDrinkResult] = useState<number | null>(null);
+  const [frontlineTally, setFrontlineTally] = useState<Record<string, number>>({});
+  const [myFrontlineTarget, setMyFrontlineTarget] = useState<string | null>(null);
   const [vocationBusy, setVocationBusy] = useState<string | null>(null);
   const [vocationError, setVocationError] = useState<string | null>(null);
   const [inspectTarget, setInspectTarget] = useState<string | null>(null);
@@ -203,17 +210,40 @@ function VotePage() {
     const ids = parts.map((p: any) => p.character_id);
     const { data: chars } = await supabase
       .from("characters")
-      .select("id, name, portrait, is_alive, declared_vocation, is_bot")
+      .select("id, name, portrait, is_alive, declared_vocation, is_bot, hp, level")
       .in("id", ids);
 
     const enriched = (chars ?? []).map((c: any) => ({
       character_id: c.id,
       is_alive: c.is_alive,
-      character: { name: c.name, portrait: c.portrait ?? "ombre", declared_vocation: c.declared_vocation ?? null, is_bot: c.is_bot ?? false },
+      character: { name: c.name, portrait: c.portrait ?? "ombre", declared_vocation: c.declared_vocation ?? null, is_bot: c.is_bot ?? false, hp: c.hp, level: c.level },
     }));
     setParticipants(enriched);
     return enriched;
   }, [expeditionId]);
+
+  const fetchFrontlineVotes = useCallback(async (stepId: string) => {
+    const { data } = await supabase.from("step_frontline_votes").select("voter_character_id, target_character_id").eq("step_id", stepId);
+    const tally: Record<string, number> = {};
+    let mine: string | null = null;
+    for (const row of (data as any[]) ?? []) {
+      tally[row.target_character_id] = (tally[row.target_character_id] ?? 0) + 1;
+      if (characterIdRef.current && row.voter_character_id === characterIdRef.current) mine = row.target_character_id;
+    }
+    setFrontlineTally(tally);
+    setMyFrontlineTarget(mine);
+  }, []);
+
+  async function voteFrontline(targetId: string) {
+    if (!step || !character) return;
+    const next = myFrontlineTarget === targetId ? null : targetId;
+    setMyFrontlineTarget(next); // optimiste
+    const { error: rpcError } = await supabase.rpc("vote_frontline" as any, {
+      p_step_id: step.id, p_voter_character_id: character.id, p_target_character_id: next,
+    });
+    if (rpcError) setError(rpcError.message);
+    await fetchFrontlineVotes(step.id);
+  }
 
   const fetchVotes = useCallback(async (stepId: string) => {
     const { data } = await supabase.from("step_votes").select("character_id").eq("step_id", stepId);
@@ -241,6 +271,8 @@ function VotePage() {
         stepIdRef.current = data.id;
         setMyVote(null);
         setVotedIds([]);
+        setFrontlineTally({});
+        setMyFrontlineTarget(null);
         setResult(null);
         setMyPrivateRisk(null);
         setAcked(false);
@@ -250,6 +282,8 @@ function VotePage() {
         setMyIntervened(false);
         setMySearched(false);
         setSearchResult(null);
+        setMyDrunk(false);
+        setDrinkResult(null);
         setGaugeWobble(50);
       } else {
         stepIdRef.current = data.id;
@@ -281,6 +315,7 @@ function VotePage() {
       }
 
       await fetchVotes(data.id);
+      await fetchFrontlineVotes(data.id);
 
       if (data.risk_revealed) {
         const { data: risk } = await supabase.rpc("get_visible_risk", { p_step_id: data.id });
@@ -332,7 +367,7 @@ function VotePage() {
       if (!session) { navigate({ to: "/" }); return; }
 
       const { data: char } = await supabase
-        .from("characters").select("id, name, guild_id, is_alive, died_in_expedition_id")
+        .from("characters").select("id, name, guild_id, is_alive, died_in_expedition_id, hp, level")
         .eq("profile_id", session.user.id).eq("is_bot", false)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (!char) { navigate({ to: "/" }); return; }
@@ -407,6 +442,19 @@ function VotePage() {
       setVotedIds(prev => prev.includes(character.id) ? prev : [...prev, character.id]);
     }
     setBusy(false);
+  }
+
+  async function drinkPotion() {
+    if (!step || !character) return;
+    setError(null); setDrinkBusy(true);
+    const { data, error: rpcError } = await supabase.rpc("drink_potion" as any, { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setError(rpcError.message);
+    else {
+      setMyDrunk(true);
+      setDrinkResult(data as number);
+      await refreshInterventionState();
+    }
+    setDrinkBusy(false);
   }
 
   async function useReveal() {
@@ -688,6 +736,10 @@ function VotePage() {
         .select("character_id, action").eq("step_id", step.id).eq("character_id", character.id).maybeSingle();
       setMyIntervened(!!mine && (mine as any).action === "aide");
       setMySearched(!!mine && (mine as any).action === "fouille");
+      setMyDrunk(!!mine && (mine as any).action === "potion");
+      const { data: potions } = await supabase
+        .from("character_potions").select("id").eq("character_id", character.id).eq("expedition_id", expeditionId).is("consumed_at", null).limit(1);
+      setHasPotion((potions ?? []).length > 0);
     }
     const { data: rows } = await supabase
       .from("step_interventions").select("character:characters(name)").eq("step_id", step.id).eq("action", "aide");
@@ -873,6 +925,19 @@ function VotePage() {
               <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
                 N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose (même ressource).
               </p>
+
+              {hasPotion && (
+                myDrunk ? (
+                  <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 mt-2 text-center">
+                    {drinkResult !== null ? `Potion bue — ${drinkResult} PV` : "Potion déjà bue sur cette étape"}
+                  </p>
+                ) : (
+                  <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                    className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 mt-2 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                    {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : "Boire une potion (même ressource)"}
+                  </button>
+                )
+              )}
               {intervenerNames.length > 0 && (
                 <p className="text-xs text-amber-400/90 text-center mt-2">
                   Intervenu·e{intervenerNames.length > 1 ? "s" : ""} sur cette étape : {intervenerNames.join(", ")}
@@ -1076,11 +1141,11 @@ function VotePage() {
                 {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
                   <button onClick={useMartyr} disabled={vocationBusy === "martyr"}
                     className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
-                    {vocationBusy === "martyr" ? "…" : "Me sacrifier en premier si mort il y a"}
+                    {vocationBusy === "martyr" ? "…" : "M'armer pour intercepter le plus gros coup (une fois par expédition)"}
                   </button>
                 )}
                 {usedAbilities.has("martyr") && (
-                  <p className="text-xs text-red-400/70 italic">Ton sacrifice est promis pour cette étape.</p>
+                  <p className="text-xs text-red-400/70 italic">Si un coup mortel devait tomber sur quelqu'un d'autre cette étape, tu le prends à sa place.</p>
                 )}
                 {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
                   <div>
@@ -1157,6 +1222,9 @@ function VotePage() {
                 Vote enregistré — en attente des autres…
               </div>
             )}
+            {step.event_type === "marchand" && step.resolving === false && step.resolved === false && (
+              <PotionShop step={step} character={character} expeditionId={expeditionId} />
+            )}
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
                 Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}
@@ -1187,15 +1255,31 @@ function VotePage() {
               <DecorativeBorder variant="wide" />
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <ul className="space-y-1.5">
-                {participants.map((p) => (
+                {participants.map((p) => {
+                  const maxHp = getMaxHp((p.character as any)?.level ?? 1);
+                  const hp = (p.character as any)?.hp ?? maxHp;
+                  const hpRatio = maxHp > 0 ? hp / maxHp : 1;
+                  const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
+                  const votes = frontlineTally[p.character_id] ?? 0;
+                  return (
                   <li key={p.character_id}
                     className={`flex items-center gap-2 px-2 py-1.5 border ${!p.is_alive ? "opacity-30 border-red-400/20" : p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
                     <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={28} />
                     <span className={`text-xs flex-1 ${!p.is_alive ? "line-through text-red-400/50" : p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
                       {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
                       {!p.is_alive ? " ✝" : ""}
+                      {p.is_alive && <span className="ml-1.5 font-mono" style={{ color: hpColor }}>{hp}/{maxHp} PV</span>}
                     </span>
                     <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
+                    {p.is_alive && step && !step.resolving && !step.resolved && (
+                      <button
+                        onClick={() => voteFrontline(p.character_id)}
+                        title="Désigner en première ligne pour la prochaine étape"
+                        className={`text-[9px] uppercase tracking-[0.06em] border px-1.5 py-0.5 ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/30 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-300"}`}
+                      >
+                        Devant{votes > 0 ? ` (${votes})` : ""}
+                      </button>
+                    )}
                     {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
                       <div className="flex gap-1">
                         <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id}
@@ -1232,7 +1316,8 @@ function VotePage() {
                       </span>
                     )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           </>
@@ -1299,6 +1384,55 @@ function LarcenyButton({ expeditionId, character }: { expeditionId: string; char
           Renoncer
         </button>
       </div>
+    </div>
+  );
+}
+
+function PotionShop({ step, character, expeditionId }: { step: Step; character: Character | null; expeditionId: string }) {
+  const [totalBought, setTotalBought] = useState(0);
+  const [owned, setOwned] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!character) return;
+    const { data } = await supabase
+      .from("character_potions")
+      .select("id, consumed_at")
+      .eq("character_id", character.id)
+      .eq("expedition_id", expeditionId);
+    const rows = (data as any[]) ?? [];
+    setTotalBought(rows.length);
+    setOwned(rows.filter((r) => !r.consumed_at).length);
+  }, [character, expeditionId]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  if (!character) return null;
+
+  const nextPrice = Math.round(80 * Math.pow(6, totalBought) * (1 + 0.05 * (step.step_number - 1)));
+
+  async function buy() {
+    if (!character) return;
+    setBusy(true); setMsg(null);
+    const { data, error: rpcError } = await supabase.rpc("buy_potion" as any, { p_character_id: character.id, p_step_id: step.id });
+    if (rpcError) setMsg(rpcError.message);
+    else { setMsg(`Potion achetée pour ${(data as any)?.price ?? nextPrice} or.`); await refresh(); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mb-4 px-3 py-2 border border-amber-500/30 bg-amber-500/5">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground">
+          Le marchand vend des potions de soin (+8 PV).{owned > 0 && <span className="text-primary"> Tu en portes {owned}.</span>}
+        </p>
+        <button onClick={buy} disabled={busy}
+          className="text-xs uppercase tracking-[0.1em] border border-amber-400/50 text-amber-300 px-3 py-1.5 hover:bg-amber-500/10 disabled:opacity-30 whitespace-nowrap">
+          {busy ? "…" : `Acheter (${nextPrice} or)`}
+        </button>
+      </div>
+      {msg && <p className="text-[10px] text-muted-foreground mt-1.5">{msg}</p>}
     </div>
   );
 }
