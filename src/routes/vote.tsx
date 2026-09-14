@@ -31,7 +31,7 @@ type Step = {
   death_percentage: number; third_option_death_pct: number | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[] };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 
@@ -646,6 +646,10 @@ function VotePage() {
 
     if (ended && pollRef.current) clearInterval(pollRef.current);
 
+    const { data: dmgRows } = await supabase
+      .from("step_damage_log").select("damage, character:characters(name)").eq("step_id", stepId).order("damage", { ascending: false });
+    const damageLog = ((dmgRows as any[]) ?? []).map((r) => ({ name: r.character?.name ?? "?", damage: r.damage })).filter((r) => r.damage > 0);
+
     setResult({
       deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended,
       deadNames, cinematic: cinematicText, iDied: myDied,
@@ -654,6 +658,7 @@ function VotePage() {
       xpAwarded: resolvedStep?.xp_awarded ?? 0,
       survivorNames,
       resolutionType,
+      damageLog,
     });
   }
 
@@ -900,44 +905,49 @@ function VotePage() {
 
               <LedgerError message={error} />
 
-              <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                {myIntervened ? "Intervention déjà utilisée sur cette étape"
-                  : !interventionsRemaining ? "Plus d'intervention disponible"
-                  : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour cette expédition)`}
-              </button>
-              <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-                Réduit le risque de cette étape. Pool partagé avec "Fouiller" — une fois épuisé, il ne revient pas.
-              </p>
+              <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
+                <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Ton action — une seule possible</p>
 
-              {mySearched && searchResult ? (
-                <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 mt-2 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
-                  {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
-                </p>
-              ) : (
-                <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                  className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 mt-2 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                  {mySearched ? "Fouille déjà tentée sur cette étape"
+                <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                  className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                  {myIntervened ? "Intervention déjà utilisée sur cette étape"
                     : !interventionsRemaining ? "Plus d'intervention disponible"
-                    : searchBusy ? "…" : "Fouiller pour toi-même"}
+                    : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour cette expédition)`}
                 </button>
-              )}
-              <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
-                N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose (même ressource).
-              </p>
+                <p className="text-[10px] text-muted-foreground/60 text-center">
+                  Réduit le risque de cette étape. Pool partagé avec "Fouiller" et les potions — une fois épuisé, il ne revient pas.
+                </p>
 
-              {hasPotion && (
-                myDrunk ? (
-                  <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 mt-2 text-center">
-                    {drinkResult !== null ? `Potion bue — ${drinkResult} PV` : "Potion déjà bue sur cette étape"}
+                {mySearched && searchResult ? (
+                  <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
+                    {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
                   </p>
                 ) : (
-                  <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                    className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 mt-2 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                    {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : "Boire une potion (même ressource)"}
+                  <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                    className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                    {mySearched ? "Fouille déjà tentée sur cette étape"
+                      : !interventionsRemaining ? "Plus d'intervention disponible"
+                      : searchBusy ? "…" : "Fouiller pour toi-même"}
                   </button>
-                )
-              )}
+                )}
+                <p className="text-[10px] text-muted-foreground/60 text-center">
+                  N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose.
+                </p>
+
+                {hasPotion && (
+                  myDrunk ? (
+                    <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 text-center">
+                      {drinkResult !== null ? `Potion bue — ${drinkResult} PV` : "Potion déjà bue sur cette étape"}
+                    </p>
+                  ) : (
+                    <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                      className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                      {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : "Boire une potion"}
+                    </button>
+                  )
+                )}
+              </div>
+
               {intervenerNames.length > 0 && (
                 <p className="text-xs text-amber-400/90 text-center mt-2">
                   Intervenu·e{intervenerNames.length > 1 ? "s" : ""} sur cette étape : {intervenerNames.join(", ")}
@@ -1000,6 +1010,17 @@ function VotePage() {
         <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title={title} subtitle={subtitle}>
           <p className="text-lg md:text-xl text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
+
+          {result.damageLog.length > 0 && (
+            <div className="mb-5 px-3 py-3 border border-red-400/30 bg-red-400/5">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-red-400/70 mb-1.5 text-center">Dégâts encaissés</p>
+              {result.damageLog.map((d, i) => (
+                <p key={i} className="text-sm text-red-300 text-center">
+                  {d.name} a pris <span className="font-mono">{d.damage}</span> point{d.damage > 1 ? "s" : ""} de dégâts.
+                </p>
+              ))}
+            </div>
+          )}
 
           {!result.iDied && !result.ended && result.stepLoot > 0 && (
             <div className="flex justify-center mb-5">
@@ -1129,63 +1150,10 @@ function VotePage() {
               </span>
             </div>
 
-            {/* Pouvoirs de vocation actifs pendant le vote */}
-            {myVocation && !myVote && (
-              <div className="mb-4 space-y-2">
-                {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
-                  <button onClick={useReveal} disabled={vocationBusy === "reveal"}
-                    className="w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-2 hover:bg-primary/10 disabled:opacity-30">
-                    {vocationBusy === "reveal" ? "…" : "Révéler le risque (à toi seul)"}
-                  </button>
-                )}
-                {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
-                  <button onClick={useMartyr} disabled={vocationBusy === "martyr"}
-                    className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
-                    {vocationBusy === "martyr" ? "…" : "M'armer pour intercepter le plus gros coup (une fois par expédition)"}
-                  </button>
-                )}
-                {usedAbilities.has("martyr") && (
-                  <p className="text-xs text-red-400/70 italic">Si un coup mortel devait tomber sur quelqu'un d'autre cette étape, tu le prends à sa place.</p>
-                )}
-                {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
-                    <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"}
-                      className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
-                      {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
-                    </button>
-                  </div>
-                )}
-                {usedAbilities.has("martyr_provocation") && (
-                  <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée — le résultat arrive.</p>
-                )}
-                {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
-                  <button onClick={useGambit} disabled={vocationBusy === "gambit"}
-                    className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
-                    {vocationBusy === "gambit" ? "…" : "Manigancer une mise trafiquée (+ butin, + risque du groupe)"}
-                  </button>
-                )}
-                {usedAbilities.has("traitre_gambit") && (
-                  <p className="text-xs text-amber-400/70 italic">La mise est lancée pour cette étape.</p>
-                )}
-                {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
-                  <div>
-                    <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Traître</p>
-                    <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"}
-                      className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
-                      {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
-                    </button>
-                  </div>
-                )}
-                {usedAbilities.has("traitre_vente") && (
-                  <p className="text-xs text-amber-400/70 italic">Personne ne sait ce que tu as fait. Pour l'instant.</p>
-                )}
-                <LedgerError message={vocationError} />
-              </div>
-            )}
-
+            {/* ================= TON VOTE — la décision qui compte ================= */}
             {!myVote ? (
               <div className="mb-4">
+                <p className="text-[10px] tracking-[0.18em] uppercase text-primary/70 mb-2 text-center">Ton vote</p>
                 {runningTotals && (
                   <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
                     <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
@@ -1222,8 +1190,68 @@ function VotePage() {
                 Vote enregistré — en attente des autres…
               </div>
             )}
-            {step.event_type === "marchand" && step.resolving === false && step.resolved === false && (
-              <PotionShop step={step} character={character} expeditionId={expeditionId} />
+
+            {/* ================= Actions individuelles — optionnelles, indépendantes du vote ================= */}
+            {((myVocation && !myVote) || (step.event_type === "marchand" && !step.resolving && !step.resolved)) && (
+              <div className="mb-4 px-3 py-3 border border-dashed border-border/40 bg-border/5">
+                <p className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground/70 mb-2 text-center">Actions individuelles (optionnelles)</p>
+                {myVocation && !myVote && (
+                  <div className="space-y-2">
+                    {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
+                      <button onClick={useReveal} disabled={vocationBusy === "reveal"}
+                        className="w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-2 hover:bg-primary/10 disabled:opacity-30">
+                        {vocationBusy === "reveal" ? "…" : "Révéler le risque (à toi seul)"}
+                      </button>
+                    )}
+                    {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
+                      <button onClick={useMartyr} disabled={vocationBusy === "martyr"}
+                        className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
+                        {vocationBusy === "martyr" ? "…" : "M'armer pour intercepter le plus gros coup (une fois par expédition)"}
+                      </button>
+                    )}
+                    {usedAbilities.has("martyr") && (
+                      <p className="text-xs text-red-400/70 italic">Si un coup mortel devait tomber sur quelqu'un d'autre cette étape, tu le prends à sa place.</p>
+                    )}
+                    {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
+                        <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"}
+                          className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
+                          {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
+                        </button>
+                      </div>
+                    )}
+                    {usedAbilities.has("martyr_provocation") && (
+                      <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée — le résultat arrive.</p>
+                    )}
+                    {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
+                      <button onClick={useGambit} disabled={vocationBusy === "gambit"}
+                        className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
+                        {vocationBusy === "gambit" ? "…" : "Manigancer une mise trafiquée (+ butin, + risque du groupe)"}
+                      </button>
+                    )}
+                    {usedAbilities.has("traitre_gambit") && (
+                      <p className="text-xs text-amber-400/70 italic">La mise est lancée pour cette étape.</p>
+                    )}
+                    {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Traître</p>
+                        <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"}
+                          className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
+                          {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
+                        </button>
+                      </div>
+                    )}
+                    {usedAbilities.has("traitre_vente") && (
+                      <p className="text-xs text-amber-400/70 italic">Personne ne sait ce que tu as fait. Pour l'instant.</p>
+                    )}
+                    <LedgerError message={vocationError} />
+                  </div>
+                )}
+                {step.event_type === "marchand" && step.resolving === false && step.resolved === false && (
+                  <PotionShop step={step} character={character} expeditionId={expeditionId} />
+                )}
+              </div>
             )}
             <div className="mb-4">
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
@@ -1254,6 +1282,9 @@ function VotePage() {
             <div className="relative mt-4 pt-8 px-6 pb-6">
               <DecorativeBorder variant="wide" />
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
+              <p className="text-[10px] text-muted-foreground/60 mb-2">
+                "Devant" désigne qui prend la première ligne à la prochaine étape — optionnel, effectif seulement à la majorité des vivants.
+              </p>
               <ul className="space-y-1.5">
                 {participants.map((p) => {
                   const maxHp = getMaxHp((p.character as any)?.level ?? 1);
