@@ -1333,88 +1333,92 @@ function VotePage() {
                 {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
               </button>
             )}
-            <div className="lg:fixed lg:top-24 lg:right-6 lg:z-10 lg:w-72 lg:max-h-[65vh] lg:overflow-y-auto lg:bg-card/40 lg:backdrop-blur-sm lg:rounded-sm lg:p-3">
-              <ChatBox expeditionId={expeditionId} character={character} />
-            </div>
-            <div className="relative mt-4 pt-8 px-6 pb-6 lg:fixed lg:top-24 lg:left-6 lg:z-10 lg:w-64 lg:max-h-[65vh] lg:overflow-y-auto lg:mt-0 lg:pt-3 lg:px-3 lg:pb-3 lg:bg-card/40 lg:backdrop-blur-sm lg:rounded-sm">
-              <DecorativeBorder variant="wide" className="lg:hidden" />
-              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
-              <p className="text-[10px] text-muted-foreground/60 mb-2">
-                "Devant" désigne qui prend la première ligne à la prochaine étape — optionnel, effectif seulement à la majorité des vivants.
-              </p>
-              <ul className="space-y-1.5">
-                {participants.map((p) => {
-                  const maxHp = getMaxHp((p.character as any)?.level ?? 1);
-                  const hp = (p.character as any)?.hp ?? maxHp;
-                  const hpRatio = maxHp > 0 ? hp / maxHp : 1;
-                  const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
-                  const votes = frontlineTally[p.character_id] ?? 0;
-                  return (
-                  <li key={p.character_id}
-                    className={`flex items-center gap-2 px-2 py-1.5 border ${!p.is_alive ? "opacity-30 border-red-400/20" : p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
-                    <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={28} />
-                    <span className={`text-xs flex-1 ${!p.is_alive ? "line-through text-red-400/50" : p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
-                      {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
-                      {!p.is_alive ? " ✝" : ""}
-                      {p.is_alive && (
-                        <span className="ml-1.5 font-mono inline-flex items-center gap-0.5" style={{ color: hpColor }}>
-                          {hp}/{maxHp} <Heart size={10} className="fill-current" />
-                        </span>
-                      )}
-                    </span>
-                    <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
-                    {p.is_alive && step && !step.resolving && !step.resolved && (
-                      <button
-                        onClick={() => voteFrontline(p.character_id)}
-                        title="Désigner en première ligne pour la prochaine étape"
-                        className={`text-[9px] uppercase tracking-[0.06em] border px-1.5 py-0.5 ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/30 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-300"}`}
-                      >
-                        Devant{votes > 0 ? ` (${votes})` : ""}
-                      </button>
-                    )}
-                    {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
-                      <div className="flex gap-1">
-                        <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id}
-                          className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
-                          Continuer
-                        </button>
-                        <button onClick={() => botVote(p.character_id, "rentrer")} disabled={botBusy === p.character_id}
-                          className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
-                          Rentrer
-                        </button>
-                      </div>
-                    )}
-                    {isAdmin && p.character.is_bot && !p.is_alive && (
-                      <button onClick={() => botRevive(p.character_id)} disabled={botBusy === p.character_id}
-                        className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
-                        {botBusy === p.character_id ? "…" : "Ressusciter"}
-                      </button>
-                    )}
-                    {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
-                      inspectResult?.id === p.character_id ? (
-                        <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
-                          {inspectResult.honest ? "Honnête" : "Traître"}
-                        </span>
-                      ) : usedAbilities.has("inquisiteur_inspect") ? null : (
-                        <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
-                          className="text-[10px] uppercase tracking-[0.08em] border border-border/40 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
-                          {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
-                        </button>
-                      )
-                    )}
-                    {p.is_alive && (
-                      <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
-                        {votedIds.includes(p.character_id) ? "✓" : "…"}
-                      </span>
-                    )}
-                  </li>
-                  );
-                })}
-              </ul>
-            </div>
           </>
         )}
       </LedgerCard>
+      {step && !step.resolved && (
+        <>
+          <div className="mt-4 border border-border/30 rounded-sm bg-card/60 p-3 xl:mt-0 xl:fixed xl:top-24 xl:right-6 xl:z-10 xl:w-72 xl:border-0 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
+            <ChatBox expeditionId={expeditionId} character={character} />
+          </div>
+          <div className="relative mt-4 pt-8 px-6 pb-6 xl:fixed xl:top-24 xl:left-6 xl:z-10 xl:w-64 xl:mt-0 xl:pt-3 xl:px-3 xl:pb-3 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
+            <DecorativeBorder variant="wide" className="xl:hidden" />
+                <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
+                <p className="text-[10px] text-muted-foreground/60 mb-2">
+                  "Devant" désigne qui prend la première ligne à la prochaine étape — optionnel, effectif seulement à la majorité des vivants.
+                </p>
+                <ul className="space-y-1.5">
+                  {participants.map((p) => {
+                    const maxHp = getMaxHp((p.character as any)?.level ?? 1);
+                    const hp = (p.character as any)?.hp ?? maxHp;
+                    const hpRatio = maxHp > 0 ? hp / maxHp : 1;
+                    const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
+                    const votes = frontlineTally[p.character_id] ?? 0;
+                    return (
+                    <li key={p.character_id}
+                      className={`flex items-center gap-2 px-2 py-1.5 border ${!p.is_alive ? "opacity-30 border-red-400/20" : p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
+                      <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={28} />
+                      <span className={`text-xs flex-1 ${!p.is_alive ? "line-through text-red-400/50" : p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
+                        {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
+                        {!p.is_alive ? " ✝" : ""}
+                        {p.is_alive && (
+                          <span className="ml-1.5 font-mono inline-flex items-center gap-0.5" style={{ color: hpColor }}>
+                            {hp}/{maxHp} <Heart size={10} className="fill-current" />
+                          </span>
+                        )}
+                      </span>
+                      <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
+                      {p.is_alive && step && !step.resolving && !step.resolved && (
+                        <button
+                          onClick={() => voteFrontline(p.character_id)}
+                          title="Désigner en première ligne pour la prochaine étape"
+                          className={`text-[9px] uppercase tracking-[0.06em] border px-1.5 py-0.5 ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/30 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-300"}`}
+                        >
+                          Devant{votes > 0 ? ` (${votes})` : ""}
+                        </button>
+                      )}
+                      {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
+                        <div className="flex gap-1">
+                          <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id}
+                            className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
+                            Continuer
+                          </button>
+                          <button onClick={() => botVote(p.character_id, "rentrer")} disabled={botBusy === p.character_id}
+                            className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
+                            Rentrer
+                          </button>
+                        </div>
+                      )}
+                      {isAdmin && p.character.is_bot && !p.is_alive && (
+                        <button onClick={() => botRevive(p.character_id)} disabled={botBusy === p.character_id}
+                          className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
+                          {botBusy === p.character_id ? "…" : "Ressusciter"}
+                        </button>
+                      )}
+                      {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
+                        inspectResult?.id === p.character_id ? (
+                          <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
+                            {inspectResult.honest ? "Honnête" : "Traître"}
+                          </span>
+                        ) : usedAbilities.has("inquisiteur_inspect") ? null : (
+                          <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
+                            className="text-[10px] uppercase tracking-[0.08em] border border-border/40 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
+                            {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
+                          </button>
+                        )
+                      )}
+                      {p.is_alive && (
+                        <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
+                          {votedIds.includes(p.character_id) ? "✓" : "…"}
+                        </span>
+                      )}
+                    </li>
+                    );
+                  })}
+                </ul>
+              </div>
+        </>
+      )}
     </LedgerPage>
   );
 }
