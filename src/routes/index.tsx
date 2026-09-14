@@ -11,7 +11,7 @@ import { PortraitDisplay, PortraitPicker } from "@/components/portraits";
 import { GuildChatBox } from "@/components/guildChat";
 import { getTitleForLevel, getNextTitleThreshold, getTitleProgress, getMaxHp } from "@/lib/titles";
 import { isOnline, usePresenceHeartbeat } from "@/hooks/usePresence";
-import { Coins } from "lucide-react";
+import { Coins, Heart } from "lucide-react";
 import { ImmersiveButton } from "@/components/immersive";
 
 export const Route = createFileRoute("/")({
@@ -293,7 +293,7 @@ function Index() {
                   <div className="text-[10px] mt-1 text-muted-foreground">prochain palier au niveau {getNextTitleThreshold(character.level)}</div>
                 )}
                 <div className="flex items-center justify-between mt-2 mb-0.5">
-                  <span className="text-[10px] uppercase tracking-[0.1em] text-red-400/80">PV</span>
+                  <Heart size={12} className="text-red-400/80 fill-red-400/80" />
                   <span className="text-[10px] font-mono text-red-400/80">{character.hp ?? getMaxHp(character.level)} / {getMaxHp(character.level)}</span>
                 </div>
                 <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">

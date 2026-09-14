@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router"
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getMaxHp } from "@/lib/titles";
+import { Heart } from "lucide-react";
 import { LedgerCard, LedgerError, LedgerPage, TextLink } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
@@ -141,6 +142,7 @@ function VotePage() {
   const [step, setStep] = useState<Step | null>(null);
   const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const aliveParticipants = participants.filter(p => p.is_alive);
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -171,6 +173,8 @@ function VotePage() {
   const [myPrivateRisk, setMyPrivateRisk] = useState<number | null>(null);
   const [hasRiskReserveEffect, setHasRiskReserveEffect] = useState(false);
   const [hasPotion, setHasPotion] = useState(false);
+  const [skipTally, setSkipTally] = useState<{ mine: boolean; count: number; total: number } | null>(null);
+  const [skipBusy, setSkipBusy] = useState(false);
   const [myDrunk, setMyDrunk] = useState(false);
   const [drinkBusy, setDrinkBusy] = useState(false);
   const [drinkResult, setDrinkResult] = useState<number | null>(null);
@@ -284,6 +288,7 @@ function VotePage() {
         setSearchResult(null);
         setMyDrunk(false);
         setDrinkResult(null);
+        setSkipTally(null);
         setGaugeWobble(50);
       } else {
         stepIdRef.current = data.id;
@@ -337,13 +342,30 @@ function VotePage() {
       }
 
       // Si la fenêtre d'intervention est écoulée, quelqu'un doit déclencher le vrai jet.
+      // Ou si tout le monde vivant a voté "Passer" : on accélère avant le délai.
       // Best-effort : en cas de course entre plusieurs clients, un seul réussit vraiment,
       // les autres échouent silencieusement et récupèrent le résultat au prochain poll.
-      if (data.resolving && !data.resolved && data.resolution_deadline && new Date(data.resolution_deadline) <= new Date()) {
-        await supabase.rpc("finalize_resolution", { p_step_id: data.id });
-        // Pas de .catch() ici : supabase-js ne lève pas d'exception sur une RPC
-        // en échec, elle renvoie juste { error } — qu'on ignore volontairement
-        // (course normale entre plusieurs clients, un seul réussit vraiment).
+      if (data.resolving && !data.resolved && data.resolution_deadline) {
+        const deadlinePassed = new Date(data.resolution_deadline) <= new Date();
+        let shouldFinalize = deadlinePassed;
+        if (!shouldFinalize) {
+          const { data: aliveRows } = await supabase
+            .from("expedition_participants")
+            .select("character_id, characters!inner(is_alive)")
+            .eq("expedition_id", expeditionId);
+          const aliveIds = ((aliveRows as any[]) ?? []).filter((r) => r.characters?.is_alive).map((r) => r.character_id);
+          if (aliveIds.length > 0) {
+            const { data: skipRows } = await supabase.from("step_skip_votes").select("character_id").eq("step_id", data.id);
+            const skipIds = ((skipRows as any[]) ?? []).map((r) => r.character_id);
+            shouldFinalize = aliveIds.every((id) => skipIds.includes(id));
+          }
+        }
+        if (shouldFinalize) {
+          await supabase.rpc("finalize_resolution", { p_step_id: data.id });
+          // Pas de .catch() ici : supabase-js ne lève pas d'exception sur une RPC
+          // en échec, elle renvoie juste { error } — qu'on ignore volontairement
+          // (course normale entre plusieurs clients, un seul réussit vraiment).
+        }
       }
     }
     return data;
@@ -749,7 +771,24 @@ function VotePage() {
     const { data: rows } = await supabase
       .from("step_interventions").select("character:characters(name)").eq("step_id", step.id).eq("action", "aide");
     setIntervenerNames((rows as any[] ?? []).map(r => r.character?.name).filter(Boolean));
-  }, [step, expeditionId, character]);
+
+    const { data: skipRows } = await supabase.from("step_skip_votes").select("character_id").eq("step_id", step.id);
+    const skipIds = (skipRows as any[] ?? []).map(r => r.character_id);
+    setSkipTally({
+      mine: !!character && skipIds.includes(character.id),
+      count: skipIds.length,
+      total: aliveParticipants.length,
+    });
+  }, [step, expeditionId, character, aliveParticipants.length]);
+
+  async function voteSkip() {
+    if (!step || !character) return;
+    setSkipBusy(true); setError(null);
+    const { error: rpcError } = await supabase.rpc("vote_skip_resolution" as any, { p_step_id: step.id, p_character_id: character.id });
+    if (rpcError) setError(rpcError.message);
+    await refreshInterventionState();
+    setSkipBusy(false);
+  }
 
   // Pendant la fenêtre de résolution : jauge cosmétique (le vrai jet est
   // recalculé côté serveur à la fin), compte à rebours, et suivi du pool
@@ -765,7 +804,6 @@ function VotePage() {
   }, [step?.resolving, step?.resolved, refreshInterventionState]);
 
   // Participants vivants = ceux qui comptent pour le vote
-  const aliveParticipants = participants.filter(p => p.is_alive);
   const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
 
   // Totaux affichés avant de voter : or de guilde déjà engrangé cette
@@ -903,6 +941,15 @@ function VotePage() {
                 {secondsLeft > 0 ? `${formatCountdown(secondsLeft)} avant le verdict` : "Verdict imminent…"}
               </p>
 
+              {secondsLeft > 0 && (
+                <button onClick={voteSkip} disabled={skipBusy || skipTally?.mine}
+                  className="w-full mb-4 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-2 hover:border-primary/40 hover:text-primary disabled:opacity-50">
+                  {skipTally?.mine
+                    ? `En attente des autres — ${skipTally.count}/${skipTally.total} veulent passer`
+                    : skipBusy ? "…" : `Passer (accélère si tout le monde est d'accord${skipTally ? ` — ${skipTally.count}/${skipTally.total}` : ""})`}
+                </button>
+              )}
+
               <LedgerError message={error} />
 
               <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
@@ -912,11 +959,15 @@ function VotePage() {
                   className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                   {myIntervened ? "Intervention déjà utilisée sur cette étape"
                     : !interventionsRemaining ? "Plus d'intervention disponible"
-                    : interventionBusy ? "…" : `Intervenir (${interventionsRemaining} restante${interventionsRemaining && interventionsRemaining > 1 ? "s" : ""} pour cette expédition)`}
+                    : interventionBusy ? "…" : (
+                      <>
+                        Intervenir
+                        <span className="block text-[10px] normal-case opacity-70 mt-0.5">
+                          ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
+                        </span>
+                      </>
+                    )}
                 </button>
-                <p className="text-[10px] text-muted-foreground/60 text-center">
-                  Réduit le risque de cette étape. Pool partagé avec "Fouiller" et les potions — une fois épuisé, il ne revient pas.
-                </p>
 
                 {mySearched && searchResult ? (
                   <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
@@ -927,17 +978,21 @@ function VotePage() {
                     className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                     {mySearched ? "Fouille déjà tentée sur cette étape"
                       : !interventionsRemaining ? "Plus d'intervention disponible"
-                      : searchBusy ? "…" : "Fouiller pour toi-même"}
+                      : searchBusy ? "…" : (
+                        <>
+                          Fouiller
+                          <span className="block text-[10px] normal-case opacity-70 mt-0.5">
+                            ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
+                          </span>
+                        </>
+                      )}
                   </button>
                 )}
-                <p className="text-[10px] text-muted-foreground/60 text-center">
-                  N'aide pas le groupe — vérifie juste si toi tu as mis la main sur quelque chose.
-                </p>
 
                 {hasPotion && (
                   myDrunk ? (
                     <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 text-center">
-                      {drinkResult !== null ? `Potion bue — ${drinkResult} PV` : "Potion déjà bue sur cette étape"}
+                      {drinkResult !== null ? <>Potion bue — {drinkResult} <Heart size={11} className="inline -mt-0.5 fill-current" /></> : "Potion déjà bue sur cette étape"}
                     </p>
                   ) : (
                     <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
@@ -1278,9 +1333,11 @@ function VotePage() {
                 {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
               </button>
             )}
-            <ChatBox expeditionId={expeditionId} character={character} />
-            <div className="relative mt-4 pt-8 px-6 pb-6">
-              <DecorativeBorder variant="wide" />
+            <div className="lg:fixed lg:top-24 lg:right-6 lg:z-10 lg:w-72 lg:max-h-[65vh] lg:overflow-y-auto lg:bg-card/40 lg:backdrop-blur-sm lg:rounded-sm lg:p-3">
+              <ChatBox expeditionId={expeditionId} character={character} />
+            </div>
+            <div className="relative mt-4 pt-8 px-6 pb-6 lg:fixed lg:top-24 lg:left-6 lg:z-10 lg:w-64 lg:max-h-[65vh] lg:overflow-y-auto lg:mt-0 lg:pt-3 lg:px-3 lg:pb-3 lg:bg-card/40 lg:backdrop-blur-sm lg:rounded-sm">
+              <DecorativeBorder variant="wide" className="lg:hidden" />
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
               <p className="text-[10px] text-muted-foreground/60 mb-2">
                 "Devant" désigne qui prend la première ligne à la prochaine étape — optionnel, effectif seulement à la majorité des vivants.
@@ -1299,7 +1356,11 @@ function VotePage() {
                     <span className={`text-xs flex-1 ${!p.is_alive ? "line-through text-red-400/50" : p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
                       {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
                       {!p.is_alive ? " ✝" : ""}
-                      {p.is_alive && <span className="ml-1.5 font-mono" style={{ color: hpColor }}>{hp}/{maxHp} PV</span>}
+                      {p.is_alive && (
+                        <span className="ml-1.5 font-mono inline-flex items-center gap-0.5" style={{ color: hpColor }}>
+                          {hp}/{maxHp} <Heart size={10} className="fill-current" />
+                        </span>
+                      )}
                     </span>
                     <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
                     {p.is_alive && step && !step.resolving && !step.resolved && (
@@ -1456,7 +1517,7 @@ function PotionShop({ step, character, expeditionId }: { step: Step; character: 
     <div className="mb-4 px-3 py-2 border border-amber-500/30 bg-amber-500/5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <p className="text-xs text-muted-foreground">
-          Le marchand vend des potions de soin (+8 PV).{owned > 0 && <span className="text-primary"> Tu en portes {owned}.</span>}
+          Le marchand vend des potions de soin (+8 <Heart size={11} className="inline -mt-0.5 fill-current text-emerald-300" />).{owned > 0 && <span className="text-primary"> Tu en portes {owned}.</span>}
         </p>
         <button onClick={buy} disabled={busy}
           className="text-xs uppercase tracking-[0.1em] border border-amber-400/50 text-amber-300 px-3 py-1.5 hover:bg-amber-500/10 disabled:opacity-30 whitespace-nowrap">
