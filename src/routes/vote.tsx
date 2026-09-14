@@ -32,7 +32,7 @@ type Step = {
   death_percentage: number; third_option_death_pct: number | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[] };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[]; frontlineNarrative: string | null };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 
@@ -669,8 +669,48 @@ function VotePage() {
     if (ended && pollRef.current) clearInterval(pollRef.current);
 
     const { data: dmgRows } = await supabase
-      .from("step_damage_log").select("damage, character:characters(name)").eq("step_id", stepId).order("damage", { ascending: false });
-    const damageLog = ((dmgRows as any[]) ?? []).map((r) => ({ name: r.character?.name ?? "?", damage: r.damage })).filter((r) => r.damage > 0);
+      .from("step_damage_log").select("damage, character_id, character:characters(name)").eq("step_id", stepId).order("damage", { ascending: false });
+    const damageLog = ((dmgRows as any[]) ?? []).map((r) => ({ name: r.character?.name ?? "?", characterId: r.character_id, damage: r.damage })).filter((r) => r.damage > 0);
+
+    // Narration de la désignation "pousser devant" : qui a poussé qui, et ce que ça a donné.
+    const nameById = new Map(participants.map((p) => [p.character_id, (p.character as any)?.name ?? "?"]));
+    const joinNames = (names: string[]) => names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}`;
+    let frontlineNarrative: string | null = null;
+    const { data: flResultRow } = await supabase
+      .from("step_frontline_result").select("target_character_id").eq("step_id", stepId).maybeSingle();
+    const majorityTargetId = (flResultRow as any)?.target_character_id ?? null;
+    const { data: flVoteRows } = await supabase
+      .from("step_frontline_votes").select("voter_character_id, target_character_id").eq("step_id", stepId);
+    const votesByTarget = new Map<string, string[]>();
+    for (const row of (flVoteRows as any[]) ?? []) {
+      const list = votesByTarget.get(row.target_character_id) ?? [];
+      list.push(nameById.get(row.voter_character_id) ?? "?");
+      votesByTarget.set(row.target_character_id, list);
+    }
+    if (majorityTargetId) {
+      const voters = votesByTarget.get(majorityTargetId) ?? [];
+      const votersText = voters.length > 0 ? joinNames(voters) : "Le groupe";
+      const targetName = nameById.get(majorityTargetId) ?? "?";
+      const targetHit = damageLog.some((d) => d.characterId === majorityTargetId);
+      if (damageLog.length > 0) {
+        frontlineNarrative = targetHit
+          ? `${votersText} ont poussé ${targetName} devant, c'est pourquoi il a pris des dégâts.`
+          : `${votersText} ont poussé ${targetName} devant, mais il a réussi à esquiver.`;
+      } else {
+        frontlineNarrative = `${votersText} avaient poussé ${targetName} devant.`;
+      }
+    } else if (votesByTarget.size > 0) {
+      let bestTargetId: string | null = null; let bestVoters: string[] = [];
+      for (const [tid, voters] of votesByTarget) {
+        if (voters.length > bestVoters.length) { bestTargetId = tid; bestVoters = voters; }
+      }
+      if (bestTargetId) {
+        const targetName = nameById.get(bestTargetId) ?? "?";
+        frontlineNarrative = bestVoters.length > 1
+          ? `${joinNames(bestVoters)} ont essayé de pousser ${targetName} devant, mais ça n'a pas suffi.`
+          : `${bestVoters[0]} a poussé ${targetName} devant, mais seul, il n'a pas réussi.`;
+      }
+    }
 
     setResult({
       deaths, loot: Math.round(exp?.total_loot_kept ?? 0), ended,
@@ -681,6 +721,7 @@ function VotePage() {
       survivorNames,
       resolutionType,
       damageLog,
+      frontlineNarrative,
     });
   }
 
@@ -944,18 +985,17 @@ function VotePage() {
               {secondsLeft > 0 && (
                 <button onClick={voteSkip} disabled={skipBusy || skipTally?.mine}
                   className="w-full mb-4 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-2 hover:border-primary/40 hover:text-primary disabled:opacity-50">
-                  {skipTally?.mine
-                    ? `En attente des autres — ${skipTally.count}/${skipTally.total} veulent passer`
-                    : skipBusy ? "…" : `Passer (accélère si tout le monde est d'accord${skipTally ? ` — ${skipTally.count}/${skipTally.total}` : ""})`}
+                  {skipBusy ? "…" : `Accélérer${skipTally ? ` ${skipTally.count}/${skipTally.total}` : ""}`}
                 </button>
               )}
 
               <LedgerError message={error} />
 
               <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
-                <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Ton action — une seule possible</p>
+                <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Optionnel</p>
 
                 <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                  title="Réduit le risque de cette étape. Pool partagé avec Fouiller et les potions, une fois épuisé il ne revient pas."
                   className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                   {myIntervened ? "Intervention déjà utilisée sur cette étape"
                     : !interventionsRemaining ? "Plus d'intervention disponible"
@@ -975,6 +1015,7 @@ function VotePage() {
                   </p>
                 ) : (
                   <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                    title="N'aide pas le groupe. Vérifie juste si toi tu as mis la main sur quelque chose."
                     className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                     {mySearched ? "Fouille déjà tentée sur cette étape"
                       : !interventionsRemaining ? "Plus d'intervention disponible"
@@ -992,7 +1033,7 @@ function VotePage() {
                 {hasPotion && (
                   myDrunk ? (
                     <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 text-center">
-                      {drinkResult !== null ? <>Potion bue — {drinkResult} <Heart size={11} className="inline -mt-0.5 fill-current" /></> : "Potion déjà bue sur cette étape"}
+                      {drinkResult !== null ? <>Potion bue, {drinkResult} <Heart size={11} className="inline -mt-0.5 fill-current" /></> : "Potion déjà bue sur cette étape"}
                     </p>
                   ) : (
                     <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
@@ -1066,6 +1107,10 @@ function VotePage() {
         <LedgerCard title={title} subtitle={subtitle}>
           <p className="text-lg md:text-xl text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
 
+          {result.frontlineNarrative && (
+            <p className="text-sm text-amber-300/90 text-center mb-3 italic">{result.frontlineNarrative}</p>
+          )}
+
           {result.damageLog.length > 0 && (
             <div className="mb-5 px-3 py-3 border border-red-400/30 bg-red-400/5">
               <p className="text-[10px] uppercase tracking-[0.14em] text-red-400/70 mb-1.5 text-center">Dégâts encaissés</p>
@@ -1091,7 +1136,7 @@ function VotePage() {
             <div className="mb-4 px-3 py-2 border border-border/20">
               {result.survivorNames.map(n => (
                 <p key={n} className="text-xs text-muted-foreground">
-                  {n} — <span className="text-purple-300">+{result.xpAwarded} XP</span>
+                  {n}, <span className="text-purple-300">+{result.xpAwarded} XP</span>
                 </p>
               ))}
             </div>
@@ -1170,15 +1215,15 @@ function VotePage() {
           <>
             <Frame variant="bar" className="mb-2">
               <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold">
-                Étape {step.step_number} — {step.event_type}
+                Étape {step.step_number}, {step.event_type}
               </span>
             </Frame>
 
             <p className={`text-sm font-semibold mb-4 text-center ${RISK_COLOR[step.risk_level]}`}>
               ⚠ Risque {RISK_LABEL[step.risk_level]}
               <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
-              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact — connu de tout le groupe)</span>}
-              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort — connu de toi seul)</span>}
+              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact, connu de tout le groupe)</span>}
+              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort, connu de toi seul)</span>}
             </p>
 
             {step.description && (
@@ -1226,7 +1271,7 @@ function VotePage() {
                 {step.third_option_kind && step.third_option_label && (
                   step.required_vocation && myVocation !== step.required_vocation ? (
                     <p className="w-full mt-2 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
-                      {step.third_option_label} — réservé à un personnage {vocationLabel(step.required_vocation)}
+                      {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
                     </p>
                   ) : (
                     <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
@@ -1235,21 +1280,36 @@ function VotePage() {
                       {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
                       {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde)`}
                       {step.third_option_kind === "pillage" && step.third_option_loot_min != null && step.third_option_loot_max != null &&
-                        ` — ${step.third_option_loot_min}–${step.third_option_loot_max} or, risque propre`}
+                        `, ${step.third_option_loot_min}–${step.third_option_loot_max} or, risque propre`}
                     </button>
                   )
                 )}
               </div>
             ) : (
               <div className="mb-4 px-3 py-3 border border-border/40 text-sm text-muted-foreground text-center">
-                Vote enregistré — en attente des autres…
+                Vote enregistré, en attente des autres…
               </div>
             )}
 
             {/* ================= Actions individuelles — optionnelles, indépendantes du vote ================= */}
-            {((myVocation && !myVote) || (step.event_type === "marchand" && !step.resolving && !step.resolved)) && (
+            {(() => {
+              const isMarchandStep = step.event_type === "marchand" && !step.resolving && !step.resolved;
+              const hasVocationAction = !!myVocation && !myVote && (
+                (myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal")) ||
+                hasRiskReserveEffect ||
+                (myVocation === "Martyr" && !usedAbilities.has("martyr")) ||
+                usedAbilities.has("martyr") ||
+                (myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation")) ||
+                usedAbilities.has("martyr_provocation") ||
+                (myVocation === "Traitre" && !usedAbilities.has("traitre_gambit")) ||
+                usedAbilities.has("traitre_gambit") ||
+                (myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente")) ||
+                usedAbilities.has("traitre_vente")
+              );
+              return hasVocationAction || isMarchandStep;
+            })() && (
               <div className="mb-4 px-3 py-3 border border-dashed border-border/40 bg-border/5">
-                <p className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground/70 mb-2 text-center">Actions individuelles (optionnelles)</p>
+                <p className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground/70 mb-2 text-center">Actions individuelles, optionnelles</p>
                 {myVocation && !myVote && (
                   <div className="space-y-2">
                     {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
@@ -1277,7 +1337,7 @@ function VotePage() {
                       </div>
                     )}
                     {usedAbilities.has("martyr_provocation") && (
-                      <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée — le résultat arrive.</p>
+                      <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée, le résultat arrive.</p>
                     )}
                     {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
                       <button onClick={useGambit} disabled={vocationBusy === "gambit"}
@@ -1344,37 +1404,39 @@ function VotePage() {
           <div className="relative mt-4 pt-8 px-6 pb-6 xl:fixed xl:top-24 xl:left-6 xl:z-10 xl:w-64 xl:mt-0 xl:pt-3 xl:px-3 xl:pb-3 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
             <DecorativeBorder variant="wide" className="xl:hidden" />
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
-                <p className="text-[10px] text-muted-foreground/60 mb-2">
-                  "Devant" désigne qui prend la première ligne à la prochaine étape — optionnel, effectif seulement à la majorité des vivants.
-                </p>
                 <ul className="space-y-1.5">
-                  {participants.map((p) => {
+                  {participants.map((p, idx) => {
                     const maxHp = getMaxHp((p.character as any)?.level ?? 1);
                     const hp = (p.character as any)?.hp ?? maxHp;
                     const hpRatio = maxHp > 0 ? hp / maxHp : 1;
                     const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
                     const votes = frontlineTally[p.character_id] ?? 0;
+                    const isMe = p.character_id === character?.id;
                     return (
                     <li key={p.character_id}
-                      className={`flex items-center gap-2 px-2 py-1.5 border ${!p.is_alive ? "opacity-30 border-red-400/20" : p.character_id === character?.id ? "border-primary/40" : "border-border/20"}`}>
-                      <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={28} />
-                      <span className={`text-xs flex-1 ${!p.is_alive ? "line-through text-red-400/50" : p.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
-                        {(p.character as any)?.name}{p.character_id === character?.id ? " (toi)" : ""}
-                        {!p.is_alive ? " ✝" : ""}
-                        {p.is_alive && (
-                          <span className="ml-1.5 font-mono inline-flex items-center gap-0.5" style={{ color: hpColor }}>
-                            {hp}/{maxHp} <Heart size={10} className="fill-current" />
-                          </span>
-                        )}
-                      </span>
-                      <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
+                      className={`px-1 py-2 ${idx > 0 ? "border-t border-border/10" : ""} ${!p.is_alive ? "opacity-30" : ""}`}>
+                      <div className="flex items-center gap-2">
+                        <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={38} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs truncate ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
+                            {(p.character as any)?.name}{isMe ? " (toi)" : ""}{!p.is_alive ? " ✝" : ""}
+                          </p>
+                          {p.is_alive && (
+                            <p className="text-[10px] font-mono flex items-center gap-0.5" style={{ color: hpColor }}>
+                              {hp}/{maxHp} <Heart size={9} className="fill-current" />
+                            </p>
+                          )}
+                        </div>
+                        <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       {p.is_alive && step && !step.resolving && !step.resolved && (
                         <button
                           onClick={() => voteFrontline(p.character_id)}
-                          title="Désigner en première ligne pour la prochaine étape"
-                          className={`text-[9px] uppercase tracking-[0.06em] border px-1.5 py-0.5 ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/30 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-300"}`}
+                          title="Pousser cette personne devant pour la prochaine étape"
+                          className={`text-[9px] uppercase tracking-[0.06em] border px-1.5 py-0.5 whitespace-nowrap ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/30 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-300"}`}
                         >
-                          Devant{votes > 0 ? ` (${votes})` : ""}
+                          Pousser devant{votes > 0 ? ` (${votes})` : ""}
                         </button>
                       )}
                       {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
@@ -1412,6 +1474,7 @@ function VotePage() {
                           {votedIds.includes(p.character_id) ? "✓" : "…"}
                         </span>
                       )}
+                      </div>
                     </li>
                     );
                   })}

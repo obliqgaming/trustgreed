@@ -261,7 +261,7 @@ function Index() {
                 </p>
                 <p className="text-sm text-muted-foreground mb-2">
                   {activeExpedition.participant_count} participant{activeExpedition.participant_count > 1 ? "s" : ""}
-                  {activeExpedition.status === "waiting" ? " — en attente du lancement" : " — en route"}
+                  {activeExpedition.status === "waiting" ? ", en attente du lancement" : ", en route"}
                 </p>
                 <button
                   onClick={() => {
@@ -438,12 +438,12 @@ function GuildMemorial({ guildId }: { guildId: string }) {
   return (
     <div className="mt-5">
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
-        Mémorial de la guilde — {dead.length} mort{dead.length > 1 ? "s" : ""}
+        Mémorial de la guilde, {dead.length} mort{dead.length > 1 ? "s" : ""}
       </p>
       <ul className="space-y-1">
         {dead.map((c) => (
           <li key={c.id} className="text-xs text-muted-foreground/70 border border-border/20 px-3 py-1.5 flex justify-between">
-            <span className="line-through">{c.name} <span className="opacity-60">— {getTitleForLevel(c.level)} (niv. {c.level})</span></span>
+            <span className="line-through">{c.name}, <span className="opacity-60">{getTitleForLevel(c.level)} (niv. {c.level})</span></span>
             {c.died_at && (
               <span>{new Date(c.died_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</span>
             )}
@@ -621,7 +621,7 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-3">Guildes actives</p>
               {pendingGuildId && (
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground/70 italic">Demande en attente — un seul dossier à la fois.</p>
+                  <p className="text-xs text-muted-foreground/70 italic">Demande en attente, un seul dossier à la fois.</p>
                   <button
                     type="button"
                     onClick={cancelRequest}
@@ -971,7 +971,7 @@ function RetroVocationPicker({ characterId, onDone }: { characterId: string; onD
   return (
     <div className="mb-4 border border-primary/40 bg-primary/5 px-3 py-3">
       <p className="text-xs tracking-[0.14em] uppercase text-primary mb-2">⚔ Nouveau : les vocations sont arrivées</p>
-      <p className="text-xs text-muted-foreground mb-3">Chaque personnage a désormais un vrai rôle en expédition — pas juste un titre. Choix définitif, à faire une seule fois dans sa vie.</p>
+      <p className="text-xs text-muted-foreground mb-3">Chaque personnage a désormais un vrai rôle en expédition, pas juste un titre. Choix définitif, à faire une seule fois dans sa vie.</p>
       {!open ? (
         <button onClick={() => setOpen(true)} className="text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10">
           Choisir maintenant
@@ -1134,7 +1134,7 @@ function AdminTestPanel({ guildId, characterId, memberCount, history, onDone }: 
   }
 
   function copyLogs() {
-    const text = history.map(e => `[${e.created_at}] ${e.event_type} — ${e.description}`).join("\n");
+    const text = history.map(e => `[${e.created_at}] ${e.event_type}, ${e.description}`).join("\n");
     void navigator.clipboard.writeText(text || "(historique vide)");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -1142,7 +1142,7 @@ function AdminTestPanel({ guildId, characterId, memberCount, history, onDone }: 
 
   return (
     <div className="mb-4 border border-dashed border-amber-500/50 bg-amber-500/5 px-3 py-3">
-      <p className="text-xs tracking-[0.14em] uppercase text-amber-300 mb-2">Mode admin — compagnons de test</p>
+      <p className="text-xs tracking-[0.14em] uppercase text-amber-300 mb-2">Mode admin, compagnons de test</p>
       <LedgerError message={error} />
       <div className="flex flex-wrap gap-2">
         <button onClick={spawnBots} disabled={busy}
