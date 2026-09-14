@@ -29,6 +29,7 @@ type Step = {
   third_option_loot_min: number | null; third_option_loot_max: number | null; third_option_cost: number | null;
   resolution_type: string | null; required_vocation: string | null;
   required_flag_sentiment: string | null; required_flag: string | null;
+  situation_success_text: string | null; situation_failure_text: string | null;
   death_percentage: number; third_option_death_pct: number | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
@@ -296,7 +297,7 @@ function VotePage() {
   const fetchStep = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag, death_percentage, third_option_death_pct")
+      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag, death_percentage, third_option_death_pct, situation_success_text, situation_failure_text")
       .eq("expedition_id", expeditionId)
       .order("step_number", { ascending: false })
       .limit(1)
@@ -612,7 +613,7 @@ function VotePage() {
 
   async function showStepResult(stepId: string, eventType: string, deathsCountHint: number, isRetreat: boolean = false) {
     const { data: resolvedStep } = await supabase
-      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded, resolution_type").eq("id", stepId).maybeSingle();
+      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded, resolution_type, situation_success_text, situation_failure_text").eq("id", stepId).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
     const resolutionType = resolvedStep?.resolution_type ?? null;
 
@@ -687,7 +688,8 @@ function VotePage() {
         ? "Vous auriez dû laisser ça tranquille. Ce que vous avez réveillé en l'étudiant ne se rendort pas si facilement."
         : "L'examen minutieux paie : ce que vous avez trouvé valait plus que ce qu'un simple coup d'œil aurait laissé croire.";
     } else {
-      cinematicText = getCinematic(eventType, wentWrong);
+      cinematicText = (wentWrong ? resolvedStep?.situation_failure_text : resolvedStep?.situation_success_text)
+        ?? getCinematic(eventType, wentWrong);
       const { data: interventionRows } = await supabase
         .from("step_interventions").select("character:characters(name)").eq("step_id", stepId).eq("action", "aide");
       const intervenerNames = (interventionRows as any[] ?? []).map(r => r.character?.name).filter(Boolean);
