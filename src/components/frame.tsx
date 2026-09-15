@@ -104,11 +104,16 @@ export function DecorativeBorder({ variant = "wide", className = "" }: { variant
       aria-hidden
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
       style={{
+        // borderWidth en % de la boîte (pas en px fixe) : sur un panneau
+        // haut et étroit de quelques centaines de px, une bordure de 330px
+        // fixes écrasait et décalait tout le contenu. borderImageSlice
+        // reste en px (dimensions réelles du fichier source) — seule la
+        // largeur affichée doit être relative au conteneur.
         borderStyle: "solid",
-        borderWidth: `${cfg.slice}px`,
+        borderWidth: "8%",
         borderImageSource: `url(${cfg.src})`,
         borderImageSlice: `${cfg.slice} fill`,
-        borderImageWidth: `${cfg.slice}px`,
+        borderImageWidth: "8%",
         borderImageRepeat: "round",
       }}
     />
