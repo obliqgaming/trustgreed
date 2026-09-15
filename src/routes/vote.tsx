@@ -1710,7 +1710,8 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   }
 
   return (
-    <div className="mt-4 border-t border-border/20 pt-4">
+    <div className="relative mt-4 pt-6 px-4 pb-4">
+      <DecorativeBorder variant="square" className="xl:hidden" />
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
       <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
         {messages.length === 0
