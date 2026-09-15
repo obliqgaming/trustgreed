@@ -17,12 +17,12 @@ type CharacterRow = {
   legacy_tier: number; multiclass_vocations: string[]; unlocked_portraits: string[]; miracle_used: boolean;
 };
 
-const SOUL_STONE_BASE = 500;
-const SOUL_STONE_MULT = 3;
-const LEGACY_BASE = 300;
-const LEGACY_MULT = 2.5;
-const MULTICLASS_BASE = 800;
-const MULTICLASS_MULT = 3;
+const SOUL_STONE_BASE = 1200;
+const SOUL_STONE_MULT = 3.5;
+const LEGACY_BASE = 700;
+const LEGACY_MULT = 3;
+const MULTICLASS_BASE = 1800;
+const MULTICLASS_MULT = 3.5;
 const PORTRAIT_COST = 600;
 
 const INK = "#f2e4c8";
