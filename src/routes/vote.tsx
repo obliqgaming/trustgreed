@@ -8,7 +8,7 @@ import { PortraitDisplay } from "@/components/portraits";
 import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 import { Frame, DecorativeBorder } from "@/components/frame";
-import { ImmersiveButton } from "@/components/immersive";
+import { ImmersiveButton, FramedBox } from "@/components/immersive";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -1351,12 +1351,12 @@ function VotePage() {
                 </div>
               </Frame>
             )}
-            <div className="flex items-center justify-between mb-4 px-3 py-2 border border-border/40">
+            <FramedBox frame={5} className="flex items-center justify-between mb-4 px-3 py-2">
               <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
               <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
                 {timeLeft !== null ? fmt(timeLeft) : "—"}
               </span>
-            </div>
+            </FramedBox>
 
             {/* ================= TON VOTE — la décision qui compte ================= */}
             {!myVote ? (
@@ -1510,9 +1510,8 @@ function VotePage() {
             <ChatBox expeditionId={expeditionId} character={character} />
           </div>
           <div className="relative mt-4 pt-8 px-6 pb-6 xl:fixed xl:top-24 xl:left-6 xl:z-10 xl:w-64 xl:mt-0 xl:pt-3 xl:px-3 xl:pb-3 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
-            <DecorativeBorder variant="wide" />
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
-                <ul className="space-y-1.5">
+                <div className="space-y-1.5">
                   {participants.map((p, idx) => {
                     const maxHp = getMaxHp((p.character as any)?.level ?? 1);
                     const hp = (p.character as any)?.hp ?? maxHp;
@@ -1521,8 +1520,8 @@ function VotePage() {
                     const votes = frontlineTally[p.character_id] ?? 0;
                     const isMe = p.character_id === character?.id;
                     return (
-                    <li key={p.character_id}
-                      className={`px-1 py-2 ${idx > 0 ? "border-t border-border/10" : ""} ${!p.is_alive ? "opacity-30" : ""}`}>
+                    <FramedBox key={p.character_id} frame={5}
+                      className={`px-2 py-2 ${!p.is_alive ? "opacity-30" : ""}`}>
                       <div className="flex items-center gap-2">
                         <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={38} />
                         <div className="flex-1 min-w-0">
@@ -1583,10 +1582,10 @@ function VotePage() {
                         </span>
                       )}
                       </div>
-                    </li>
+                    </FramedBox>
                     );
                   })}
-                </ul>
+                </div>
               </div>
         </>
       )}
