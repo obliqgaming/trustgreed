@@ -72,9 +72,15 @@ export function MemberFrame({
   );
 }
 
+/**
+ * `slice` est la largeur (en px, dans l'image source) de la zone de coin/bord
+ * à préserver sans déformation — mesurée pour couvrir l'ornement le plus
+ * large des 4 coins de chaque image. Le centre de chaque bord est répété
+ * (pas étiré) pour ne jamais déformer le motif de la ligne fine.
+ */
 const BORDER_CONFIG = {
-  wide: "/border_wide.webp",
-  square: "/border_square.webp",
+  wide: { src: "/border_wide.webp", slice: 160 },
+  square: { src: "/border_square.webp", slice: 330 },
 } as const;
 
 /**
@@ -83,14 +89,28 @@ const BORDER_CONFIG = {
  * flou, padding gérés par l'appelant). Le parent doit être `position: relative`.
  * Usage : enrober une carte, une liste, un panneau, etc. sans reconstruire sa
  * mise en page.
+ *
+ * Implémenté en `border-image` (9-slice) plutôt qu'en `<img>` étirée : les 4
+ * coins gardent leurs proportions d'origine quel que soit le ratio du
+ * conteneur (panneau haut et étroit, large et bas, etc.), seuls les 4
+ * segments de bord entre les coins sont répétés pour combler la longueur.
+ * Une `<img>` avec `object-fill` écrase tout uniformément et déforme les
+ * coins dès que le conteneur s'éloigne d'un ratio carré.
  */
 export function DecorativeBorder({ variant = "wide", className = "" }: { variant?: keyof typeof BORDER_CONFIG; className?: string }) {
+  const cfg = BORDER_CONFIG[variant];
   return (
-    <img
-      src={BORDER_CONFIG[variant]}
-      alt=""
+    <div
       aria-hidden
-      className={`absolute inset-0 w-full h-full object-fill pointer-events-none select-none ${className}`}
+      className={`absolute inset-0 pointer-events-none select-none ${className}`}
+      style={{
+        borderStyle: "solid",
+        borderWidth: `${cfg.slice}px`,
+        borderImageSource: `url(${cfg.src})`,
+        borderImageSlice: `${cfg.slice} fill`,
+        borderImageWidth: `${cfg.slice}px`,
+        borderImageRepeat: "round",
+      }}
     />
   );
 }
