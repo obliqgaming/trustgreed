@@ -13,7 +13,15 @@ import type { ReactNode } from "react";
 // (parchemin), barre3/4/5 ont un remplissage sombre — vérifié sur les
 // images réelles.
 const FRAME_IS_LIGHT: Record<number, boolean> = { 2: true, 3: false, 4: false, 5: false };
+// `slice` = dimensions réelles dans le fichier source (où couper les coins),
+// mesuré sur chaque image, ne change jamais avec la taille de la carte.
+// `displayWidth` = épaisseur affichée à l'écran (fine, façon liseré autour
+// du texte) — le navigateur redimensionne les coins découpés du fichier
+// source pour rentrer dans cette épaisseur. Les confondre (même valeur pour
+// les deux) affiche le cadre à l'échelle 1:1 du fichier source, énorme et
+// disproportionné sur une carte compacte — c'est le bug qu'on corrige ici.
 const FRAME_SLICE: Record<number, number> = { 2: 50, 3: 50, 4: 50, 5: 50 };
+const FRAME_DISPLAY_WIDTH = 12;
 export function FramedBox({ frame, children, className = "" }: { frame: 2 | 3 | 4 | 5; children: ReactNode; className?: string }) {
   const isLight = FRAME_IS_LIGHT[frame];
   const slice = FRAME_SLICE[frame];
@@ -22,10 +30,10 @@ export function FramedBox({ frame, children, className = "" }: { frame: 2 | 3 | 
       className={`relative ${className}`}
       style={{
         borderStyle: "solid",
-        borderWidth: `${slice}px`,
+        borderWidth: `${FRAME_DISPLAY_WIDTH}px`,
         borderImageSource: `url(/barre${frame}.webp)`,
         borderImageSlice: `${slice} fill`,
-        borderImageWidth: `${slice}px`,
+        borderImageWidth: `${FRAME_DISPLAY_WIDTH}px`,
         borderImageRepeat: "round",
       }}
     >
