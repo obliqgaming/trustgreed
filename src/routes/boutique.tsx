@@ -23,7 +23,7 @@ const LEGACY_BASE = 300;
 const LEGACY_MULT = 2.5;
 const MULTICLASS_BASE = 800;
 const MULTICLASS_MULT = 3;
-const PORTRAIT_COST = 250;
+const PORTRAIT_COST = 600;
 
 const INK = "#f2e4c8";
 const INK_MUTED = "#c9b896";

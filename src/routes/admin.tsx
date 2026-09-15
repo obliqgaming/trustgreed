@@ -11,9 +11,10 @@ export const Route = createFileRoute("/admin")({
 type GuildRow = { id: string; name: string; gold: number; member_count: number; history_count: number };
 type CharacterRow = { id: string; name: string; is_alive: boolean; level: number; guild_id: string | null; guild_name?: string; is_bot: boolean };
 type ExpeditionRow = { id: string; status: string; guild_id: string; guild_name: string; participant_count: number };
+type EventSituation = { situation: string; success: string | null; failure: string | null };
 type EventTemplate = {
   id: string; event_type: string; risk_level: string;
-  loot_base_min: number; loot_base_max: number; death_percentage: number; flavor_texts: string[];
+  loot_base_min: number; loot_base_max: number; death_percentage: number; flavor_texts: EventSituation[];
 };
 type ProfileRow = { id: string; username: string; last_seen_at: string | null };
 
@@ -331,17 +332,53 @@ function AdminPage() {
                       </label>
                     </div>
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">Textes narratifs (un par ligne)</p>
-                      <textarea value={editingTemplate.flavor_texts.join("\n")}
-                        onChange={(e) => setEditingTemplate({ ...editingTemplate, flavor_texts: e.target.value.split("\n") })}
-                        rows={4} className="w-full bg-transparent border border-border/40 px-2 py-1.5 text-xs" />
+                      <p className="text-[10px] text-muted-foreground mb-1">Situations (chacune avec sa réussite et son échec, laisser vide pour retomber sur le texte générique)</p>
+                      <div className="space-y-3">
+                        {editingTemplate.flavor_texts.map((sit, i) => (
+                          <div key={i} className="border border-border/30 p-2 space-y-1">
+                            <div className="flex items-start gap-1">
+                              <textarea value={sit.situation} placeholder="Situation"
+                                onChange={(e) => {
+                                  const next = [...editingTemplate.flavor_texts];
+                                  next[i] = { ...next[i], situation: e.target.value };
+                                  setEditingTemplate({ ...editingTemplate, flavor_texts: next });
+                                }}
+                                rows={2} className="flex-1 bg-transparent border border-border/40 px-2 py-1.5 text-xs" />
+                              <button onClick={() => {
+                                const next = editingTemplate.flavor_texts.filter((_, j) => j !== i);
+                                setEditingTemplate({ ...editingTemplate, flavor_texts: next });
+                              }} className="text-[10px] text-red-400/70 border border-red-400/30 px-1.5 py-1 hover:bg-red-400/10">✕</button>
+                            </div>
+                            <textarea value={sit.success ?? ""} placeholder="Réussite (optionnel)"
+                              onChange={(e) => {
+                                const next = [...editingTemplate.flavor_texts];
+                                next[i] = { ...next[i], success: e.target.value || null };
+                                setEditingTemplate({ ...editingTemplate, flavor_texts: next });
+                              }}
+                              rows={2} className="w-full bg-transparent border border-emerald-400/20 px-2 py-1.5 text-xs" />
+                            <textarea value={sit.failure ?? ""} placeholder="Échec (optionnel)"
+                              onChange={(e) => {
+                                const next = [...editingTemplate.flavor_texts];
+                                next[i] = { ...next[i], failure: e.target.value || null };
+                                setEditingTemplate({ ...editingTemplate, flavor_texts: next });
+                              }}
+                              rows={2} className="w-full bg-transparent border border-red-400/20 px-2 py-1.5 text-xs" />
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => setEditingTemplate({
+                        ...editingTemplate,
+                        flavor_texts: [...editingTemplate.flavor_texts, { situation: "", success: null, failure: null }],
+                      })} className="mt-2 text-[10px] uppercase border border-border/40 text-muted-foreground px-2 py-1 hover:border-primary/40 hover:text-primary">
+                        + Ajouter une situation
+                      </button>
                     </div>
                     <button disabled={busy === `tpl-${t.id}`}
                       onClick={() => runAction(`tpl-${t.id}`, () => supabase.rpc("admin_update_event_template" as any, {
                         p_id: t.id, p_risk_level: editingTemplate.risk_level,
                         p_loot_base_min: editingTemplate.loot_base_min, p_loot_base_max: editingTemplate.loot_base_max,
                         p_death_percentage: editingTemplate.death_percentage,
-                        p_flavor_texts: editingTemplate.flavor_texts.map(s => s.trim()).filter(Boolean),
+                        p_flavor_texts: editingTemplate.flavor_texts.filter(s => s.situation.trim()),
                       }).then((res) => { if (!res.error) setEditingTemplate(null); return res; }))}
                       className="text-[10px] uppercase border border-primary/40 text-primary px-2 py-1 hover:bg-primary/10 disabled:opacity-30">
                       {busy === `tpl-${t.id}` ? "…" : "Enregistrer"}
