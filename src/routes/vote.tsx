@@ -1469,7 +1469,7 @@ function VotePage() {
             <ChatBox expeditionId={expeditionId} character={character} />
           </div>
           <div className="relative mt-4 pt-8 px-6 pb-6 xl:fixed xl:top-24 xl:left-6 xl:z-10 xl:w-64 xl:mt-0 xl:pt-3 xl:px-3 xl:pb-3 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
-            <DecorativeBorder variant="wide" className="xl:hidden" />
+            <DecorativeBorder variant="wide" className="xl:-inset-3 xl:w-auto xl:h-auto" />
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <ul className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1711,7 +1711,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
 
   return (
     <div className="relative mt-4 pt-6 px-4 pb-4">
-      <DecorativeBorder variant="square" className="xl:hidden" />
+      <DecorativeBorder variant="square" className="xl:-inset-3 xl:w-auto xl:h-auto" />
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
       <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
         {messages.length === 0
