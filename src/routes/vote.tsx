@@ -100,8 +100,25 @@ const EVENT_ECHEC_IMAGES: Partial<Record<string, string[]>> = {
   passage: ["/passage_echec.webp"],
   rencontre: ["/rencontre_echec.webp"],
   traces: ["/traces_echec_v1.webp", "/traces_echec_v2.webp"],
+  marchand: ["/marchand_echec_v1.webp"],
+  decouverte: ["/decouverte_echec.webp"],
 };
 const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.webp", "/cinematic_survive_bis.webp"];
+// Symétrique de EVENT_ECHEC_IMAGES côté réussite — une réussite de coffre
+// (couvercle ouvert, or qui déborde) n'a rien à voir avec une réussite de
+// passage (l'autre bord atteint). S'ajoute au pool générique existant
+// (eventBg + STEP_RESULT_SUCCESS + CINEMATIC_SURVIVE_IMGS), ne le remplace
+// pas, pour ne rien retirer de la variété déjà en place.
+const EVENT_REUSSITE_IMAGES: Partial<Record<string, string[]>> = {
+  coffre: ["/coffre_reussite_v1.webp", "/coffre_reussite_v2.webp"],
+  decouverte: ["/decouverte_reussite_v1.webp", "/decouverte_reussite_v2.webp"],
+  gardien: ["/gardien_reussite.webp"],
+  marchand: ["/marchand_reussite.webp"],
+  passage: ["/passage_reussite.webp"],
+  porte: ["/porte_reussite.webp"],
+  rencontre: ["/rencontre_reussite.webp"],
+  traces: ["/traces_reussite.webp"],
+};
 const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
 const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
 const MARCHAND_ACHETE_IMGS = ["/marchand_protection_achetee.webp", "/marchand_protection_achetee_bis.webp"];
@@ -1151,15 +1168,22 @@ function VotePage() {
         : ((resultImageVariant < 0.5 ? RETURN_SUCCESS_IMGS[0] : RETURN_SUCCESS_IMGS[1]) ?? RETURN_SUCCESS_IMGS[0]!);
     } else if (result.deaths > 0) {
       // Image liée au type de l'événement qui vient de faire des dégâts,
-      // quand elle existe ; repli sur le pool générique pour les types qui
-      // n'ont pas encore d'image d'échec dédiée (decouverte, marchand).
+      // quand elle existe ; repli sur le pool générique sinon.
       const echecPool = EVENT_ECHEC_IMAGES[result.eventType] ?? CINEMATIC_DEATH_IMGS;
       resultBg = echecPool[Math.floor(resultImageVariant * echecPool.length)] ?? echecPool[0]!;
     } else {
-      // L'image de l'étape elle-même rejoint le pool générique, pour que
-      // "étape franchie" garde un vrai lien visuel avec ce qui vient de se
-      // passer plutôt que d'être toujours déconnecté de l'événement.
-      const successPool = eventBg ? [eventBg, STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS] : [STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS];
+      // L'image de l'étape elle-même rejoint le pool générique, tout comme
+      // l'image de réussite dédiée au type (coffre ouvert, découverte
+      // révélée...) quand elle existe, pour que "étape franchie" garde un
+      // vrai lien visuel avec ce qui vient de se passer plutôt que d'être
+      // toujours déconnecté de l'événement.
+      const reussitePool = EVENT_REUSSITE_IMAGES[result.eventType] ?? [];
+      const successPool = [
+        ...(eventBg ? [eventBg] : []),
+        ...reussitePool,
+        STEP_RESULT_SUCCESS,
+        ...CINEMATIC_SURVIVE_IMGS,
+      ];
       resultBg = successPool[Math.floor(resultImageVariant * successPool.length)] ?? successPool[0]!;
     }
     const title = result.iDied ? "Tu es mort."
