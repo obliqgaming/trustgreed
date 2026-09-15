@@ -20,7 +20,7 @@ const FRAME_IS_LIGHT: Record<number, boolean> = { 2: true, 3: false, 4: false, 5
 // source pour rentrer dans cette épaisseur. Les confondre (même valeur pour
 // les deux) affiche le cadre à l'échelle 1:1 du fichier source, énorme et
 // disproportionné sur une carte compacte — c'est le bug qu'on corrige ici.
-const FRAME_SLICE: Record<number, number> = { 2: 50, 3: 50, 4: 50, 5: 50 };
+const FRAME_SLICE: Record<number, number> = { 2: 50, 3: 50, 4: 50, 5: 160 };
 const FRAME_DISPLAY_WIDTH = 12;
 export function FramedBox({ frame, children, className = "" }: { frame: 2 | 3 | 4 | 5; children: ReactNode; className?: string }) {
   const isLight = FRAME_IS_LIGHT[frame];

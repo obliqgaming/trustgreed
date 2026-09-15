@@ -1521,11 +1521,11 @@ function VotePage() {
                     const isMe = p.character_id === character?.id;
                     return (
                     <FramedBox key={p.character_id} frame={5}
-                      className={`px-2 py-2 ${!p.is_alive ? "opacity-30" : ""}`}>
+                      className={`px-3 py-2.5 ${!p.is_alive ? "opacity-30" : ""}`}>
                       <div className="flex items-center gap-2">
-                        <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={38} />
+                        <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={52} bordered={false} />
                         <div className="flex-1 min-w-0">
-                          <p className={`text-xs truncate ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
+                          <p className={`text-xs ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
                             {(p.character as any)?.name}{isMe ? " (toi)" : ""}{!p.is_alive ? " ✝" : ""}
                           </p>
                           {p.is_alive && (

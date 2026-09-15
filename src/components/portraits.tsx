@@ -16,11 +16,11 @@ export const PORTRAITS: { id: string; label: string; src: string; premium?: bool
   { id: "chevalier_radiant", label: "Le Chevalier Radiant",src: "/portrait_chevalier_radiant.webp", premium: true },
 ];
 
-export function PortraitDisplay({ portraitId, size = 64 }: { portraitId: string; size?: number }) {
+export function PortraitDisplay({ portraitId, size = 64, bordered = true }: { portraitId: string; size?: number; bordered?: boolean }) {
   const portrait = PORTRAITS.find(p => p.id === portraitId) ?? PORTRAITS[4]; // capuche par défaut
   return (
     <div style={{ width: size, height: size }}
-      className="rounded-sm border border-border/40 overflow-hidden flex-shrink-0 bg-black">
+      className={`rounded-sm overflow-hidden flex-shrink-0 bg-black ${bordered ? "border border-border/40" : ""}`}>
       <img
         src={portrait?.src ?? ""}
         alt={portrait?.label ?? ""}
