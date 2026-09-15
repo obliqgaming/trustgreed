@@ -33,7 +33,7 @@ type Step = {
   death_percentage: number; third_option_death_pct: number | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[]; frontlineNarrative: string | null };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[]; frontlineNarrative: string | null; eventType: string };
 
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 
@@ -88,7 +88,19 @@ const DEATH_SCREEN = "/death_screen.webp";
 const RETURN_SUCCESS_IMGS = ["/return_success.webp", "/rentrer_safe.webp"];
 const RETURN_WIPE = "/return_wipe.webp";
 const CINEMATIC_TPK_IMG = "/cinematic_wipe.webp";
-const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // un mort dans le groupe, pas tout le monde — cinematic_death.webp retirée : c'est une vue d'ambiance sans lien visuel avec une mort
+const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // fallback générique quand le event_type n'a pas d'image d'échec dédiée
+// Image d'échec spécifique par type d'événement — un mort après un coffre
+// piégé n'a plus le même visuel qu'un mort après un gardien. S'ajoute au
+// pool générique ci-dessus plutôt que de le remplacer, pour les types qui
+// n'ont pas encore d'image dédiée.
+const EVENT_ECHEC_IMAGES: Partial<Record<string, string[]>> = {
+  coffre: ["/coffre_echec.webp"],
+  gardien: ["/gardien_echec.webp"],
+  porte: ["/porte_echec.webp"],
+  passage: ["/passage_echec.webp"],
+  rencontre: ["/rencontre_echec.webp"],
+  traces: ["/traces_echec_v1.webp", "/traces_echec_v2.webp"],
+};
 const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.webp", "/cinematic_survive_bis.webp"];
 const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
 const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
@@ -760,6 +772,7 @@ function VotePage() {
       resolutionType,
       damageLog,
       frontlineNarrative,
+      eventType,
     });
   }
 
@@ -1137,7 +1150,11 @@ function VotePage() {
       resultBg = isWipe ? CINEMATIC_TPK_IMG : result.deadNames.length > 0 ? RETURN_WIPE
         : ((resultImageVariant < 0.5 ? RETURN_SUCCESS_IMGS[0] : RETURN_SUCCESS_IMGS[1]) ?? RETURN_SUCCESS_IMGS[0]!);
     } else if (result.deaths > 0) {
-      resultBg = CINEMATIC_DEATH_IMGS[Math.floor(resultImageVariant * CINEMATIC_DEATH_IMGS.length)] ?? CINEMATIC_DEATH_IMGS[0]!;
+      // Image liée au type de l'événement qui vient de faire des dégâts,
+      // quand elle existe ; repli sur le pool générique pour les types qui
+      // n'ont pas encore d'image d'échec dédiée (decouverte, marchand).
+      const echecPool = EVENT_ECHEC_IMAGES[result.eventType] ?? CINEMATIC_DEATH_IMGS;
+      resultBg = echecPool[Math.floor(resultImageVariant * echecPool.length)] ?? echecPool[0]!;
     } else {
       // L'image de l'étape elle-même rejoint le pool générique, pour que
       // "étape franchie" garde un vrai lien visuel avec ce qui vient de se
