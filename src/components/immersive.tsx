@@ -5,20 +5,28 @@ import type { ReactNode } from "react";
 // filet fin avec des losanges aux extrémités, pas un cadre de contenu —
 // volontairement exclu ici, à réserver plus tard pour un usage de
 // séparateur horizontal, pas une boîte à étirer.
-// Fond étiré pour remplir la boîte (pas de découpe en 9 morceaux, on n'a
-// pas les mesures précises des bordures). Couleur de texte adaptée à
-// chaque cadre : barre2 a un remplissage clair (parchemin), barre3/4/5 ont
-// un remplissage sombre — vérifié sur les images réelles, pas deviné.
+// Rendu en `border-image` (9-slice) comme DecorativeBorder : les coins
+// arrondis gardent leur forme réelle quelle que soit la hauteur de la
+// boîte encadrée, seuls les bords se répètent. `slice` mesuré sur chaque
+// fichier (rayon du coin + épaisseur du bord), pas deviné. Couleur de
+// texte adaptée à chaque cadre : barre2 a un remplissage clair
+// (parchemin), barre3/4/5 ont un remplissage sombre — vérifié sur les
+// images réelles.
 const FRAME_IS_LIGHT: Record<number, boolean> = { 2: true, 3: false, 4: false, 5: false };
+const FRAME_SLICE: Record<number, number> = { 2: 50, 3: 50, 4: 50, 5: 50 };
 export function FramedBox({ frame, children, className = "" }: { frame: 2 | 3 | 4 | 5; children: ReactNode; className?: string }) {
   const isLight = FRAME_IS_LIGHT[frame];
+  const slice = FRAME_SLICE[frame];
   return (
     <div
       className={`relative ${className}`}
       style={{
-        backgroundImage: `url(/barre${frame}.webp)`,
-        backgroundSize: "100% 100%",
-        backgroundRepeat: "no-repeat",
+        borderStyle: "solid",
+        borderWidth: `${slice}px`,
+        borderImageSource: `url(/barre${frame}.webp)`,
+        borderImageSlice: `${slice} fill`,
+        borderImageWidth: `${slice}px`,
+        borderImageRepeat: "round",
       }}
     >
       <div
