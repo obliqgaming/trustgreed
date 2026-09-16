@@ -123,6 +123,14 @@ const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
 const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
 const MARCHAND_ACHETE_IMGS = ["/marchand_protection_achetee.webp", "/marchand_protection_achetee_bis.webp"];
 const MARCHAND_REFUSE_IMG = "/marchand_protection_refusee.webp";
+// Bouclier de groupe : une icône par rareté (bois fissuré/léger, blason
+// métal-tissu/moyen, plaque cloutée/lourd), utilisée dans le pop-up de
+// vote et l'indicateur du porteur.
+const SHIELD_ICON: Record<"leger" | "moyen" | "lourd", string> = {
+  leger: "/shield_leger.webp",
+  moyen: "/shield_moyen.webp",
+  lourd: "/shield_lourd.webp",
+};
 const RISK_COLOR: Record<string, string> = { faible: "text-emerald-400", moyen: "text-amber-400", eleve: "text-red-400" };
 
 const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
@@ -222,6 +230,18 @@ function VotePage() {
   const [drinkResult, setDrinkResult] = useState<number | null>(null);
   const [frontlineTally, setFrontlineTally] = useState<Record<string, number>>({});
   const [myFrontlineTarget, setMyFrontlineTarget] = useState<string | null>(null);
+  // Bouclier de groupe : loot rare, attribué par vote séparé (voir
+  // fetchShield / vote_shield / resolve_shield_vote).
+  const [shield, setShield] = useState<{
+    id: string; rarity: "leger" | "moyen" | "lourd"; reduction: number; duration_steps: number;
+    vote_deadline: string; resolved: boolean; holder_character_id: string | null;
+    steps_remaining: number | null; broken_reason: string | null;
+  } | null>(null);
+  const [shieldTally, setShieldTally] = useState<Record<string, number>>({});
+  const [myShieldTarget, setMyShieldTarget] = useState<string | null>(null);
+  const [shieldBusy, setShieldBusy] = useState(false);
+  const dismissedShieldIdRef = useRef<string | null>(null);
+  const [shieldNotice, setShieldNotice] = useState<string | null>(null);
   const [vocationBusy, setVocationBusy] = useState<string | null>(null);
   const [vocationError, setVocationError] = useState<string | null>(null);
   const [inspectTarget, setInspectTarget] = useState<string | null>(null);
@@ -234,6 +254,32 @@ function VotePage() {
   const characterIdRef = useRef<string | null>(null);
   const stepIdRef = useRef<string | null>(null);
   const resultShownRef = useRef(false);
+
+  // Bouclier de groupe : détecte la transition vers un état final (gagné,
+  // cassé par égalité, expiré, ou perdu avec son porteur) et affiche un
+  // texte narratif court une seule fois par bouclier, puis se dissipe seul.
+  useEffect(() => {
+    if (!shield || dismissedShieldIdRef.current === shield.id) return;
+    let text: string | null = null;
+    if (shield.resolved && shield.holder_character_id && shield.steps_remaining === shield.duration_steps) {
+      const name = participants.find(p => p.character_id === shield.holder_character_id)?.character?.name ?? "Quelqu'un";
+      text = `${name} remporte le bouclier ${shield.rarity}.`;
+    } else if (shield.broken_reason === "egalite") {
+      text = "Le vote était trop partagé : le bouclier se brise, personne ne le porte.";
+    } else if (shield.broken_reason === "porteur_mort") {
+      text = "Le porteur du bouclier est tombé : il se brise avec lui.";
+    } else if (shield.broken_reason === "expire") {
+      text = shield.rarity === "leger" ? "Le bouclier léger se désagrège."
+        : shield.rarity === "moyen" ? "Le bouclier moyen se casse."
+        : "Le bouclier lourd, trop encombrant, épuise son porteur qui finit par le laisser tomber.";
+    }
+    if (text) {
+      dismissedShieldIdRef.current = shield.id;
+      setShieldNotice(text);
+      const t = setTimeout(() => setShieldNotice(null), 6000);
+      return () => clearTimeout(t);
+    }
+  }, [shield, participants]);
 
   // Déterministe à partir de l'id de l'étape (pas Math.random()) : tout le
   // groupe doit voir exactement la même image de résultat, pas une par client.
@@ -310,6 +356,67 @@ function VotePage() {
     });
     if (rpcError) setError(rpcError.message);
     await fetchFrontlineVotes(step.id);
+  }
+
+  // Bouclier de groupe : récupère le bouclier actif de l'expédition (en
+  // vote ou porté), son décompte de votes, et déclenche resolve_shield_vote
+  // si la fenêtre est écoulée — même pattern best-effort que fetchStep
+  // pour la résolution des étapes (course normale entre clients, un seul
+  // réussit vraiment).
+  const fetchShieldVotes = useCallback(async (shieldId: string) => {
+    const { data } = await supabase.from("step_shield_votes").select("voter_character_id, target_character_id").eq("shield_id", shieldId);
+    const tally: Record<string, number> = {};
+    let mine: string | null = null;
+    for (const row of (data as any[]) ?? []) {
+      tally[row.target_character_id] = (tally[row.target_character_id] ?? 0) + 1;
+      if (characterIdRef.current && row.voter_character_id === characterIdRef.current) mine = row.target_character_id;
+    }
+    setShieldTally(tally);
+    setMyShieldTarget(mine);
+  }, []);
+
+  const fetchShield = useCallback(async () => {
+    const { data } = await supabase
+      .from("expedition_shields")
+      .select("id, rarity, reduction, duration_steps, vote_deadline, resolved, holder_character_id, steps_remaining, broken_reason")
+      .eq("expedition_id", expeditionId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const row = data as any;
+    setShield(row ?? null);
+    if (!row) return;
+
+    if (!row.resolved) {
+      await fetchShieldVotes(row.id);
+      const deadlinePassed = new Date(row.vote_deadline) <= new Date();
+      if (deadlinePassed) {
+        await supabase.rpc("resolve_shield_vote" as any, { p_shield_id: row.id });
+        // Pas de garde ici : même principe que finalize_resolution plus haut
+        // (course normale entre clients, la fonction est idempotente côté
+        // serveur — elle renvoie sans effet si déjà résolue).
+        const { data: fresh } = await supabase
+          .from("expedition_shields")
+          .select("id, rarity, reduction, duration_steps, vote_deadline, resolved, holder_character_id, steps_remaining, broken_reason")
+          .eq("id", row.id)
+          .maybeSingle();
+        if (fresh) setShield(fresh as any);
+      }
+    }
+  }, [expeditionId, fetchShieldVotes]);
+
+  async function voteShield(targetId: string) {
+    if (!shield || !character) return;
+    const next = myShieldTarget === targetId ? null : targetId;
+    setMyShieldTarget(next); // optimiste
+    setShieldBusy(true);
+    const { error: rpcError } = await supabase.rpc("vote_shield" as any, {
+      p_shield_id: shield.id, p_voter_character_id: character.id, p_target_character_id: next,
+    });
+    if (rpcError) setError(rpcError.message);
+    await fetchShieldVotes(shield.id);
+    setShieldBusy(false);
   }
 
   const fetchVotes = useCallback(async (stepId: string) => {
@@ -443,8 +550,10 @@ function VotePage() {
       // Étape + votes (la détection de mort personnelle est gérée dans showStepResult,
       // déclenché naturellement quand l'étape se résout)
       void fetchStep();
+      // Bouclier de groupe (apparition, vote en cours, ou déjà porté)
+      void fetchShield();
     }, 5000);
-  }, [fetchStep, fetchParticipants]);
+  }, [fetchStep, fetchParticipants, fetchShield]);
 
   useEffect(() => {
     void (async () => {
@@ -1533,6 +1642,11 @@ function VotePage() {
                               {hp}/{maxHp} <Heart size={9} className="fill-current" />
                             </p>
                           )}
+                          {shield && shield.resolved && !shield.broken_reason && shield.holder_character_id === p.character_id && shield.steps_remaining !== null && shield.steps_remaining > 0 && (
+                            <p className="text-[10px] font-mono flex items-center gap-1 text-sky-400" title={`Bouclier ${shield.rarity} : -${shield.reduction} dégâts`}>
+                              <img src={SHIELD_ICON[shield.rarity]} alt="" className="w-3.5 h-3.5 object-contain" /> {shield.steps_remaining}
+                            </p>
+                          )}
                         </div>
                         <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
                       </div>
@@ -1587,6 +1701,58 @@ function VotePage() {
                   })}
                 </div>
               </div>
+
+              {/* Bouclier de groupe — texte narratif court à l'issue du
+                  vote (gagné, cassé, expiré), une fois par bouclier. */}
+              {shieldNotice && (
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-2.5 bg-card/95 border border-sky-400/40 backdrop-blur-sm rounded-sm text-xs text-center text-sky-100">
+                  {shieldNotice}
+                </div>
+              )}
+
+              {/* Bouclier de groupe — pop-up de vote tant qu'il n'est pas
+                  résolu (gagnant désigné ou cassé par égalité). */}
+              {shield && !shield.resolved && (() => {
+                const rarityLabel = shield.rarity === "leger" ? "léger" : shield.rarity === "moyen" ? "moyen" : "lourd";
+                const alive = participants.filter(p => p.is_alive);
+                const totalVotes = Object.values(shieldTally).reduce((a, b) => a + b, 0);
+                return (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+                    <div className="w-full max-w-sm border border-primary/30 bg-card/95 backdrop-blur-sm rounded-sm p-5">
+                      <div className="flex items-center gap-3 mb-3">
+                        <img src={SHIELD_ICON[shield.rarity]} alt="" className="w-12 h-12 object-contain flex-shrink-0" />
+                        <div>
+                          <p className="text-xs tracking-[0.14em] uppercase text-primary">Bouclier {rarityLabel} trouvé</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            -{shield.reduction} dégâts pendant {shield.duration_steps} tour{shield.duration_steps > 1 ? "s" : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        Le vote doit désigner un gagnant net, sinon il se brise pour tout le monde.
+                      </p>
+                      <div className="space-y-1.5 mb-4">
+                        {alive.map(p => {
+                          const name = (p.character as any)?.name ?? "?";
+                          const votes = shieldTally[p.character_id] ?? 0;
+                          const isMine = myShieldTarget === p.character_id;
+                          return (
+                            <button key={p.character_id} disabled={shieldBusy}
+                              onClick={() => voteShield(p.character_id)}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-xs border ${isMine ? "border-primary text-primary" : "border-border/40 text-muted-foreground"} hover:border-primary/60 disabled:opacity-50`}>
+                              <span>{name}{p.character_id === character?.id ? " (toi)" : ""}</span>
+                              <span className="font-mono">{votes > 0 ? `${votes} vote${votes > 1 ? "s" : ""}` : ""}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground text-center">
+                        {totalVotes}/{alive.length} vote{alive.length > 1 ? "s" : ""} — clôture automatique à la fin du délai
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
         </>
       )}
     </LedgerPage>
