@@ -75,9 +75,20 @@ const CALLBACK_IMAGES: Record<string, string> = {
 function pickEventBg(step: { id: string; event_type: string; risk_level: string; required_flag?: string | null }): string {
   const callbackImg = step.required_flag ? CALLBACK_IMAGES[step.required_flag] : undefined;
   if (callbackImg) return callbackImg;
-  const pool = [...(EVENT_IMAGES[step.event_type] ?? [])];
+  // L'image spécifique au palier de risque, quand elle existe, doit
+  // toujours s'afficher — jamais mélangée dans le même pool que les images
+  // génériques du type. Avant ce correctif, elle n'était qu'une candidate
+  // parmi d'autres dans un tirage par hash sur l'id de l'étape : pour les
+  // types avec un seul visuel générique + un visuel de risque (coffre,
+  // gardien, porte, passage), c'était un vrai tirage à pile ou face,
+  // indépendant du risque réellement affiché au joueur ("Risque Élevé" à
+  // l'écran, mais l'image neutre affichée une fois sur deux, ou l'inverse).
   const riskVariant = EVENT_IMAGES_BY_RISK[step.event_type]?.[step.risk_level];
-  if (riskVariant) pool.push(riskVariant);
+  if (riskVariant) return riskVariant;
+  // Sinon (type sans variante de risque dédiée), tirage par hash dans le
+  // pool générique du type, comme avant — là, la variété n'a pas besoin
+  // d'être ancrée sur quoi que ce soit.
+  const pool = EVENT_IMAGES[step.event_type] ?? [];
   if (pool.length === 0) return "";
   const idx = step.id.charCodeAt(0) % pool.length;
   return pool[idx] ?? pool[0] ?? "";
@@ -607,11 +618,12 @@ function VotePage() {
         }
       }
       if (currentStep) stepIdRef.current = currentStep.id;
+      void fetchShield();
       setReady(true);
       startPoll();
     })();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [expeditionId, navigate, fetchStep, fetchParticipants, startPoll]);
+  }, [expeditionId, navigate, fetchStep, fetchParticipants, fetchShield, startPoll]);
 
   // Minuteur
   useEffect(() => {
@@ -1490,16 +1502,41 @@ function VotePage() {
                     <p className="w-full mt-2 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
                       {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
                     </p>
-                  ) : (
-                    <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
-                      className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
-                      {step.third_option_label}
-                      {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
-                      {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde)`}
-                      {step.third_option_kind === "pillage" && step.third_option_loot_min != null && step.third_option_loot_max != null &&
-                        `, ${step.third_option_loot_min}–${step.third_option_loot_max} or, risque propre`}
-                    </button>
-                  )
+                  ) : (() => {
+                    // Indicateur qualitatif du risque de la troisième option par
+                    // rapport au risque de base — jamais de pourcentage exact
+                    // affiché (comme pour Risque Faible/Moyen/Élevé plus haut),
+                    // mais sans indicateur du tout le joueur ne voit qu'un loot
+                    // plus élevé et aucune contrepartie visible, ce qui rend le
+                    // choix illisible (ex. "pillage" : +15 points de risque de
+                    // mort contre ×1,6 de butin, entièrement invisible avant).
+                    const delta = step.third_option_death_pct != null
+                      ? step.third_option_death_pct - step.death_percentage
+                      : null;
+                    const riskTag = delta === null ? null
+                      : delta > 0.08 ? { text: "risque nettement accru", color: "text-red-400" }
+                      : delta > 0 ? { text: "risque accru", color: "text-amber-400" }
+                      : delta < -0.08 ? { text: "risque nettement réduit", color: "text-emerald-400" }
+                      : delta < 0 ? { text: "risque réduit", color: "text-emerald-400" }
+                      : null;
+                    const hasLoot = step.third_option_loot_min != null && step.third_option_loot_max != null;
+                    return (
+                      <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
+                        className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
+                        <span>
+                          {step.third_option_label}
+                          {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
+                          {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde)`}
+                          {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or`}
+                        </span>
+                        {riskTag && (
+                          <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag.color}`}>
+                            ⚠ {riskTag.text} par rapport à Continuer
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()
                 )}
               </div>
             ) : (

@@ -34,9 +34,24 @@ function getStoredVolume(): number {
  */
 export function BackgroundMusic() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [muted, setMuted] = useState<boolean>(getStoredMuted);
-  const [volume, setVolume] = useState<number>(getStoredVolume);
+  // Initialisés à la valeur par défaut (identique à ce que le serveur rend,
+  // puisqu'il n'a pas accès à localStorage) plutôt qu'à getStoredMuted/Volume
+  // directement : lire localStorage dès l'état initial fait diverger le
+  // premier rendu client de celui du serveur dès qu'une préférence a été
+  // sauvegardée lors d'une visite précédente — React détecte l'écart et
+  // rejette l'hydratation (voir l'erreur "Hydration failed" dans la console).
+  // La vraie valeur est appliquée juste après le montage, ci-dessous.
+  const [muted, setMuted] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(DEFAULT_VOLUME);
   const [expanded, setExpanded] = useState(false);
+
+  // Synchronise avec la préférence sauvegardée, uniquement côté client et
+  // après le premier rendu — c'est ce décalage volontaire (rendu identique
+  // au serveur d'abord, correction ensuite) qui évite le mismatch d'hydratation.
+  useEffect(() => {
+    setMuted(getStoredMuted());
+    setVolume(getStoredVolume());
+  }, []);
 
   useEffect(() => {
     const audio = new Audio(pickTrackSrc());
