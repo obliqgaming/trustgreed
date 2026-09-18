@@ -44,10 +44,17 @@ Deno.serve(async (req) => {
     const roleId = await createGuildRole(guild.name);
     const channelId = await createGuildChannel(guild.name, categoryId, roleId);
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("guilds")
       .update({ discord_channel_id: channelId, discord_role_id: roleId })
       .eq("id", guild.id);
+    if (updateError) {
+      // Ne bloque pas la suite (le salon/rôle existent déjà côté Discord),
+      // mais on le trace clairement — avant, cette erreur passait
+      // inaperçue en silence, la fonction continuait jusqu'à "OK" sans
+      // jamais enregistrer discord_channel_id/discord_role_id en base.
+      console.error("Échec update guilds.discord_channel_id/discord_role_id :", updateError);
+    }
 
     // Le fondateur reçoit le rôle tout de suite s'il a déjà lié son Discord
     // (create_profile le fait automatiquement à la connexion) ; sinon rien

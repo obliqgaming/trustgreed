@@ -53,9 +53,18 @@ export async function createGuildRole(guildName: string): Promise<string> {
 }
 
 // Salon texte dans la catégorie GUILDES, visible uniquement par le rôle de
-// la guilde (et les rôles admin du serveur, qui voient tout par défaut
-// sauf restriction explicite — on ne touche qu'à @everyone et au rôle créé).
+// la guilde (et le bot lui-même, sans quoi il ne peut plus rien y poster,
+// bloqué par sa propre restriction sur @everyone — c'est exactement ce qui
+// causait l'erreur Discord 403 "Missing Access" une fois le vrai souci
+// verify_jwt enfin résolu). Récupère l'ID de l'application (= l'ID du bot)
+// pour lui accorder explicitement VIEW_CHANNEL + SEND_MESSAGES.
+async function getBotUserId(): Promise<string> {
+  const me = await discordFetch(`/users/@me`);
+  return me.id;
+}
+
 export async function createGuildChannel(guildName: string, categoryId: string, roleId: string): Promise<string> {
+  const botId = await getBotUserId();
   const channel = await discordFetch(`/guilds/${SERVER_ID}/channels`, {
     method: "POST",
     body: JSON.stringify({
@@ -63,8 +72,9 @@ export async function createGuildChannel(guildName: string, categoryId: string, 
       type: 0,
       parent_id: categoryId,
       permission_overwrites: [
-        { id: SERVER_ID, type: 0, deny: "1024" }, // @everyone (l'ID du rôle @everyone = l'ID du serveur) : refuse VIEW_CHANNEL
-        { id: roleId, type: 0, allow: "1024" },   // le rôle de la guilde : autorise VIEW_CHANNEL
+        { id: SERVER_ID, type: 0, deny: "1024" },              // @everyone : refuse VIEW_CHANNEL
+        { id: roleId, type: 0, allow: "1024" },                // le rôle de la guilde : autorise VIEW_CHANNEL
+        { id: botId, type: 1, allow: "3072" },                 // le bot lui-même : VIEW_CHANNEL (1024) + SEND_MESSAGES (2048)
       ],
     }),
   });
