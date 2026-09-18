@@ -658,38 +658,36 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
 }
 
 function CreateProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
-  const [username, setUsername] = useState(""); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  // Pré-remplit avec le pseudo Discord (global_name en priorité, plus lisible
-  // que le username technique) — le joueur peut toujours le changer avant
-  // de valider, ça reste juste une suggestion pour éviter une case vide.
+  const [error, setError] = useState<string | null>(null);
+  // Entièrement automatique maintenant que la connexion se fait via Discord :
+  // le pseudo Discord (global_name en priorité, plus lisible que le username
+  // technique) est utilisé directement, sans demander confirmation au joueur
+  // — cette étape existait comme garde-fou avant qu'on vérifie que le nom
+  // Discord était bien récupérable à chaque fois, elle ne l'est plus.
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
       const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
       const suggested = (meta?.global_name || meta?.full_name || meta?.name || meta?.user_name) as string | undefined;
-      if (suggested) setUsername(suggested);
-    });
-  }, []);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); setBusy(true);
-    const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
-    if (rpcError) {
-      if (rpcError.message.includes("déjà existant") || rpcError.message.includes("already exists")) {
-        await onDone(); // profil déjà là, on avance
+      const { error: rpcError } = await supabase.rpc("create_profile", { p_username: suggested || "Aventurier" });
+      if (cancelled) return;
+      if (rpcError) {
+        if (rpcError.message.includes("déjà existant") || rpcError.message.includes("already exists")) {
+          await onDone(); // profil déjà là, on avance
+        } else {
+          setError(rpcError.message);
+        }
       } else {
-        setError(rpcError.message);
+        await onDone();
       }
-    } else {
-      await onDone();
-    }
-    setBusy(false);
-  }
+    })();
+    return () => { cancelled = true; };
+  }, [onDone]);
   return (
-    <LedgerCard title="Choisis ton pseudo" subtitle="Ton compte n'est pas encore inscrit au registre.">
-      <form onSubmit={submit} noValidate>
-        <Field label="Pseudo" required value={username} onChange={(e) => setUsername(e.target.value)} />
-        <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>{busy ? "Scellement…" : "Rejoindre le registre"}</SealButton>
-      </form>
+    <LedgerCard title="Inscription au registre…" subtitle="Un instant.">
+      <LedgerError message={error} />
+      {!error && <p className="text-sm text-muted-foreground">Création de ton profil…</p>}
       <TextLink onClick={() => supabase.auth.signOut()}>Se déconnecter</TextLink>
     </LedgerCard>
   );
