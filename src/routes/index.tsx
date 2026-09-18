@@ -40,7 +40,6 @@ function Index() {
   const [membersOpen, setMembersOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [activeExpedition, setActiveExpedition] = useState<ActiveExpedition>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
@@ -175,21 +174,16 @@ function Index() {
           backgroundImage: "url(/landing_hero.webp)", backgroundSize: "cover", backgroundPosition: "center",
         }}>
           <div className="max-w-sm w-full mx-4 space-y-2 bg-background/40 backdrop-blur-sm p-4 rounded-sm">
-            <button onClick={() => setMode("signup")}
-              className="w-full rounded-sm border px-4 py-3 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10">
-              Créer un compte
-            </button>
-            <button onClick={() => setMode("signin")}
-              className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.14em] uppercase border-border/40 text-muted-foreground hover:bg-border/10">
-              J'ai déjà un compte
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: "discord" })}
+              className="w-full flex items-center justify-center gap-2 rounded-sm border px-4 py-3 font-serif tracking-[0.14em] uppercase border-primary/60 text-primary hover:bg-primary/10">
+              <svg width="18" height="18" viewBox="0 0 127.14 96.36" fill="currentColor" aria-hidden>
+                <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/>
+              </svg>
+              Se connecter avec Discord
             </button>
           </div>
         </div>
-      ) : mode === "signup" ? (
-        <SignUpScreen onSwitch={() => setMode("signin")} onNotice={setNotice} notice={notice} />
-      ) : (
-        <SignInScreen onSwitch={() => setMode("signup")} />
-      )}
+      ) : null}
     </LedgerPage>
   );
   if (profileMissing) return <LedgerPage bg="/register_book.png"><CreateProfileScreen onDone={refresh} /></LedgerPage>;
@@ -663,54 +657,18 @@ function GuildScreen({ character, onDone }: { character: Character; onDone: () =
   );
 }
 
-function SignUpScreen({ onSwitch, onNotice, notice }: { onSwitch: () => void; onNotice: (v: string | null) => void; notice: string | null }) {
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); onNotice(null); setBusy(true);
-    const { error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
-    if (signUpError) { setError(signUpError.message); setBusy(false); return; }
-    onNotice("Compte créé. Connecte-toi pour continuer.");
-    setBusy(false);
-  }
-  return (
-    <LedgerCard title="Inscription" subtitle="Gratuit. Ton compte est actif immédiatement.">
-      <form onSubmit={submit} noValidate>
-        <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Field label="Mot de passe" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
-        <LedgerError message={error} />
-        {notice ? <p className="mt-4 text-sm text-muted-foreground">{notice}</p> : null}
-        <SealButton type="submit" disabled={busy}>{busy ? "Scellement…" : "Sceller l'inscription"}</SealButton>
-      </form>
-      <TextLink onClick={onSwitch}>J'ai déjà un compte</TextLink>
-    </LedgerCard>
-  );
-}
-
-function SignInScreen({ onSwitch }: { onSwitch: () => void }) {
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); setBusy(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInError) setError(signInError.message);
-    setBusy(false);
-  }
-  return (
-    <LedgerCard title="Connexion">
-      <form onSubmit={submit} noValidate>
-        <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Field label="Mot de passe" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        <LedgerError message={error} />
-        <SealButton type="submit" disabled={busy}>{busy ? "Vérification…" : "Entrer"}</SealButton>
-      </form>
-      <TextLink onClick={onSwitch}>Créer un compte</TextLink>
-    </LedgerCard>
-  );
-}
-
 function CreateProfileScreen({ onDone }: { onDone: () => Promise<void> }) {
   const [username, setUsername] = useState(""); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  // Pré-remplit avec le pseudo Discord (global_name en priorité, plus lisible
+  // que le username technique) — le joueur peut toujours le changer avant
+  // de valider, ça reste juste une suggestion pour éviter une case vide.
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
+      const suggested = (meta?.global_name || meta?.full_name || meta?.name || meta?.user_name) as string | undefined;
+      if (suggested) setUsername(suggested);
+    });
+  }, []);
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(null); setBusy(true);
     const { error: rpcError } = await supabase.rpc("create_profile", { p_username: username });
