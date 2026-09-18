@@ -59,11 +59,17 @@ Deno.serve(async (req) => {
     // Le fondateur reçoit le rôle tout de suite s'il a déjà lié son Discord
     // (create_profile le fait automatiquement à la connexion) ; sinon rien
     // ne bloque, il l'aura dès sa prochaine connexion via une future passe.
-    const { data: founderProfile } = await supabase
+    const { data: founderProfile, error: founderLookupError } = await supabase
       .from("profiles")
       .select("discord_user_id")
       .eq("id", guild.founder_profile_id)
       .single();
+    if (founderLookupError) {
+      // Même trou que sur guilds tout à l'heure : sans cette trace, un
+      // échec ici (ex. permission manquante) passait inaperçu et sautait
+      // silencieusement l'attribution du rôle au fondateur.
+      console.error("Échec lecture profiles.discord_user_id du fondateur :", founderLookupError);
+    }
     if (founderProfile?.discord_user_id) {
       await assignRole(founderProfile.discord_user_id, roleId);
     }
