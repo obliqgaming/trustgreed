@@ -1,1 +1,13 @@
 project_id = "ilxukkqasybrvbmbsfyb"
+
+# Ces deux fonctions sont appelées par nos propres triggers Postgres (via
+# pg_net), pas par un utilisateur connecté — elles n'ont donc pas de vrai
+# JWT à présenter, seulement notre clé anon. Le contrôle verify_jwt de la
+# plateforme (avant même que le code de la fonction ne s'exécute) les
+# rejetait avec un 401. La vérification d'origine se fait déjà nous-mêmes
+# via l'en-tête x-webhook-secret dans le code de chaque fonction.
+[functions.discord-on-guild-created]
+verify_jwt = false
+
+[functions.discord-on-guild-join]
+verify_jwt = false
