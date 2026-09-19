@@ -1,16 +1,17 @@
-// Déclenchée par un Database Webhook Supabase sur INSERT dans `guilds`.
-// Crée le salon + le rôle Discord de la nouvelle guilde, donne le rôle au
-// fondateur (s'il a déjà lié son Discord), poste un message de bienvenue.
+// Déclenchée par un trigger Postgres sur INSERT dans `expedition_steps`,
+// filtré côté SQL pour ne se déclencher qu'en mode asynchrone (voir le
+// fichier SQL correspondant — notify_async_turn()). Prévient tous les
+// participants vivants qu'une nouvelle étape attend leur vote
+// continuer/rentrer.
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import {
-  findOrCreateGuildsCategory,
-  createGuildRole,
-  createGuildChannel,
-  assignRole,
-  postMessage,
-} from "../_shared/discord.ts";
+import { notifyAliveParticipants } from "../_shared/discord.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("WEBHOOK_SECRET")!;
+// Base du site — utilisée pour construire le lien direct vers l'étape.
+// Je pars du domaine vu tout au long de la soirée dans les captures
+// d'écran (trustgreed.lovable.app). À corriger si ce n'est plus le bon
+// domaine de production au moment où tu lis ceci.
+const APP_BASE_URL = "https://trustgreed.lovable.app";
 
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== WEBHOOK_SECRET) {
@@ -18,8 +19,8 @@ Deno.serve(async (req) => {
   }
 
   const payload = await req.json();
-  const guild = payload.record as { id: string; name: string; founder_profile_id: string };
-  if (!guild?.id || !guild?.name) {
+  const step = payload.record as { id: string; expedition_id: string; step_number: number; event_type: string };
+  if (!step?.expedition_id) {
     return new Response("Payload invalide", { status: 400 });
   }
 
@@ -28,63 +29,11 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Garde-fou anti-doublon : si cette guilde a déjà un salon Discord, on ne
-  // refait rien (protège contre une éventuelle double livraison du webhook).
-  const { data: existing } = await supabase
-    .from("guilds")
-    .select("discord_channel_id")
-    .eq("id", guild.id)
-    .single();
-  if (existing?.discord_channel_id) {
-    return new Response("Déjà traité", { status: 200 });
-  }
+  const message =
+    `⚔️ **C'est ton tour !** Étape ${step.step_number} (${step.event_type}) est ouverte, ` +
+    `à toi de voter *Continuer* ou *Rentrer*.\n${APP_BASE_URL}/vote?expedition=${step.expedition_id}`;
 
-  try {
-    const categoryId = await findOrCreateGuildsCategory();
-    const roleId = await createGuildRole(guild.name);
-    const channelId = await createGuildChannel(guild.name, categoryId, roleId);
+  await notifyAliveParticipants(supabase, step.expedition_id, message);
 
-    const { error: updateError } = await supabase
-      .from("guilds")
-      .update({ discord_channel_id: channelId, discord_role_id: roleId })
-      .eq("id", guild.id);
-    if (updateError) {
-      // Ne bloque pas la suite (le salon/rôle existent déjà côté Discord),
-      // mais on le trace clairement — avant, cette erreur passait
-      // inaperçue en silence, la fonction continuait jusqu'à "OK" sans
-      // jamais enregistrer discord_channel_id/discord_role_id en base.
-      console.error("Échec update guilds.discord_channel_id/discord_role_id :", updateError);
-    }
-
-    // Le fondateur reçoit le rôle tout de suite s'il a déjà lié son Discord
-    // (create_profile le fait automatiquement à la connexion) ; sinon rien
-    // ne bloque, il l'aura dès sa prochaine connexion via une future passe.
-    const { data: founderProfile, error: founderLookupError } = await supabase
-      .from("profiles")
-      .select("discord_user_id")
-      .eq("id", guild.founder_profile_id)
-      .single();
-    if (founderLookupError) {
-      // Même trou que sur guilds tout à l'heure : sans cette trace, un
-      // échec ici (ex. permission manquante) passait inaperçu et sautait
-      // silencieusement l'attribution du rôle au fondateur.
-      console.error("Échec lecture profiles.discord_user_id du fondateur :", founderLookupError);
-    }
-    if (founderProfile?.discord_user_id) {
-      await assignRole(founderProfile.discord_user_id, roleId);
-    }
-
-    await postMessage(
-      channelId,
-      `Bienvenue dans le salon de **${guild.name}** ! Les membres de cette guilde seront mentionnés ici pour les salles d'attente et les résultats d'expédition.`
-    );
-
-    return new Response("OK", { status: 200 });
-  } catch (err) {
-    console.error(err);
-    // On renvoie 200 quand même : la guilde existe déjà côté jeu, un souci
-    // Discord ne doit jamais faire échouer la création de guilde elle-même
-    // côté client (qui a déjà réussi avant que ce webhook ne se déclenche).
-    return new Response(`Erreur Discord : ${err}`, { status: 200 });
-  }
+  return new Response("OK", { status: 200 });
 });
