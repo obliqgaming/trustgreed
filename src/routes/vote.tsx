@@ -1008,9 +1008,16 @@ function VotePage() {
 
   const refreshInterventionState = useCallback(async () => {
     if (!step) return;
-    const { data: exp } = await supabase.from("expeditions").select("interventions_remaining").eq("id", expeditionId).maybeSingle();
-    setInterventionsRemaining(exp?.interventions_remaining ?? null);
+    // Réserve désormais personnelle (par personnage, par expédition) —
+    // avant elle venait de expeditions.interventions_remaining (le pool
+    // commun du groupe), maintenant de la ligne du joueur dans
+    // expedition_participants.
     if (character) {
+      const { data: myPart } = await supabase
+        .from("expedition_participants").select("interventions_remaining")
+        .eq("expedition_id", expeditionId).eq("character_id", character.id).maybeSingle();
+      setInterventionsRemaining((myPart as any)?.interventions_remaining ?? null);
+
       const { data: mine } = await supabase.from("step_interventions")
         .select("character_id, action").eq("step_id", step.id).eq("character_id", character.id).maybeSingle();
       setMyIntervened(!!mine && (mine as any).action === "aide");
@@ -1024,10 +1031,9 @@ function VotePage() {
       .from("step_interventions").select("character:characters(name)").eq("step_id", step.id).eq("action", "aide");
     setIntervenerNames((rows as any[] ?? []).map(r => r.character?.name).filter(Boolean));
 
-    // Qui a déjà pioché dans le pool partagé sur cette étape, toutes actions
-    // confondues (aide/fouille/potion) — avant, seul "aide" était listé, ce
-    // qui donnait l'impression trompeuse que le pool "réapparaissait" quand
-    // c'était en fait quelqu'un d'autre qui avait fouillé ou bu une potion.
+    // Qui a agi sur cette étape, toutes actions confondues (aide/fouille/
+    // potion) — chacun pioche dans sa propre réserve désormais, cette liste
+    // reste utile pour voir qui a déjà agi sur l'étape en cours.
     const { data: allRows } = await supabase
       .from("step_interventions").select("action, character:characters(name)").eq("step_id", step.id);
     setAllInterventionUsers(
@@ -1232,7 +1238,7 @@ function VotePage() {
               <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Optionnel</p>
                 <p className="text-[11px] text-muted-foreground/80 text-center mb-1">
-                  Réserve commune au groupe ({interventionsRemaining ?? 0} restante{(interventionsRemaining ?? 0) > 1 ? "s" : ""}) — Intervenir, Fouiller et boire une potion y puisent tous les trois, et elle ne se recharge pas.
+                  Ta réserve personnelle ({interventionsRemaining ?? 0} restante{(interventionsRemaining ?? 0) > 1 ? "s" : ""}) — Intervenir, Fouiller et boire une potion y puisent tous les trois, et elle ne se recharge pas pendant l'expédition.
                 </p>
 
                 <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
@@ -1286,7 +1292,7 @@ function VotePage() {
 
               {allInterventionUsers.length > 0 && (
                 <p className="text-xs text-amber-400/90 text-center mt-2">
-                  Déjà puisé dans la réserve sur cette étape : {allInterventionUsers.map(u =>
+                  Déjà agi sur cette étape : {allInterventionUsers.map(u =>
                     `${u.name} (${u.action === "aide" ? "intervention" : u.action === "fouille" ? "fouille" : "potion"})`
                   ).join(", ")}
                 </p>
