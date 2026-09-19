@@ -202,6 +202,7 @@ function VotePage() {
   const [myDeathDetails, setMyDeathDetails] = useState<{ level: number; goldLost: number; highestStep: number | null; damageTaken: number } | null>(null);
   const [step, setStep] = useState<Step | null>(null);
   const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
+  const [myGoldAdjustment, setMyGoldAdjustment] = useState(0);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const aliveParticipants = participants.filter(p => p.is_alive);
   const [votedIds, setVotedIds] = useState<string[]>([]);
@@ -1087,18 +1088,25 @@ function VotePage() {
   // Totaux affichés avant de voter : or de guilde déjà engrangé cette
   // expédition, et XP déjà gagnée. Pas d'or personnel affiché ici — sous le
   // système actuel, il n'est versé qu'en une fois au retour, donc on montre
-  // plutôt une projection ("si tu rentres maintenant").
+  // plutôt une projection ("si tu rentres maintenant"), qui inclut désormais
+  // l'ajustement personnel (larcins réussis/subis) — sans ça, un voleur qui
+  // vient de réussir ne verrait rien bouger avant la fin réelle de l'expédition.
   useEffect(() => {
     if (!step || step.resolving || step.resolved) return;
     void (async () => {
-      const [{ data: exp }, { data: steps }] = await Promise.all([
+      const [{ data: exp }, { data: steps }, { data: myPart }] = await Promise.all([
         supabase.from("expeditions").select("total_loot_earned").eq("id", expeditionId).maybeSingle(),
         supabase.from("expedition_steps").select("xp_awarded").eq("expedition_id", expeditionId),
+        character
+          ? supabase.from("expedition_participants").select("personal_gold_adjustment")
+              .eq("expedition_id", expeditionId).eq("character_id", character.id).maybeSingle()
+          : Promise.resolve({ data: null }),
       ]);
       const xp = (steps ?? []).reduce((sum: number, s: any) => sum + (s.xp_awarded ?? 0), 0);
       setRunningTotals({ guildGold: Math.round(exp?.total_loot_earned ?? 0), xp });
+      setMyGoldAdjustment((myPart as any)?.personal_gold_adjustment ?? 0);
     })();
-  }, [step?.id, step?.resolving, step?.resolved, expeditionId]);
+  }, [step?.id, step?.resolving, step?.resolved, expeditionId, character]);
   const deadlineExpired = !isAsync && timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !step.resolving && !busy;
   const prevAllVoted = useRef(false);
@@ -1556,7 +1564,14 @@ function VotePage() {
                 {runningTotals && (
                   <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
                     <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
-                    <p className="text-[10px] opacity-70">Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.round(runningTotals.guildGold * 0.01)} or.</p>
+                    <p className="text-[10px] opacity-70">
+                      Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
+                      {myGoldAdjustment !== 0 && (
+                        <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
+                          {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment} suite à un larcin)
+                        </span>
+                      )}.
+                    </p>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
