@@ -279,7 +279,7 @@ function ExpeditionPage() {
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const myParticipant = participants.find((p) => p.character_id === character?.id);
   const allReady = participants.length > 0 && participants.every((p) => p.ready);
-  const canStart = isLeader && participants.length >= 3 && allReady;
+  const canStart = isLeader && participants.length >= expedition.target_size && allReady;
   const isGuildFounder = !!myUserId && !!guildFounderId && myUserId === guildFounderId;
   const canCancel = isLeader || isGuildFounder;
 
@@ -383,7 +383,7 @@ function ExpeditionPage() {
 
           {isLeader && (
             <ImmersiveButton variant="clair" onClick={startExpedition} disabled={!canStart || busy} className="mt-3 w-full">
-              {participants.length < 3 ? `En attente (${participants.length}/3 min.)` : !allReady ? "En attente que tout le monde soit prêt" : "Lancer l'expédition"}
+              {participants.length < expedition.target_size ? `En attente (${participants.length}/${expedition.target_size} joueurs requis)` : !allReady ? "En attente que tout le monde soit prêt" : "Lancer l'expédition"}
             </ImmersiveButton>
           )}
           {canCancel && !confirmCancel && (
