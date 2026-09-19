@@ -279,7 +279,7 @@ function ExpeditionPage() {
   const isParticipant = participants.some((p) => p.character_id === character?.id);
   const myParticipant = participants.find((p) => p.character_id === character?.id);
   const allReady = participants.length > 0 && participants.every((p) => p.ready);
-  const canStart = isLeader && participants.length >= expedition.target_size && allReady;
+  const canStart = isLeader && participants.length >= (expedition?.target_size ?? 3) && allReady;
   const isGuildFounder = !!myUserId && !!guildFounderId && myUserId === guildFounderId;
   const canCancel = isLeader || isGuildFounder;
 
