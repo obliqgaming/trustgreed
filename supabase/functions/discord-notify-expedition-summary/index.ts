@@ -84,36 +84,32 @@ Deno.serve(async (req) => {
 
   // Larcins : requête séparée puis jointure faite ici en JS, même principe
   // que pour les morts ci-dessus — pas d'embed PostgREST imbriqué.
-  const { data: larcenies, error: larcenyError } = await supabase
+  // IMPORTANT : on ne révèle JAMAIS un larcin réussi (succeeded = true) —
+  // même dans le salon privé de la guilde. Un vol jamais découvert doit
+  // rester secret pour toujours, c'est le principe même du jeu ; l'annoncer
+  // après coup, même en privé, casserait la mécanique de confiance. Seuls
+  // les larcins RATÉS (pris en flagrant délit) sont mentionnés ici.
+  const { data: caughtLarcenies, error: larcenyError } = await supabase
     .from("larceny_attempts")
-    .select("character_id, succeeded, amount")
-    .eq("expedition_id", expedition.id);
+    .select("character_id")
+    .eq("expedition_id", expedition.id)
+    .eq("succeeded", false);
   if (larcenyError) {
     console.error("Échec lecture larceny_attempts :", larcenyError);
   }
 
-  if (larcenies && larcenies.length > 0) {
-    const larcenyCharacterIds = [...new Set(larcenies.map((l: any) => l.character_id))];
-    const { data: larcenyCharacters, error: larcenyCharError } = await supabase
+  if (caughtLarcenies && caughtLarcenies.length > 0) {
+    const caughtCharacterIds = [...new Set(caughtLarcenies.map((l: any) => l.character_id))];
+    const { data: caughtCharacters, error: caughtCharError } = await supabase
       .from("characters")
       .select("id, name")
-      .in("id", larcenyCharacterIds);
-    if (larcenyCharError) {
-      console.error("Échec lecture characters (larcins) :", larcenyCharError);
+      .in("id", caughtCharacterIds);
+    if (caughtCharError) {
+      console.error("Échec lecture characters (larcins) :", caughtCharError);
     }
-    const nameById = new Map((larcenyCharacters ?? []).map((c: any) => [c.id, c.name]));
-
-    const succeeded = larcenies.filter((l: any) => l.succeeded);
-    const caught = larcenies.filter((l: any) => !l.succeeded);
-
-    if (succeeded.length > 0) {
-      const lines = succeeded.map((l: any) => `${nameById.get(l.character_id) ?? "?"} (${Math.round(l.amount)} or)`);
-      message += `\n🗝️ A discrètement empoché quelque chose : ${lines.join(", ")}.`;
-    }
-    if (caught.length > 0) {
-      const names = caught.map((l: any) => nameById.get(l.character_id) ?? "?");
-      message += `\n🚨 S'est fait prendre la main dans le sac : ${names.join(", ")}.`;
-    }
+    const nameById = new Map((caughtCharacters ?? []).map((c: any) => [c.id, c.name]));
+    const names = caughtLarcenies.map((l: any) => nameById.get(l.character_id) ?? "?");
+    message += `\n🚨 S'est fait prendre la main dans le sac : ${[...new Set(names)].join(", ")}.`;
   }
 
   await postMessage(guild.discord_channel_id, message);
