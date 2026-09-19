@@ -42,6 +42,22 @@ export async function findOrCreateGuildsCategory(): Promise<string> {
   return created.id;
 }
 
+// Version générique : trouve un salon TEXTE public par son nom exact, sinon
+// le crée (à la racine du serveur, pas dans une catégorie). Utilisée pour
+// #chronique-des-guildes, public par nature — pas besoin de restriction de
+// permission_overwrites comme pour les salons de guilde.
+export async function findOrCreateTextChannel(name: string): Promise<string> {
+  const channels = await discordFetch(`/guilds/${SERVER_ID}/channels`);
+  const existing = (channels as any[]).find((c) => c.type === 0 && c.name === name);
+  if (existing) return existing.id;
+
+  const created = await discordFetch(`/guilds/${SERVER_ID}/channels`, {
+    method: "POST",
+    body: JSON.stringify({ name, type: 0 }),
+  });
+  return created.id;
+}
+
 // Un rôle par guilde, nommé d'après elle — sert à la fois à mentionner
 // tout le monde d'un coup et à restreindre l'accès au salon.
 export async function createGuildRole(guildName: string): Promise<string> {
