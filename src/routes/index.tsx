@@ -181,6 +181,10 @@ function Index() {
               </svg>
               Se connecter avec Discord
             </button>
+            <a href="https://discord.gg/7FkwKQaYaF" target="_blank" rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 rounded-sm border px-3 py-2 font-serif tracking-[0.1em] uppercase border-border/40 text-muted-foreground hover:border-primary/40 hover:text-primary text-sm">
+              Rejoindre le serveur Discord
+            </a>
           </div>
         </div>
       ) : null}
