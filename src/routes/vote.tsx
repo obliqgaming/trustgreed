@@ -633,15 +633,23 @@ function VotePage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [expeditionId, navigate, fetchStep, fetchParticipants, fetchShield, startPoll]);
 
-  // Minuteur
+  // Minuteur — n'a de sens qu'en mode synchrone : en asynchrone, il n'y a
+  // délibérément aucune échéance forcée (le serveur attend que tout le
+  // monde ait voté, quel que soit le temps que ça prend — voir les
+  // commentaires de begin_resolution/finalize_resolution). Avant, ce
+  // minuteur tournait quand même en asynchrone, et si jamais vote_deadline
+  // n'est pas une vraie sentinelle lointaine côté serveur pour ce mode, ça
+  // désactivait aussitôt "Continuer"/"Rentrer" et déclenchait des tentatives
+  // de résolution vouées à échouer ("la fenêtre de vote n'est pas encore
+  // écoulée", en boucle sur "Réessayer").
   useEffect(() => {
-    if (!step?.vote_deadline || step.resolved) { setTimeLeft(null); return; }
+    if (isAsync || !step?.vote_deadline || step.resolved) { setTimeLeft(null); return; }
     const deadline = new Date(step.vote_deadline).getTime();
     const tick = () => setTimeLeft(Math.max(0, Math.floor((deadline - Date.now()) / 1000)));
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [step?.id, step?.vote_deadline, step?.resolved]);
+  }, [step?.id, step?.vote_deadline, step?.resolved, isAsync]);
 
   async function castVote(vote: "continuer" | "rentrer" | "troisieme") {
     if (!step || !character || myVote) return;
@@ -1091,7 +1099,7 @@ function VotePage() {
       setRunningTotals({ guildGold: Math.round(exp?.total_loot_earned ?? 0), xp });
     })();
   }, [step?.id, step?.resolving, step?.resolved, expeditionId]);
-  const deadlineExpired = timeLeft !== null && timeLeft <= 0;
+  const deadlineExpired = !isAsync && timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !step.resolving && !busy;
   const prevAllVoted = useRef(false);
   const autoResolveAttempted = useRef<string | null>(null);
