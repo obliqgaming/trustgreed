@@ -4,9 +4,14 @@
 // finalize_resolution — un seul trigger sur la table couvre les deux).
 //
 // Poste le résumé dans le SALON DE GUILDE (pas un DM) : étape atteinte,
-// or récolté, qui est mort. N'inclut PAS pour l'instant qui a volé / qui
-// s'est fait prendre en larcin — je ne connais pas la vraie structure de
-// la table larceny_attempts, voir NOTES_POUR_DEMAIN.md.
+// or récolté, qui est mort, qui a volé / qui s'est fait prendre en larcin
+// (larceny_attempts : character_id, succeeded, amount — structure confirmée
+// le 19/09, complétée après coup).
+//
+// Chaque lecture vérifie son erreur et la trace : après le bug du 18/09
+// (une erreur d'écriture avalée en silence a fait échouer l'attribution
+// de rôle Discord pendant des heures sans qu'on le voie), plus aucune
+// requête de ce fichier n'ignore silencieusement un échec.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { postMessage } from "../_shared/discord.ts";
 
@@ -33,30 +38,39 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const { data: guild } = await supabase
+  const { data: guild, error: guildError } = await supabase
     .from("guilds")
     .select("discord_channel_id")
     .eq("id", expedition.guild_id)
     .single();
+  if (guildError) {
+    console.error("Échec lecture guilds.discord_channel_id :", guildError);
+  }
   if (!guild?.discord_channel_id) {
     // Guilde sans salon Discord (pas encore créé, ou lié à un serveur
     // Discord différent) : rien à faire, on ne bloque rien côté jeu.
     return new Response("Pas de salon Discord pour cette guilde", { status: 200 });
   }
 
-  const { data: steps } = await supabase
+  const { data: steps, error: stepsError } = await supabase
     .from("expedition_steps")
     .select("step_number")
     .eq("expedition_id", expedition.id)
     .order("step_number", { ascending: false })
     .limit(1);
+  if (stepsError) {
+    console.error("Échec lecture expedition_steps.step_number :", stepsError);
+  }
   const lastStep = steps?.[0]?.step_number ?? "?";
 
-  const { data: deadCharacters } = await supabase
+  const { data: deadCharacters, error: deadError } = await supabase
     .from("characters")
     .select("name")
     .eq("died_in_expedition_id", expedition.id)
     .eq("is_alive", false);
+  if (deadError) {
+    console.error("Échec lecture characters (morts) :", deadError);
+  }
 
   const lootFinal = expedition.total_loot_kept ?? expedition.total_loot_earned ?? 0;
 
@@ -64,8 +78,42 @@ Deno.serve(async (req) => {
   if (deadCharacters && deadCharacters.length > 0) {
     const names = deadCharacters.map((c: any) => c.name).join(", ");
     message += `\n💀 Ont péri durant l'expédition : ${names}.`;
-  } else {
+  } else if (!deadError) {
     message += `\n✅ Personne n'est mort — belle expédition !`;
+  }
+
+  // Larcins : requête séparée puis jointure faite ici en JS, même principe
+  // que pour les morts ci-dessus — pas d'embed PostgREST imbriqué.
+  const { data: larcenies, error: larcenyError } = await supabase
+    .from("larceny_attempts")
+    .select("character_id, succeeded, amount")
+    .eq("expedition_id", expedition.id);
+  if (larcenyError) {
+    console.error("Échec lecture larceny_attempts :", larcenyError);
+  }
+
+  if (larcenies && larcenies.length > 0) {
+    const larcenyCharacterIds = [...new Set(larcenies.map((l: any) => l.character_id))];
+    const { data: larcenyCharacters, error: larcenyCharError } = await supabase
+      .from("characters")
+      .select("id, name")
+      .in("id", larcenyCharacterIds);
+    if (larcenyCharError) {
+      console.error("Échec lecture characters (larcins) :", larcenyCharError);
+    }
+    const nameById = new Map((larcenyCharacters ?? []).map((c: any) => [c.id, c.name]));
+
+    const succeeded = larcenies.filter((l: any) => l.succeeded);
+    const caught = larcenies.filter((l: any) => !l.succeeded);
+
+    if (succeeded.length > 0) {
+      const lines = succeeded.map((l: any) => `${nameById.get(l.character_id) ?? "?"} (${Math.round(l.amount)} or)`);
+      message += `\n🗝️ A discrètement empoché quelque chose : ${lines.join(", ")}.`;
+    }
+    if (caught.length > 0) {
+      const names = caught.map((l: any) => nameById.get(l.character_id) ?? "?");
+      message += `\n🚨 S'est fait prendre la main dans le sac : ${names.join(", ")}.`;
+    }
   }
 
   await postMessage(guild.discord_channel_id, message);
