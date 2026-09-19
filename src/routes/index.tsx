@@ -201,7 +201,7 @@ function Index() {
       <LedgerCard>
 
         {/* En-tête : bannière inline + nom + sous-titre + accès carte (mis en avant) */}
-        <div className="flex items-start gap-3 mb-4">
+        <div className="flex items-start gap-3 mb-4 flex-wrap">
           <GuildBanner symbol={guild?.banner_symbol} color={guild?.banner_color} size={40} />
           <div className="min-w-0 flex-1">
             <h1 className="font-serif text-2xl tracking-[0.12em] text-primary uppercase truncate">{guild?.name ?? "Guilde"}</h1>
