@@ -19,7 +19,6 @@ export const Route = createFileRoute("/expedition")({
 type Character = { id: string; name: string; level: number; guild_id: string | null };
 type Expedition = { id: string; status: string; target_size: number; created_by_character_id: string; vote_window_seconds: number };
 
-const VOTE_WINDOW_LABEL: Record<number, string> = { 180: "3 min", 3600: "1h", 21600: "6h", 86400: "24h" };
 type Participant = { character_id: string; ready: boolean; character: { name: string; level: number } };
 
 const STAKES: { id: "forge" | "infirmerie" | "eclaireurs"; label: string; cost: number; description: string }[] = [
@@ -309,37 +308,23 @@ function ExpeditionPage() {
               <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Rythme de l'expédition</p>
               <div className="flex gap-2 flex-wrap items-stretch">
                 <button onClick={() => setVoteWindow(180)}
-                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow <= 180 ? "border-amber-400 text-amber-300" : "border-amber-500/30 text-amber-400/60"}`}>
+                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow === 180 ? "border-amber-400 text-amber-300" : "border-amber-500/30 text-amber-400/60"}`}>
                   Synchrone ⚡
                 </button>
-                <button onClick={() => setVoteWindow((w) => (w <= 180 ? 3600 : w))}
-                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow > 180 ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
+                <button onClick={() => setVoteWindow(0)}
+                  className={`px-4 py-2 text-sm border rounded-sm ${voteWindow === 0 ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
                   Asynchrone
                 </button>
               </div>
-              {voteWindow <= 180 ? (
+              {voteWindow === 180 ? (
                 <p className="mt-1.5 text-xs text-muted-foreground">
                   ⚡ Mode session, 3 min par étape : soyez tous en ligne au même moment, sans quoi l'étape restera bloquée en attente de vote.
                 </p>
               ) : (
-                <>
-                  <div className="flex gap-2 flex-wrap mt-2">
-                    {[
-                      { label: "1h", value: 3600 },
-                      { label: "6h", value: 21600 },
-                      { label: "24h", value: 86400 },
-                    ].map((opt) => (
-                      <button key={opt.value} onClick={() => setVoteWindow(opt.value)}
-                        className={`px-3 py-1.5 text-xs border rounded-sm ${voteWindow === opt.value ? "border-primary text-primary" : "border-border/40 text-muted-foreground"}`}>
-                        Délai max {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    Mode asynchrone : chacun agit quand il peut. Chaque étape se poursuit dès que tout le monde a voté ou est intervenu
-                    — le délai choisi ne sert que de filet de sécurité si quelqu'un ne se manifeste pas.
-                  </p>
-                </>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Mode asynchrone : chacun agit quand il peut, sans aucune limite de temps. Chaque étape se poursuit dès que tout le
+                  monde a voté ou agi — soyez notifiés sur Discord dès que c'est votre tour.
+                </p>
               )}
             </div>
             <LedgerError message={error} />
@@ -357,13 +342,13 @@ function ExpeditionPage() {
           <div className="mb-4 border border-border/30 px-3 py-2.5">
             <p className="text-xs text-muted-foreground">
               Rythme : <span className="text-primary font-mono">
-                {expedition.vote_window_seconds <= 180 ? "Synchrone (3 min)" : `Asynchrone (${VOTE_WINDOW_LABEL[expedition.vote_window_seconds] ?? `${expedition.vote_window_seconds}s`} max)`}
+                {expedition.vote_window_seconds === 180 ? "Synchrone (3 min)" : "Asynchrone (sans limite de temps)"}
               </span>
             </p>
             <p className="text-xs text-muted-foreground/70 mt-1">
-              {expedition.vote_window_seconds <= 180
+              {expedition.vote_window_seconds === 180
                 ? "Mode session — mieux vaut être tous en ligne en même temps pour voter."
-                : "Mode asynchrone — chaque étape se poursuit dès que tout le monde a agi ; le délai n'est qu'un filet de sécurité."}
+                : "Mode asynchrone — chaque étape se poursuit dès que tout le monde a agi, sans aucune limite de temps."}
             </p>
           </div>
           <ul className="space-y-1 mb-4">

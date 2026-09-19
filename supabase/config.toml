@@ -11,3 +11,23 @@ verify_jwt = false
 
 [functions.discord-on-guild-join]
 verify_jwt = false
+
+# IMPORTANT (leçon apprise ce soir à la dure) : ce fichier seul ne suffit
+# PAS toujours à désactiver verify_jwt — on a dû batailler des heures avant
+# de comprendre que le vrai bug était ailleurs (secret mal synchronisé),
+# mais on a aussi confirmé que le déploiement le plus fiable est TOUJOURS
+# avec le drapeau explicite en CLI :
+#   supabase functions deploy <nom> --use-api --no-verify-jwt
+# Ne te fie jamais à ce fichier seul pour ces fonctions déclenchées par
+# triggers (jamais par un vrai utilisateur connecté, donc jamais de JWT).
+[functions.discord-notify-step-open]
+verify_jwt = false
+
+[functions.discord-notify-resolution-open]
+verify_jwt = false
+
+[functions.discord-notify-shield-open]
+verify_jwt = false
+
+[functions.discord-notify-expedition-summary]
+verify_jwt = false

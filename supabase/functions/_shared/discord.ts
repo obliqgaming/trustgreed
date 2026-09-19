@@ -107,3 +107,64 @@ export async function sendDM(discordUserId: string, content: string) {
   });
   await postMessage(dmChannel.id, content);
 }
+
+// Envoie un DM à tous les participants VIVANTS d'une expédition qui ont
+// lié leur Discord. Utilisée par les 3 notifications "c'est ton tour"
+// (nouvelle étape, résolution ouverte, vote de bouclier).
+//
+// Écrit en 3 requêtes séparées et simples plutôt qu'une seule jointure
+// imbriquée PostgREST — plus verbeux, mais je ne peux pas tester la
+// syntaxe exacte d'un embed imbriqué en direct ce soir (travail fait sans
+// Lils pour valider), donc je préfère la version la plus simple à
+// vérifier à l'œil plutôt que la plus courte.
+export async function notifyAliveParticipants(
+  supabase: any,
+  expeditionId: string,
+  message: string
+): Promise<void> {
+  const { data: participants, error: partError } = await supabase
+    .from("expedition_participants")
+    .select("character_id")
+    .eq("expedition_id", expeditionId);
+  if (partError || !participants) {
+    console.error("notifyAliveParticipants : échec lecture participants :", partError);
+    return;
+  }
+  const characterIds = participants.map((p: any) => p.character_id);
+  if (characterIds.length === 0) return;
+
+  const { data: characters, error: charError } = await supabase
+    .from("characters")
+    .select("profile_id, is_alive")
+    .in("id", characterIds);
+  if (charError || !characters) {
+    console.error("notifyAliveParticipants : échec lecture characters :", charError);
+    return;
+  }
+  const aliveProfileIds = characters
+    .filter((c: any) => c.is_alive)
+    .map((c: any) => c.profile_id)
+    .filter((id: any) => id != null);
+  if (aliveProfileIds.length === 0) return;
+
+  const { data: profiles, error: profError } = await supabase
+    .from("profiles")
+    .select("discord_user_id")
+    .in("id", aliveProfileIds);
+  if (profError || !profiles) {
+    console.error("notifyAliveParticipants : échec lecture profiles :", profError);
+    return;
+  }
+
+  for (const p of profiles as any[]) {
+    if (p.discord_user_id) {
+      try {
+        await sendDM(p.discord_user_id, message);
+      } catch (err) {
+        // Un DM qui échoue (ex. joueur ayant désactivé les DM du serveur)
+        // ne doit jamais bloquer l'envoi aux autres joueurs.
+        console.error(`notifyAliveParticipants : échec DM à ${p.discord_user_id} :`, err);
+      }
+    }
+  }
+}

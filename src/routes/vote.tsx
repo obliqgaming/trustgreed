@@ -207,6 +207,10 @@ function VotePage() {
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  // Mode de l'expédition — récupéré une fois au chargement (voir plus bas)
+  // pour savoir si on affiche un compte à rebours (synchrone) ou un simple
+  // décompte de qui a agi (asynchrone, aucune limite de temps).
+  const [isAsync, setIsAsync] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -605,6 +609,9 @@ function VotePage() {
       if (!partCheck) { navigate({ to: "/" }); return; }
 
       await fetchParticipants();
+      const { data: expData } = await supabase
+        .from("expeditions").select("vote_window_seconds").eq("id", expeditionId).maybeSingle();
+      setIsAsync(((expData as any)?.vote_window_seconds ?? 180) !== 180);
       let currentStep = await fetchStep();
       // Course possible : la page peut se monter une fraction de seconde
       // avant que generate_next_step (déclenché par "Lancer") n'ait fini
@@ -1472,12 +1479,20 @@ function VotePage() {
                 </div>
               </Frame>
             )}
-            <FramedBox frame={5} className="flex items-center justify-between mb-4 px-3 py-2">
-              <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
-              <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
-                {timeLeft !== null ? fmt(timeLeft) : "—"}
-              </span>
-            </FramedBox>
+            {isAsync ? (
+              <FramedBox frame={5} className="flex items-center justify-center mb-4 px-3 py-2">
+                <span className="text-xs tracking-[0.1em] uppercase text-muted-foreground text-center">
+                  Aucune limite de temps — en attente que chacun agisse
+                </span>
+              </FramedBox>
+            ) : (
+              <FramedBox frame={5} className="flex items-center justify-between mb-4 px-3 py-2">
+                <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
+                <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
+                  {timeLeft !== null ? fmt(timeLeft) : "—"}
+                </span>
+              </FramedBox>
+            )}
 
             {/* ================= TON VOTE — la décision qui compte ================= */}
             {!myVote ? (
@@ -1784,7 +1799,8 @@ function VotePage() {
                         })}
                       </div>
                       <p className="text-[10px] text-muted-foreground text-center">
-                        {totalVotes}/{alive.length} vote{alive.length > 1 ? "s" : ""} — clôture automatique à la fin du délai
+                        {totalVotes}/{alive.length} vote{alive.length > 1 ? "s" : ""}
+                        {isAsync ? " — clôture dès que tout le monde a voté" : " — clôture automatique à la fin du délai"}
                       </p>
                     </div>
                   </div>
