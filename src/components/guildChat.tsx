@@ -8,6 +8,7 @@ export function GuildChatBox({ guildId, characterId }: { guildId: string; charac
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMessages = useCallback(async () => {
@@ -22,22 +23,52 @@ export function GuildChatBox({ guildId, characterId }: { guildId: string; charac
 
   useEffect(() => {
     void fetchMessages();
+    // Écoute en direct les nouveaux messages : le sondage de 8s ci-dessous
+    // ne sert plus que de filet de sécurité si Realtime rate un événement
+    // (même schéma que expedition.tsx pour les participants), au lieu
+    // d'être la seule source de mise à jour — c'est ce qui donnait
+    // l'impression que le chat « se figeait ».
+    const channel = supabase
+      .channel(`guild_chat_${guildId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "guild_chat_messages",
+        filter: `guild_id=eq.${guildId}`,
+      }, () => { void fetchMessages(); })
+      .subscribe();
     pollRef.current = setInterval(fetchMessages, 8000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchMessages]);
+    return () => {
+      supabase.removeChannel(channel);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [guildId, fetchMessages]);
 
+  // Ne fait défiler automatiquement vers le bas que si le joueur était déjà
+  // proche du bas (ou que c'est lui qui vient d'envoyer un message) — avant,
+  // ça sautait tout en bas à chaque nouveau message reçu, même en train de
+  // relire plus haut, ce qui rendait le chat pénible sur mobile.
   const prevMsgCount = useRef(0);
+  const sentByMeRef = useRef(false);
   useEffect(() => {
-    if (messages.length > prevMsgCount.current) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const grew = messages.length > prevMsgCount.current;
     prevMsgCount.current = messages.length;
+    if (!grew) return;
+    const box = scrollBoxRef.current;
+    const wasNearBottom = box
+      ? box.scrollHeight - box.scrollTop - box.clientHeight < 60
+      : true;
+    if (wasNearBottom || sentByMeRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    sentByMeRef.current = false;
   }, [messages]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || busy) return;
     setBusy(true);
+    sentByMeRef.current = true;
     const { error } = await supabase.from("guild_chat_messages").insert({ guild_id: guildId, character_id: characterId, message: text.trim() });
-    if (error) console.error("[chat guilde] échec d'envoi :", error.message);
+    if (error) { console.error("[chat guilde] échec d'envoi :", error.message); sentByMeRef.current = false; }
     setText("");
     await fetchMessages();
     setBusy(false);
@@ -46,7 +77,7 @@ export function GuildChatBox({ guildId, characterId }: { guildId: string; charac
   return (
     <div className="mt-4 border-t border-border/20 pt-4">
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat de guilde</p>
-      <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
+      <div ref={scrollBoxRef} className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
         {messages.length === 0
           ? <p className="text-xs text-muted-foreground/40 italic">Silence dans la guilde.</p>
           : messages.map((m) => (

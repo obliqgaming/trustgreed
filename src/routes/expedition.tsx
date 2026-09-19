@@ -184,6 +184,21 @@ function ExpeditionPage() {
   async function joinExpedition() {
     if (!expedition || !character) return;
     setError(null); setBusy(true);
+    // Recompte juste avant d'insérer : rien n'empêchait jusqu'ici de
+    // s'inscrire au-delà du nombre de places visées (ex. 4/3), ni ici ni
+    // côté serveur — ce contrôle client réduit le cas courant (deux
+    // personnes qui cliquent au même moment restent possibles ; un vrai
+    // verrou nécessite une contrainte côté base, voir la requête SQL fournie).
+    const { count } = await supabase
+      .from("expedition_participants")
+      .select("character_id", { count: "exact", head: true })
+      .eq("expedition_id", expedition.id);
+    if ((count ?? 0) >= expedition.target_size) {
+      setError("L'expédition a déjà son nombre de places pourvu.");
+      await loadParticipants(expedition.id);
+      setBusy(false);
+      return;
+    }
     const { error: insertError } = await supabase
       .from("expedition_participants")
       .insert({ expedition_id: expedition.id, character_id: character.id });
@@ -458,7 +473,13 @@ function ExpeditionPage() {
           )}
 
           {!isParticipant && (
-            <SealButton onClick={joinExpedition} disabled={busy}>{busy ? "Inscription…" : "Rejoindre l'expédition"}</SealButton>
+            participants.length >= expedition.target_size ? (
+              <p className="text-xs text-muted-foreground text-center py-2 border border-border/30">
+                L'expédition a déjà son nombre de places pourvu ({participants.length}/{expedition.target_size}).
+              </p>
+            ) : (
+              <SealButton onClick={joinExpedition} disabled={busy}>{busy ? "Inscription…" : "Rejoindre l'expédition"}</SealButton>
+            )
           )}
 
           {isAdmin && availableBots.length > 0 && (

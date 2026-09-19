@@ -223,6 +223,7 @@ function VotePage() {
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchResult, setSearchResult] = useState<{ found: boolean; name?: string; flavor_text?: string } | null>(null);
   const [intervenerNames, setIntervenerNames] = useState<string[]>([]);
+  const [allInterventionUsers, setAllInterventionUsers] = useState<{ name: string; action: string }[]>([]);
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
   const [revealingOutcome, setRevealingOutcome] = useState(false);
@@ -817,7 +818,12 @@ function VotePage() {
     } else if (resolutionType === "ignorer") {
       cinematicText = "Vous laissez le coffre fermé, tel que vous l'avez trouvé. Ce qu'il contenait reste un mystère.";
     } else if (resolutionType === "interpreter") {
-      cinematicText = "Votre Éclaireur lit les traces sans l'ombre d'un doute. La voie est sûre, mais elle ne mène à rien de plus que la sécurité elle-même.";
+      // "Comprendre pourquoi" doit révéler la vraie histoire de l'étape —
+      // avant, cette branche affichait toujours la même phrase générique,
+      // quel que soit le contenu réel de l'étape (le texte spécifique
+      // existe pourtant côté serveur, jamais lu ici).
+      cinematicText = (wentWrong ? resolvedStep?.situation_failure_text : resolvedStep?.situation_success_text)
+        ?? "Votre Éclaireur lit les traces avec soin, mais elles ne livrent rien de plus que ce que vous saviez déjà.";
     } else if (resolutionType === "martyr_provocation") {
       cinematicText = wentWrong
         ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué, mais ce silence a un prix."
@@ -868,7 +874,16 @@ function VotePage() {
     if (ended && pollRef.current) clearInterval(pollRef.current);
 
     // Narration de la désignation "pousser devant" : qui a poussé qui, et ce que ça a donné.
-    const nameById = new Map(participants.map((p) => [p.character_id, (p.character as any)?.name ?? "?"]));
+    // Va chercher une correspondance id → nom fraîche plutôt que de se fier à
+    // l'état `participants` du composant : si cet écran s'affiche avant que
+    // ce state ait fini de se charger (course possible au premier rendu),
+    // la map était vide et tous les noms tombaient à "?" dans le récit.
+    const { data: rosterRows } = await supabase
+      .from("expedition_participants").select("character_id, character:characters(name)")
+      .eq("expedition_id", expeditionId);
+    const nameById = new Map(
+      ((rosterRows as any[]) ?? []).map((p) => [p.character_id, p.character?.name ?? "?"])
+    );
     const joinNames = (names: string[]) => names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}`;
     let frontlineNarrative: string | null = null;
     const { data: flResultRow } = await supabase
@@ -1008,6 +1023,18 @@ function VotePage() {
     const { data: rows } = await supabase
       .from("step_interventions").select("character:characters(name)").eq("step_id", step.id).eq("action", "aide");
     setIntervenerNames((rows as any[] ?? []).map(r => r.character?.name).filter(Boolean));
+
+    // Qui a déjà pioché dans le pool partagé sur cette étape, toutes actions
+    // confondues (aide/fouille/potion) — avant, seul "aide" était listé, ce
+    // qui donnait l'impression trompeuse que le pool "réapparaissait" quand
+    // c'était en fait quelqu'un d'autre qui avait fouillé ou bu une potion.
+    const { data: allRows } = await supabase
+      .from("step_interventions").select("action, character:characters(name)").eq("step_id", step.id);
+    setAllInterventionUsers(
+      ((allRows as any[]) ?? [])
+        .map(r => ({ name: r.character?.name as string | undefined, action: r.action as string }))
+        .filter(r => !!r.name) as { name: string; action: string }[]
+    );
 
     const { data: skipRows } = await supabase.from("step_skip_votes").select("character_id").eq("step_id", step.id);
     const skipIds = (skipRows as any[] ?? []).map(r => r.character_id);
@@ -1204,9 +1231,11 @@ function VotePage() {
 
               <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
                 <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Optionnel</p>
+                <p className="text-[11px] text-muted-foreground/80 text-center mb-1">
+                  Réserve commune au groupe ({interventionsRemaining ?? 0} restante{(interventionsRemaining ?? 0) > 1 ? "s" : ""}) — Intervenir, Fouiller et boire une potion y puisent tous les trois, et elle ne se recharge pas.
+                </p>
 
                 <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                  title="Réduit le risque de cette étape. Pool partagé avec Fouiller et les potions, une fois épuisé il ne revient pas."
                   className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
                   {myIntervened ? "Intervention déjà utilisée sur cette étape"
                     : !interventionsRemaining ? "Plus d'intervention disponible"
@@ -1255,9 +1284,11 @@ function VotePage() {
                 )}
               </div>
 
-              {intervenerNames.length > 0 && (
+              {allInterventionUsers.length > 0 && (
                 <p className="text-xs text-amber-400/90 text-center mt-2">
-                  Intervenu·e{intervenerNames.length > 1 ? "s" : ""} sur cette étape : {intervenerNames.join(", ")}
+                  Déjà puisé dans la réserve sur cette étape : {allInterventionUsers.map(u =>
+                    `${u.name} (${u.action === "aide" ? "intervention" : u.action === "fouille" ? "fouille" : "potion"})`
+                  ).join(", ")}
                 </p>
               )}
 
@@ -1314,14 +1345,24 @@ function VotePage() {
       ];
       resultBg = successPool[Math.floor(resultImageVariant * successPool.length)] ?? successPool[0]!;
     }
+    // "Étape franchie" ne doit jamais s'afficher au-dessus d'un récit
+    // d'échec accompagné de dégâts réels — avant, le titre ne regardait que
+    // le nombre de morts, alors que le texte narratif juste en dessous
+    // bascule sur la version "ça a mal tourné" dès qu'il y a eu des dégâts
+    // (voir wentWrong plus haut), même sans aucune mort. Résultat : un
+    // titre "Étape franchie" au-dessus d'un texte d'échec et d'un encart
+    // de dégâts, qui se contredisaient l'un l'autre.
+    const hurtNoDeath = result.deaths === 0 && result.damageLog.length > 0;
     const title = result.iDied ? "Tu es mort."
       : isWipe ? "Expédition anéantie"
       : result.ended ? "Expédition terminée"
-      : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}` : "Étape franchie";
+      : result.deaths > 0 ? `${result.deaths} mort${result.deaths > 1 ? "s" : ""}`
+      : hurtNoDeath ? "Étape franchie de justesse" : "Étape franchie";
     const subtitle = result.iDied ? "Ton personnage ne reviendra pas."
       : isWipe ? "Aucun survivant. Rien n'est rapporté à la guilde."
       : result.ended ? `Butin rapporté à la guilde : ${result.loot} or`
       : result.deaths > 0 ? `${result.deaths} membre${result.deaths > 1 ? "s ont" : " a"} péri.`
+      : hurtNoDeath ? "Personne n'est mort, mais ça s'est fait sentir."
       : "Le groupe avance.";
     return (
       <LedgerPage maxWidthClass="max-w-2xl">
@@ -1535,18 +1576,33 @@ function VotePage() {
                       : delta < 0 ? { text: "risque réduit", color: "text-emerald-400" }
                       : null;
                     const hasLoot = step.third_option_loot_min != null && step.third_option_loot_max != null;
+                    // Le chiffre seul ("138–321 or") ne dit pas si c'est de
+                    // l'or gagné ou dépensé, ni comment il se compare au
+                    // butin de Continuer juste au-dessus — d'où la confusion
+                    // sur des options pourtant cohérentes (plus de risque
+                    // pour plus de butin). On explicite les deux : "or à
+                    // gagner" et la comparaison directe au butin de base.
+                    const lootComparedToBase = hasLoot
+                      ? (step.third_option_loot_min! >= step.loot_max
+                          ? "butin plus élevé que Continuer"
+                          : step.third_option_loot_max! <= step.loot_min
+                            ? "butin plus faible que Continuer"
+                            : "butin comparable à Continuer")
+                      : null;
                     return (
                       <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
                         className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
                         <span>
                           {step.third_option_label}
                           {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
-                          {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde)`}
-                          {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or`}
+                          {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
+                          {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
                         </span>
-                        {riskTag && (
-                          <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag.color}`}>
-                            ⚠ {riskTag.text} par rapport à Continuer
+                        {(riskTag || lootComparedToBase) && (
+                          <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag?.color ?? "text-muted-foreground"}`}>
+                            {riskTag && <>⚠ {riskTag.text} par rapport à Continuer</>}
+                            {riskTag && lootComparedToBase && " · "}
+                            {lootComparedToBase && lootComparedToBase}
                           </span>
                         )}
                       </button>
