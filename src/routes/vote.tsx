@@ -1516,13 +1516,13 @@ function VotePage() {
           d'actions — chacune calée sur les bandes mesurées dans
           game_frame.webp (bandeau ~5-16%, parchemin ~19-68%, zone
           d'actions ~71-99% de la hauteur du panneau). */}
-      <div className="absolute z-10 top-0 bottom-0 min-w-0" style={{ left: "20.6%", width: "59%" }}>
+      <div className="absolute z-10 top-0 bottom-0 min-w-0 flex flex-col items-center" style={{ left: "20.6%", width: "59%" }}>
         {step && (!step.resolved || verdictPending || revealingOutcome) && (
           <>
-            {/* Bandeau compact : étape/type + risque deux fois plus gros
-                qu'avant, jauge intégrée ici (réduite), plus de gros bloc
-                séparé plus bas. */}
-            <div className="absolute flex flex-col items-center justify-center gap-0.5 px-[6%] text-center" style={{ top: "1%", height: "15%", left: 0, right: 0 }}>
+            {/* Bandeau compact : hauteur fixée par son contenu, pas par une
+                bande imposée — laisse le maximum d'espace à la zone
+                d'actions en dessous. */}
+            <div className="shrink-0 w-full flex flex-col items-center justify-center gap-0.5 px-[6%] pt-3 pb-1 text-center">
               <p className="inline-flex items-center gap-2.5 text-2xl md:text-3xl font-serif tracking-[0.06em] text-primary">
                 {EVENT_TYPE_ICON[step.event_type] && (
                   <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-8 w-8 object-contain shrink-0" />
@@ -1554,11 +1554,13 @@ function VotePage() {
               })()}
             </div>
 
-            {/* Illustration 16:9, calée sur la zone parchemin de game_frame.webp. */}
+            {/* Illustration : 16:9 strict (contrainte de forme), mais
+                plafonnée en hauteur — ce n'est plus elle qui décide de la
+                place qu'il reste pour les actions, c'est l'inverse. */}
             {step.description && (() => {
               const parchmentBg = pickParchmentBg(step);
               return (
-                <div className="absolute overflow-hidden rounded-sm" style={{ top: "19.5%", height: "49.5%", left: "4%", right: "4%" }}>
+                <div className="shrink-0 relative overflow-hidden rounded-sm mx-auto" style={{ width: "76%", aspectRatio: "16 / 9", maxHeight: "30vh" }}>
                   {parchmentBg && (
                     <img src={parchmentBg} alt="" aria-hidden
                       className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none opacity-90" />
@@ -1570,7 +1572,7 @@ function VotePage() {
                           Conséquence d'un choix passé
                         </p>
                       )}
-                      <p className="text-xl md:text-2xl font-sans italic leading-snug text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)" }}>
+                      <p className="text-lg md:text-xl font-sans italic leading-snug text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)" }}>
                         {step.description}
                       </p>
                     </div>
@@ -1578,99 +1580,102 @@ function VotePage() {
                 </div>
               );
             })()}
-            {/* ================= Zone d'actions — une seule zone scrollable si
-                besoin, calée sur la bande sombre de game_frame.webp.
-                Continuer/Rentrer, la réserve personnelle, et le reste du
-                contenu variable (troisième option, capacités, votes,
-                larcin) y cohabitent sans jamais dépasser l'écran. ================= */}
-            <div className="absolute overflow-y-auto flex flex-col gap-1.5" style={{ top: "70.5%", bottom: "4%", left: "4%", right: "4%" }}>
+            {/* ================= Zone d'actions — récupère tout l'espace
+                restant (flex-1). Scindée en deux colonnes pendant le vote :
+                boutons à gauche, infos à droite. Le contenu secondaire
+                (troisième option, capacités, votes, larcin) reste en
+                dessous, pleine largeur. ================= */}
+            <div className="flex-1 min-h-0 w-full overflow-y-auto px-[6%] pt-2 pb-3 flex flex-col gap-2">
             {!step.resolving && !verdictPending && !revealingOutcome && (
-              <div className="flex flex-col gap-1.5">
-                {isAsync ? (
-                  <p className="w-full text-[10px] tracking-[0.1em] uppercase text-muted-foreground text-center">
-                    Aucune limite de temps — en attente que chacun agisse
-                  </p>
-                ) : (
-                  <div className="w-full flex items-center justify-between px-1 text-[11px]">
-                    <span className="tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
-                    <span className={`font-mono text-sm ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
-                      {timeLeft !== null ? fmt(timeLeft) : "—"}
-                    </span>
-                  </div>
-                )}
-                {/* Continuer/Rentrer : à part, mais compacts — tout le bloc du
-                    bas doit tenir sans scroll. */}
-                {!myVote ? (
-                  <div className="flex gap-2">
-                    <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
-                      <span className="flex items-center justify-center gap-2">
-                        <img src="/icons/arrow_up.webp" alt="" className="h-4 w-4 object-contain" />
-                        Continuer
-                      </span>
-                    </ImmersiveButton>
-                    <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
-                      <span className="flex items-center justify-center gap-2">
-                        <img src="/icons/door.webp" alt="" className="h-4 w-4 object-contain" />
-                        Rentrer
-                      </span>
-                    </ImmersiveButton>
-                  </div>
-                ) : (
-                  <p className="w-full text-xs text-muted-foreground text-center">Vote enregistré, en attente des autres…</p>
-                )}
-                {/* Réserve personnelle — disponible dès le vote, pas seulement
-                    une fois que tout le monde a voté : Intervenir/Fouiller/
-                    Potion utilisent la même réserve que le Larcin (affiché
-                    plus bas), donc pas de raison de les réserver à une
-                    phase différente. Rangée à part, plus discrète que
-                    Continuer/Rentrer. */}
-                {!!interventionsRemaining && (
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                      title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                      className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
-                      <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
-                      <span className="text-[9px] uppercase tracking-[0.04em]">Intervenir</span>
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
-                    </button>
-                    <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                      title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                      className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
-                      <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
-                      <span className="text-[9px] uppercase tracking-[0.04em]">Fouiller</span>
-                      <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
-                    </button>
-                    {hasPotion && (
-                      <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                        title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                        className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-emerald-400/40 text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-30 rounded-sm">
-                        <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
-                        <span className="text-[9px] uppercase tracking-[0.04em]">Potion</span>
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  {/* Continuer/Rentrer : à part, compacts — tout le bloc du
+                      bas doit tenir sans scroll. */}
+                  {!myVote ? (
+                    <div className="flex gap-2">
+                      <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
+                        <span className="flex items-center justify-center gap-2">
+                          <img src="/icons/arrow_up.webp" alt="" className="h-4 w-4 object-contain" />
+                          Continuer
+                        </span>
+                      </ImmersiveButton>
+                      <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
+                        <span className="flex items-center justify-center gap-2">
+                          <img src="/icons/door.webp" alt="" className="h-4 w-4 object-contain" />
+                          Rentrer
+                        </span>
+                      </ImmersiveButton>
+                    </div>
+                  ) : (
+                    <p className="w-full text-xs text-muted-foreground text-center">Vote enregistré, en attente des autres…</p>
+                  )}
+                  {/* Réserve personnelle — disponible dès le vote, pas seulement
+                      une fois que tout le monde a voté : Intervenir/Fouiller/
+                      Potion utilisent la même réserve que le Larcin (affiché
+                      plus bas), donc pas de raison de les réserver à une
+                      phase différente. */}
+                  {!!interventionsRemaining && (
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                        title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                        className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
+                        <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
+                        <span className="text-[9px] uppercase tracking-[0.04em]">Intervenir</span>
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
                       </button>
-                    )}
-                  </div>
-                )}
-                {(myIntervened || mySearched || myDrunk) && (
-                  <p className="w-full text-[10px] text-center text-muted-foreground/70">
-                    {myIntervened && "Intervention utilisée sur cette étape."}
-                    {mySearched && searchResult && (searchResult.found ? `Fouille : trouvé ${searchResult.name}.` : "Fouille infructueuse.")}
-                    {myDrunk && drinkResult !== null && `Potion bue, ${drinkResult} PV.`}
-                  </p>
-                )}
-              </div>
-            )}
-            {!step.resolving && !verdictPending && !revealingOutcome && !myVote && runningTotals && (
-              <div className="text-xs text-muted-foreground text-center space-y-0.5">
-                <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
-                <p className="text-[10px] opacity-70">
-                  Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
-                  {myGoldAdjustment !== 0 && (
-                    <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
-                      {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment} suite à un larcin)
-                    </span>
-                  )}.
-                </p>
+                      <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                        title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                        className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
+                        <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
+                        <span className="text-[9px] uppercase tracking-[0.04em]">Fouiller</span>
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
+                      </button>
+                      {hasPotion && (
+                        <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                          title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                          className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-emerald-400/40 text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-30 rounded-sm">
+                          <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
+                          <span className="text-[9px] uppercase tracking-[0.04em]">Potion</span>
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {(myIntervened || mySearched || myDrunk) && (
+                    <p className="w-full text-[10px] text-center text-muted-foreground/70">
+                      {myIntervened && "Intervention utilisée sur cette étape."}
+                      {mySearched && searchResult && (searchResult.found ? `Fouille : trouvé ${searchResult.name}.` : "Fouille infructueuse.")}
+                      {myDrunk && drinkResult !== null && `Potion bue, ${drinkResult} PV.`}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1.5 border-l border-border/20 pl-3">
+                  {isAsync ? (
+                    <p className="w-full text-[10px] tracking-[0.1em] uppercase text-muted-foreground text-center">
+                      Aucune limite de temps — en attente que chacun agisse
+                    </p>
+                  ) : (
+                    <div className="w-full flex items-center justify-between text-[11px]">
+                      <span className="tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
+                      <span className={`font-mono text-sm ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
+                        {timeLeft !== null ? fmt(timeLeft) : "—"}
+                      </span>
+                    </div>
+                  )}
+                  {runningTotals && !myVote && (
+                    <div className="text-[11px] text-muted-foreground text-center space-y-0.5">
+                      <p>Or de guilde : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
+                      <p className="text-[10px] opacity-70">
+                        Part perso. si retour : ~{Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
+                        {myGoldAdjustment !== 0 && (
+                          <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
+                            {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {!step.resolving && !verdictPending && !revealingOutcome && !myVote && step.third_option_kind && step.third_option_label && (
