@@ -478,13 +478,56 @@ function VotePage() {
   }, []);
 
   const fetchStep = useCallback(async () => {
-    const { data } = await supabase
-      .from("expedition_steps")
-      .select("id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag, death_percentage, third_option_death_pct, situation_success_text, situation_failure_text")
-      .eq("expedition_id", expeditionId)
-      .order("step_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const stepSelect = "id, step_number, event_type, risk_level, loot_min, loot_max, vote_deadline, resolved, deaths_count, description, risk_revealed, resolving, resolution_deadline, was_retreat, resolved_at, third_option_kind, third_option_label, third_option_loot_min, third_option_loot_max, third_option_cost, resolution_type, required_vocation, required_flag_sentiment, required_flag, death_percentage, third_option_death_pct, situation_success_text, situation_failure_text";
+
+    // IMPORTANT : le joueur doit voir personnellement le récapitulatif de
+    // chaque étape résolue tant qu'il ne l'a pas validé lui-même.
+    //
+    // Le serveur peut générer l'étape suivante après son délai de secours de
+    // 90 s afin de ne pas bloquer le reste du groupe. Cela ne doit PAS être
+    // interprété comme une validation au nom du joueur absent.
+    //
+    // On cherche donc d'abord la plus ancienne étape résolue de l'expédition
+    // qui n'a pas encore d'acknowledgment pour CE personnage. S'il n'y en a
+    // aucune, seulement alors on affiche l'étape la plus récente/active.
+    let data: any = null;
+    let isPendingRecap = false;
+
+    if (characterIdRef.current) {
+      const { data: resolvedSteps } = await supabase
+        .from("expedition_steps")
+        .select(stepSelect)
+        .eq("expedition_id", expeditionId)
+        .eq("resolved", true)
+        .order("step_number", { ascending: true });
+
+      const resolvedIds = (resolvedSteps ?? []).map((s: any) => s.id);
+      if (resolvedIds.length > 0) {
+        const { data: myAcks } = await supabase
+          .from("step_acknowledgments")
+          .select("step_id")
+          .eq("character_id", characterIdRef.current)
+          .in("step_id", resolvedIds);
+
+        const ackedIds = new Set((myAcks ?? []).map((a: any) => a.step_id));
+        const pending = (resolvedSteps ?? []).find((s: any) => !ackedIds.has(s.id));
+        if (pending) {
+          data = pending;
+          isPendingRecap = true;
+        }
+      }
+    }
+
+    if (!data) {
+      const { data: latestStep } = await supabase
+        .from("expedition_steps")
+        .select(stepSelect)
+        .eq("expedition_id", expeditionId)
+        .order("step_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      data = latestStep;
+    }
 
     if (data) {
       const isNewStep = stepIdRef.current !== null && stepIdRef.current !== data.id;
@@ -519,6 +562,16 @@ function VotePage() {
       // cette animation.
       if (data.resolved && !resultShownRef.current) {
         resultShownRef.current = true;
+
+        // Si le joueur revient après coup sur un résultat qu'il n'a jamais
+        // validé, on lui montre directement le récapitulatif. On ne rejoue
+        // pas l'animation de verdict : elle est réservée au moment où le
+        // résultat tombe en direct.
+        if (isPendingRecap) {
+          await showStepResult(data.id, data.event_type, data.deaths_count, !!data.was_retreat);
+          return;
+        }
+
         if (data.was_retreat) {
           await showStepResult(data.id, data.event_type, data.deaths_count, true);
           return;
@@ -574,17 +627,10 @@ function VotePage() {
         setVisibleRisk(null);
       }
 
-      // Filet de sécurité : si le groupe reste bloqué sans que tout le monde
-      // ait cliqué "Continuer", force le passage à la suite après 90s.
-      // Ce check tourne à chaque poll (même après le premier affichage du
-      // résultat), tant qu'il reste au moins un client avec l'onglet ouvert.
-      // Utilise characterIdRef (pas character) pour éviter toute fermeture figée.
-      if (data.resolved && data.resolved_at && characterIdRef.current) {
-        const elapsedMs = Date.now() - new Date(data.resolved_at).getTime();
-        if (elapsedMs >= 90000) {
-          await supabase.rpc("acknowledge_step_result", { p_step_id: data.id, p_character_id: characterIdRef.current });
-        }
-      }
+      // Ne jamais valider automatiquement le résultat au nom du joueur.
+      // Le délai de secours de 90 s est géré côté serveur uniquement pour
+      // permettre au groupe de progresser. L'acknowledgment personnel reste
+      // volontaire : le joueur doit cliquer "Continuer" sur son récapitulatif.
     }
     return data;
   }, [expeditionId, fetchVotes]);
