@@ -1515,33 +1515,35 @@ function VotePage() {
       <main className="absolute z-10" style={{ left: "20.15%", right: "20.15%", top: 0, bottom: 0 }}>
         {step && (!step.resolved || verdictPending || revealingOutcome) && (
           <>
-            {/* 1 — BANDEAU : compact, aucune interaction lourde ici. */}
-            <section className="absolute flex flex-col items-center justify-center text-center px-[5%]" style={{ left: 0, right: 0, top: "2.4%", height: "10.8%" }}>
-              <div className="flex items-center justify-center gap-2 min-w-0">
-                {EVENT_TYPE_ICON[step.event_type] && <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-7 w-7 object-contain shrink-0" />}
-                <h1 className="font-serif text-2xl xl:text-3xl tracking-[0.08em] uppercase text-primary truncate">
-                  Étape {step.step_number} — {step.event_type}
-                </h1>
-              </div>
-              <div className="mt-1 flex items-center justify-center flex-wrap gap-x-4 gap-y-1 text-[13px]">
-                <span className={`font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
-                <span className="text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
-                {visibleRisk !== null && <span className="font-mono text-muted-foreground/70">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
-                {myPrivateRisk !== null && <span className="font-mono text-primary/80">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
-              </div>
-              {(() => {
-                const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
-                if (knownRisk == null) return null;
-                const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
-                return (
-                  <div className="mt-1.5 w-64 max-w-[42%]">
-                    <div className="h-2 border border-border/50 relative overflow-hidden">
-                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200" : "transition-all duration-700"}`} style={{ width: `${fillPct}%` }} />
+            {/* 1 — BANDEAU : plus ample, presque sur toute la largeur utile du panneau central. */}
+            <section className="absolute flex items-center justify-center text-center" style={{ left: 0, right: 0, top: "2.1%", height: "13.2%" }}>
+              <div className="w-full max-w-[92%] flex flex-col items-center">
+                <div className="flex items-center justify-center gap-2 min-w-0 max-w-full">
+                  {EVENT_TYPE_ICON[step.event_type] && <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-7 w-7 object-contain shrink-0" />}
+                  <h1 className="font-serif text-[clamp(1.7rem,2.8vw,2.7rem)] tracking-[0.08em] uppercase text-primary truncate">
+                    Étape {step.step_number} — {step.event_type}
+                  </h1>
+                </div>
+                <div className="mt-1.5 w-full flex items-center justify-center flex-wrap gap-x-5 gap-y-1 text-[14px]">
+                  <span className={`font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
+                  <span className="text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
+                  {visibleRisk !== null && <span className="font-mono text-muted-foreground/70">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
+                  {myPrivateRisk !== null && <span className="font-mono text-primary/80">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+                </div>
+                {(() => {
+                  const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
+                  if (knownRisk == null) return null;
+                  const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
+                  return (
+                    <div className="mt-2 w-[min(84%,780px)] max-w-[84%]">
+                      <div className="h-2.5 border border-border/50 relative overflow-hidden">
+                        <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200" : "transition-all duration-700"}`} style={{ width: `${fillPct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[11px] uppercase tracking-[0.08em] text-muted-foreground/85 mt-0.5 px-[1px]"><span>Échec</span><span>Réussite</span></div>
                     </div>
-                    <div className="flex justify-between text-[9px] uppercase tracking-[0.08em] text-muted-foreground/80 mt-0.5"><span>Échec</span><span>Réussite</span></div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
+              </div>
             </section>
 
             {/* 2 — SCÈNE : l'illustration seule, strictement 16:9, centrée dans le parchemin. */}
@@ -1571,23 +1573,31 @@ function VotePage() {
 
             {/* 3 — ACTIONS : trois familles stables. Aucun scroll global. */}
             <section className="absolute flex flex-col px-[4.5%] pt-1.5 pb-2" style={{ left: 0, right: 0, top: "69.8%", bottom: "2.1%" }}>
-              <div className="shrink-0 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] text-muted-foreground/75 mb-2 min-h-[20px] text-center">
-                <span>{isAsync ? "Aucune limite de temps — en attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
-                <span>•</span>
-                <span>Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}</span>
+              <div className="shrink-0 flex flex-col items-center justify-center gap-1.5 mb-2 min-h-[34px] text-center">
+                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground/78 max-w-[94%]">
+                  <span>{isAsync ? "Aucune limite de temps — en attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
+                  <span className="opacity-40">•</span>
+                  <span>Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}</span>
+                </div>
                 {runningTotals && (
-                  <>
-                    <span>•</span>
+                  <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground/72 max-w-[94%]">
                     <span>
-                      Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span>
-                      {" "}· Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
+                      Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span>
+                    </span>
+                    <span className="opacity-40">•</span>
+                    <span>
+                      XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span>
+                    </span>
+                    <span className="opacity-40">•</span>
+                    <span>
+                      Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
                       {myGoldAdjustment !== 0 && (
                         <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
                           {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment})
                         </span>
                       )}
                     </span>
-                  </>
+                  </div>
                 )}
               </div>
 
@@ -1779,7 +1789,7 @@ function VotePage() {
       </main>
 
       {/* DROITE — chat pleine hauteur, saisie ancrée en bas. */}
-      <aside className="absolute z-10 flex flex-col" style={{ right: "1.55%", top: "3.1%", bottom: "3.4%", width: "17.0%", padding: "0.55rem 0.65rem" }}>
+      <aside className="absolute z-10 flex flex-col" style={{ right: "1.55%", top: "3.1%", bottom: "3.4%", width: "18.05%", padding: "0.55rem 0.65rem 0.55rem 0.35rem" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </aside>
@@ -1957,7 +1967,7 @@ function LarcenyButton({ expeditionId, step, character, aliveParticipants, compa
     <button onClick={() => setConfirm(true)} title="Tenter un larcin"
       className="relative min-h-[48px] flex flex-col items-center justify-center border border-amber-500/30 bg-black/10 text-amber-300 hover:bg-amber-500/10 transition-colors">
       <img src="/icons/pouch_hand.webp" alt="" className="h-6 w-6 object-contain" />
-      <span className="text-[8px] uppercase leading-tight text-center">Tenter un larcin</span>
+      <span className="text-[8px] uppercase leading-tight text-center">Larcin</span>
       <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-amber-400/50 text-[8px] flex items-center justify-center">{remaining}</span>
     </button>
   ) : (
@@ -2131,7 +2141,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <p className="text-sm tracking-[0.14em] uppercase text-muted-foreground mb-3 text-center">Chat</p>
-      <div ref={scrollBoxRef} className="flex-1 min-h-0 overflow-y-auto space-y-1.5 mb-2 pr-1">
+      <div ref={scrollBoxRef} className="flex-1 min-h-0 overflow-y-auto space-y-1.5 mb-2 pr-0.5">
         {messages.length === 0
           ? <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
           : messages.map((m) => (
