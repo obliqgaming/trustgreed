@@ -1419,531 +1419,321 @@ function VotePage() {
       backgroundRepeat: "no-repeat",
       backgroundPosition: "center",
     }}>
-      {/* Colonne gauche : GROUPE — cadre fourni par game_frame.webp en fond,
-          le contenu vient juste se poser dedans avec assez de marge pour ne
-          pas chevaucher la bordure ornée. */}
-      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto pl-5 pr-11 pt-7 pb-7" style={{ left: 0, width: "20.6%" }}>
-                <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
-                <div className="space-y-1.5">
-                  {participants.map((p, idx) => {
-                    const maxHp = getMaxHp((p.character as any)?.level ?? 1);
-                    const hp = (p.character as any)?.hp ?? maxHp;
-                    const hpRatio = maxHp > 0 ? hp / maxHp : 1;
-                    const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
-                    const votes = frontlineTally[p.character_id] ?? 0;
-                    const isMe = p.character_id === character?.id;
-                    return (
-                    <FramedBox key={p.character_id} frame={5}
-                      className={`px-2 py-1.5 ${!p.is_alive ? "opacity-30" : ""}`}>
-                      <div className="flex items-center gap-2">
-                        <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={68} bordered={false} />
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
-                            {(p.character as any)?.name}{!p.is_alive ? " ✝" : ""}
+      {/* ================================================================
+          LAYOUT VOTE — le frame est uniquement un décor. Les 3 colonnes et
+          les 3 étages du centre sont positionnés indépendamment afin que la
+          logique reste stable même si le contenu change.
+          ================================================================ */}
+
+      {/* GAUCHE — groupe. Scroll local uniquement si le groupe est grand. */}
+      <aside
+        className="absolute z-10 overflow-y-auto [scrollbar-width:thin]"
+        style={{ left: "1.15%", top: "2.2%", bottom: "3.2%", width: "17.1%", padding: "0.4rem 0.55rem" }}
+      >
+        <p className="text-[11px] tracking-[0.18em] uppercase text-muted-foreground mb-2">Groupe</p>
+        <div className="space-y-1.5">
+          {participants.map((p) => {
+            const maxHp = getMaxHp((p.character as any)?.level ?? 1);
+            const hp = (p.character as any)?.hp ?? maxHp;
+            const hpRatio = maxHp > 0 ? hp / maxHp : 1;
+            const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
+            const votes = frontlineTally[p.character_id] ?? 0;
+            const isMe = p.character_id === character?.id;
+            return (
+              <FramedBox key={p.character_id} frame={5} className={`px-1.5 py-1 ${!p.is_alive ? "opacity-30" : ""}`}>
+                <div className="flex items-center gap-1.5">
+                  <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={52} bordered={false} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className={`text-[11px] truncate ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
+                        {(p.character as any)?.name}{!p.is_alive ? " ✝" : ""}
+                      </p>
+                      <div className="ml-auto shrink-0"><VocationBadge vocationId={(p.character as any)?.declared_vocation} /></div>
+                    </div>
+                    {p.is_alive && (
+                      <>
+                        <div className="h-1.5 mt-1 rounded-sm bg-black/55 border border-black/60 overflow-hidden">
+                          <div className="h-full transition-all duration-500" style={{ width: `${Math.round(hpRatio * 100)}%`, backgroundColor: hpColor }} />
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <p className="text-[9px] font-mono flex items-center gap-0.5" style={{ color: hpColor }}>
+                            {hp}/{maxHp}<Heart size={8} className="fill-current" />
                           </p>
-                          {p.is_alive && (
-                            <>
-                              <div className="h-1.5 mt-1 mb-0.5 rounded-sm bg-black/50 border border-black/60 overflow-hidden">
-                                <div className="h-full rounded-sm transition-all duration-500"
-                                  style={{ width: `${Math.round(hpRatio * 100)}%`, backgroundColor: hpColor }} />
-                              </div>
-                              <p className="text-[10px] font-mono flex items-center gap-0.5" style={{ color: hpColor }}>
-                                {hp}/{maxHp} <Heart size={9} className="fill-current" />
-                              </p>
-                            </>
-                          )}
-                          {shield && shield.resolved && !shield.broken_reason && shield.holder_character_id === p.character_id && shield.steps_remaining !== null && shield.steps_remaining > 0 && (
-                            <p className="text-[10px] font-mono flex items-center gap-1 text-sky-400" title={`Bouclier ${shield.rarity} : -${shield.reduction} dégâts`}>
-                              <img src={SHIELD_ICON[shield.rarity]} alt="" className="w-3.5 h-3.5 object-contain" /> {shield.steps_remaining}
-                            </p>
-                          )}
-                        </div>
-                        <VocationBadge vocationId={(p.character as any)?.declared_vocation} />
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                      {p.is_alive && step && !step.resolving && !step.resolved && (
-                        <button
-                          onClick={() => voteFrontline(p.character_id)}
-                          title="Pousser cette personne devant pour la prochaine étape"
-                          className={`text-[9px] uppercase tracking-[0.06em] border px-1.5 py-0.5 whitespace-nowrap ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/30 text-muted-foreground/60 hover:border-amber-400/40 hover:text-amber-300"}`}
-                        >
-                          Pousser devant{votes > 0 ? ` (${votes})` : ""}
-                        </button>
-                      )}
-                      {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
-                        <div className="flex gap-1">
-                          <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id}
-                            className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
-                            Continuer
-                          </button>
-                          <button onClick={() => botVote(p.character_id, "rentrer")} disabled={botBusy === p.character_id}
-                            className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
-                            Rentrer
-                          </button>
-                        </div>
-                      )}
-                      {isAdmin && p.character.is_bot && !p.is_alive && (
-                        <button onClick={() => botRevive(p.character_id)} disabled={botBusy === p.character_id}
-                          className="text-[10px] uppercase border border-amber-500/40 text-amber-300 px-1.5 py-0.5 hover:bg-amber-500/10 disabled:opacity-30">
-                          {botBusy === p.character_id ? "…" : "Ressusciter"}
-                        </button>
-                      )}
-                      {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
-                        inspectResult?.id === p.character_id ? (
-                          <span className={`text-xs ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>
-                            {inspectResult.honest ? "Honnête" : "Traître"}
+                          <span className={votedIds.includes(p.character_id) ? "text-primary text-[10px]" : "text-muted-foreground/35 text-[10px]"}>
+                            {votedIds.includes(p.character_id) ? "✓" : "…"}
                           </span>
-                        ) : usedAbilities.has("inquisiteur_inspect") ? null : (
-                          <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
-                            className="text-[10px] uppercase tracking-[0.08em] border border-border/40 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
-                            {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
-                          </button>
-                        )
-                      )}
-                      {p.is_alive && (
-                        <span className={votedIds.includes(p.character_id) ? "text-primary text-xs" : "text-muted-foreground/40 text-xs"}>
-                          {votedIds.includes(p.character_id) ? "✓" : "…"}
-                        </span>
-                      )}
-                      </div>
-                    </FramedBox>
-                    );
-                  })}
+                        </div>
+                      </>
+                    )}
+                    {shield && shield.resolved && !shield.broken_reason && shield.holder_character_id === p.character_id && shield.steps_remaining !== null && shield.steps_remaining > 0 && (
+                      <p className="text-[9px] font-mono flex items-center gap-1 text-sky-400" title={`Bouclier ${shield.rarity} : -${shield.reduction} dégâts`}>
+                        <img src={SHIELD_ICON[shield.rarity]} alt="" className="w-3 h-3 object-contain" /> {shield.steps_remaining}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-      {/* Colonne centrale : occupe tout l'espace restant. */}
-      {/* Colonne centrale : bandeau compact, illustration 16:9, puis zone
-          d'actions — chacune calée sur les bandes mesurées dans
-          game_frame.webp (bandeau ~5-16%, parchemin ~19-68%, zone
-          d'actions ~71-99% de la hauteur du panneau). */}
-      <div className="absolute z-10 top-0 bottom-0 min-w-0 flex flex-col items-center" style={{ left: "20.6%", width: "59%" }}>
+                <div className="flex items-center gap-1 mt-1 flex-wrap">
+                  {p.is_alive && step && !step.resolving && !step.resolved && (
+                    <button
+                      onClick={() => voteFrontline(p.character_id)}
+                      title="Pousser cette personne devant pour la prochaine étape"
+                      className={`text-[8px] uppercase tracking-[0.05em] border px-1 py-0.5 whitespace-nowrap ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/25 text-muted-foreground/55 hover:border-amber-400/40 hover:text-amber-300"}`}
+                    >
+                      Pousser devant{votes > 0 ? ` (${votes})` : ""}
+                    </button>
+                  )}
+                  {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
+                    inspectResult?.id === p.character_id ? (
+                      <span className={`text-[9px] ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>{inspectResult.honest ? "Honnête" : "Traître"}</span>
+                    ) : usedAbilities.has("inquisiteur_inspect") ? null : (
+                      <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
+                        className="text-[8px] uppercase tracking-[0.05em] border border-border/30 text-muted-foreground px-1 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
+                        {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
+                      </button>
+                    )
+                  )}
+                  {/* Contrôles bots conservés pour l'admin, volontairement discrets. */}
+                  {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
+                    <div className="ml-auto flex gap-1 opacity-60 hover:opacity-100">
+                      <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id} className="text-[8px] border border-amber-500/30 text-amber-300 px-1">C</button>
+                      <button onClick={() => botVote(p.character_id, "rentrer")} disabled={botBusy === p.character_id} className="text-[8px] border border-amber-500/30 text-amber-300 px-1">R</button>
+                    </div>
+                  )}
+                  {isAdmin && p.character.is_bot && !p.is_alive && (
+                    <button onClick={() => botRevive(p.character_id)} disabled={botBusy === p.character_id} className="text-[8px] border border-amber-500/30 text-amber-300 px-1">
+                      {botBusy === p.character_id ? "…" : "Ressusciter"}
+                    </button>
+                  )}
+                </div>
+              </FramedBox>
+            );
+          })}
+        </div>
+      </aside>
+
+      {/* CENTRE — positions calées sur game_frame.webp : bandeau / scène / actions. */}
+      <main className="absolute z-10" style={{ left: "20.15%", right: "20.15%", top: 0, bottom: 0 }}>
         {step && (!step.resolved || verdictPending || revealingOutcome) && (
           <>
-            {/* Bandeau compact : hauteur fixée par son contenu, pas par une
-                bande imposée — laisse le maximum d'espace à la zone
-                d'actions en dessous. */}
-            <div className="shrink-0 w-full flex flex-col items-center justify-center gap-0.5 px-[6%] pt-3 pb-1 text-center">
-              <p className="inline-flex items-center gap-2.5 text-2xl md:text-3xl font-serif tracking-[0.06em] text-primary">
-                {EVENT_TYPE_ICON[step.event_type] && (
-                  <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-8 w-8 object-contain shrink-0" />
-                )}
-                Étape {step.step_number}, {step.event_type}
-              </p>
-              <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1">
-                <span className={`text-base font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
-                <span className="text-sm text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
-                {visibleRisk !== null && <span className="text-xs font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
-                {myPrivateRisk !== null && <span className="text-xs font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+            {/* 1 — BANDEAU : compact, aucune interaction lourde ici. */}
+            <section className="absolute flex flex-col items-center justify-center text-center px-[5%]" style={{ left: 0, right: 0, top: "1.7%", height: "11.2%" }}>
+              <div className="flex items-center justify-center gap-2 min-w-0">
+                {EVENT_TYPE_ICON[step.event_type] && <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-5 w-5 object-contain shrink-0" />}
+                <h1 className="font-serif text-lg xl:text-xl tracking-[0.08em] uppercase text-primary truncate">
+                  Étape {step.step_number} — {step.event_type}
+                </h1>
+              </div>
+              <div className="mt-0.5 flex items-center justify-center flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                <span className={`font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
+                <span className="text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
+                {visibleRisk !== null && <span className="font-mono text-muted-foreground/70">{Math.round(visibleRisk * 100)}% révélé</span>}
+                {myPrivateRisk !== null && <span className="font-mono text-primary/80">{Math.round(myPrivateRisk * 100)}% pour toi</span>}
               </div>
               {(() => {
                 const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
                 if (knownRisk == null) return null;
                 const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
                 return (
-                  <div className="w-56">
-                    <div className="h-2 border border-border/60 relative overflow-hidden rounded-sm">
-                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
-                        style={{ width: `${fillPct}%` }} />
+                  <div className="mt-1 w-44 max-w-[35%]">
+                    <div className="h-1.5 border border-border/50 relative overflow-hidden">
+                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200" : "transition-all duration-700"}`} style={{ width: `${fillPct}%` }} />
                     </div>
-                    <div className="flex justify-between text-[9px] uppercase tracking-[0.08em] text-muted-foreground mt-0.5">
-                      <span>Échec</span>
-                      <span>Réussite</span>
+                    <div className="flex justify-between text-[7px] uppercase tracking-[0.08em] text-muted-foreground/70 mt-0.5"><span>Échec</span><span>Réussite</span></div>
+                  </div>
+                );
+              })()}
+            </section>
+
+            {/* 2 — SCÈNE : l'illustration seule, strictement 16:9, centrée dans le parchemin. */}
+            <section className="absolute flex items-center justify-center overflow-hidden" style={{ left: "1.5%", right: "1.5%", top: "15.2%", height: "53.6%" }}>
+              {step.description && (() => {
+                const parchmentBg = pickParchmentBg(step);
+                return (
+                  <div className="relative overflow-hidden" style={{ height: "86%", aspectRatio: "16 / 9", maxWidth: "92%" }}>
+                    {parchmentBg && <img src={parchmentBg} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" />}
+                    <div className="absolute inset-0 bg-black/5 pointer-events-none" />
+                    <div className="absolute inset-0 flex items-center justify-center px-[9%] py-[7%] text-center">
+                      <div className="max-w-[90%]">
+                        {step.required_flag_sentiment && (
+                          <p className={`text-[10px] tracking-[0.12em] uppercase mb-2 font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-200" : "text-red-200"}`} style={{ textShadow: "0 2px 4px #000" }}>
+                            Conséquence d'un choix passé
+                          </p>
+                        )}
+                        <p className="text-base xl:text-lg font-sans italic leading-snug text-white" style={{ textShadow: "0 2px 6px rgba(0,0,0,.98), 0 1px 2px #000" }}>
+                          {step.description}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
               })()}
-            </div>
+            </section>
 
-            {/* Illustration : 16:9 strict (contrainte de forme), mais
-                plafonnée en hauteur — ce n'est plus elle qui décide de la
-                place qu'il reste pour les actions, c'est l'inverse. */}
-            {step.description && (() => {
-              const parchmentBg = pickParchmentBg(step);
-              return (
-                <div className="shrink-0 relative overflow-hidden rounded-sm mx-auto" style={{ width: "76%", aspectRatio: "16 / 9", maxHeight: "30vh" }}>
-                  {parchmentBg && (
-                    <img src={parchmentBg} alt="" aria-hidden
-                      className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none opacity-90" />
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center px-[8%] py-[6%] text-center">
-                    <div>
-                      {step.required_flag_sentiment && (
-                        <p className={`text-xs tracking-[0.1em] mb-2 font-sans font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-300" : "text-red-300"}`}>
-                          Conséquence d'un choix passé
+            {/* 3 — ACTIONS : trois familles stables. Aucun scroll global. */}
+            <section className="absolute flex flex-col px-[4.5%] pt-1.5 pb-2" style={{ left: 0, right: 0, top: "69.8%", bottom: "2.1%" }}>
+              <div className="shrink-0 flex items-center justify-center gap-3 text-[9px] text-muted-foreground/65 mb-1.5 min-h-[16px]">
+                <span>{isAsync ? "Aucune limite de temps" : timeLeft !== null ? `${fmt(timeLeft)} restantes` : "—"}</span>
+                <span>•</span>
+                <span>Votes {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length}/{aliveParticipants.length}</span>
+                {runningTotals && <><span>•</span><span>Guilde {runningTotals.guildGold} or · {runningTotals.xp} XP</span></>}
+              </div>
+
+              {verdictPending ? (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <p className="text-xs text-muted-foreground italic mb-2">Le sort du groupe est scellé…</p>
+                  <ImmersiveButton variant="clair" onClick={revealVerdict} className="!py-2.5 px-8">
+                    <span className="flex items-center gap-2"><img src="/icons/scroll.webp" alt="" className="h-4 w-4" /> Révéler le verdict</span>
+                  </ImmersiveButton>
+                </div>
+              ) : revealingOutcome ? (
+                <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground italic">…</div>
+              ) : (
+                <div className="flex-1 min-h-0 grid grid-cols-[1.08fr_.78fr_1.34fr] gap-3">
+                  {/* BLOC 1 — VOTE : choix principaux + éventuelle troisième option. */}
+                  <div className="min-w-0 flex flex-col border-r border-border/20 pr-3">
+                    <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55 mb-1.5">Vote</p>
+                    {!step.resolving && !myVote ? (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="!py-2 text-[11px]">
+                          <span className="flex items-center justify-center gap-1.5"><img src="/icons/arrow_up.webp" alt="" className="h-4 w-4" />Continuer</span>
+                        </ImmersiveButton>
+                        <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="!py-2 text-[11px]">
+                          <span className="flex items-center justify-center gap-1.5"><img src="/icons/door.webp" alt="" className="h-4 w-4" />Rentrer</span>
+                        </ImmersiveButton>
+                      </div>
+                    ) : (
+                      <div className="border border-primary/20 bg-primary/5 px-2 py-2 text-center text-[10px] text-muted-foreground">
+                        {step.resolving ? "Vote clos — résolution en cours" : "Vote enregistré — en attente des autres"}
+                      </div>
+                    )}
+
+                    {!step.resolving && !myVote && step.third_option_kind && step.third_option_label && (
+                      step.required_vocation && myVocation !== step.required_vocation ? (
+                        <p className="mt-1.5 px-2 py-1.5 text-center text-[9px] text-muted-foreground/45 italic border border-border/15">
+                          {step.third_option_label} — réservé à {vocationLabel(step.required_vocation)}
                         </p>
-                      )}
-                      <p className="text-lg md:text-xl font-sans italic leading-snug text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)" }}>
-                        {step.description}
-                      </p>
+                      ) : (
+                        <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
+                          className="mt-1.5 w-full min-h-[34px] px-2 py-1.5 border border-amber-500/45 text-amber-300 hover:bg-amber-500/10 disabled:opacity-30 text-[9px] leading-tight uppercase tracking-[0.05em]">
+                          <span className="inline-flex items-center justify-center gap-1.5"><img src="/icons/scroll.webp" alt="" className="h-4 w-4 shrink-0" />{step.third_option_label}</span>
+                          {(step.third_option_cost != null || (step.third_option_loot_min != null && step.third_option_loot_max != null)) && (
+                            <span className="block mt-0.5 normal-case tracking-normal text-[8px] text-amber-200/65">
+                              {step.third_option_cost != null && `${step.third_option_cost} or dépensé`}
+                              {step.third_option_cost != null && step.third_option_loot_min != null && " · "}
+                              {step.third_option_loot_min != null && step.third_option_loot_max != null && `${step.third_option_loot_min}–${step.third_option_loot_max} or`}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    )}
+                    <div className="mt-auto pt-1.5">
+                      <div className="flex gap-1">
+                        {aliveParticipants.map((p) => <div key={p.character_id} className={`h-1 flex-1 ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/25"}`} />)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })()}
-            {/* ================= Zone d'actions — récupère tout l'espace
-                restant (flex-1). Scindée en deux colonnes pendant le vote :
-                boutons à gauche, infos à droite. Le contenu secondaire
-                (troisième option, capacités, votes, larcin) reste en
-                dessous, pleine largeur. ================= */}
-            <div className="flex-1 min-h-0 w-full overflow-y-auto px-[6%] pt-2 pb-3 flex flex-col gap-2">
-            {!step.resolving && !verdictPending && !revealingOutcome && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  {/* Continuer/Rentrer : à part, compacts — tout le bloc du
-                      bas doit tenir sans scroll. */}
-                  {!myVote ? (
-                    <div className="flex gap-2">
-                      <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
-                        <span className="flex items-center justify-center gap-2">
-                          <img src="/icons/arrow_up.webp" alt="" className="h-4 w-4 object-contain" />
-                          Continuer
-                        </span>
-                      </ImmersiveButton>
-                      <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
-                        <span className="flex items-center justify-center gap-2">
-                          <img src="/icons/door.webp" alt="" className="h-4 w-4 object-contain" />
-                          Rentrer
-                        </span>
-                      </ImmersiveButton>
-                    </div>
-                  ) : (
-                    <p className="w-full text-xs text-muted-foreground text-center">Vote enregistré, en attente des autres…</p>
-                  )}
-                  {/* Réserve personnelle — disponible dès le vote, pas seulement
-                      une fois que tout le monde a voté : Intervenir/Fouiller/
-                      Potion utilisent la même réserve que le Larcin (affiché
-                      plus bas), donc pas de raison de les réserver à une
-                      phase différente. */}
-                  {!!interventionsRemaining && (
-                    <div className="flex flex-wrap gap-2">
-                      <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                        title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                        className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
-                        <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
-                        <span className="text-[9px] uppercase tracking-[0.04em]">Intervenir</span>
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
-                      </button>
-                      <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                        title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                        className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
-                        <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
-                        <span className="text-[9px] uppercase tracking-[0.04em]">Fouiller</span>
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
-                      </button>
-                      {hasPotion && (
-                        <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                          title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                          className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-emerald-400/40 text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-30 rounded-sm">
-                          <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
-                          <span className="text-[9px] uppercase tracking-[0.04em]">Potion</span>
-                          <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {(myIntervened || mySearched || myDrunk) && (
-                    <p className="w-full text-[10px] text-center text-muted-foreground/70">
-                      {myIntervened && "Intervention utilisée sur cette étape."}
-                      {mySearched && searchResult && (searchResult.found ? `Fouille : trouvé ${searchResult.name}.` : "Fouille infructueuse.")}
-                      {myDrunk && drinkResult !== null && `Potion bue, ${drinkResult} PV.`}
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1.5 border-l border-border/20 pl-3">
-                  {isAsync ? (
-                    <p className="w-full text-[10px] tracking-[0.1em] uppercase text-muted-foreground text-center">
-                      Aucune limite de temps — en attente que chacun agisse
-                    </p>
-                  ) : (
-                    <div className="w-full flex items-center justify-between text-[11px]">
-                      <span className="tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
-                      <span className={`font-mono text-sm ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
-                        {timeLeft !== null ? fmt(timeLeft) : "—"}
-                      </span>
-                    </div>
-                  )}
-                  {runningTotals && !myVote && (
-                    <div className="text-[11px] text-muted-foreground text-center space-y-0.5">
-                      <p>Or de guilde : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
-                      <p className="text-[10px] opacity-70">
-                        Part perso. si retour : ~{Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
-                        {myGoldAdjustment !== 0 && (
-                          <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
-                            {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment})
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {!step.resolving && !verdictPending && !revealingOutcome && !myVote && step.third_option_kind && step.third_option_label && (
-              step.required_vocation && myVocation !== step.required_vocation ? (
-                <p className="w-full py-1.5 text-center text-xs text-muted-foreground/50 italic border border-border/20">
-                  {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
-                </p>
-              ) : (() => {
-                // Indicateur qualitatif du risque de la troisième option par
-                // rapport au risque de base — jamais de pourcentage exact
-                // affiché (comme pour Risque Faible/Moyen/Élevé plus haut),
-                // mais sans indicateur du tout le joueur ne voit qu'un loot
-                // plus élevé et aucune contrepartie visible, ce qui rend le
-                // choix illisible (ex. "pillage" : +15 points de risque de
-                // mort contre ×1,6 de butin, entièrement invisible avant).
-                const delta = step.third_option_death_pct != null
-                  ? step.third_option_death_pct - step.death_percentage
-                  : null;
-                const riskTag = delta === null ? null
-                  : delta > 0.08 ? { text: "risque nettement accru", color: "text-red-400" }
-                  : delta > 0 ? { text: "risque accru", color: "text-amber-400" }
-                  : delta < -0.08 ? { text: "risque nettement réduit", color: "text-emerald-400" }
-                  : delta < 0 ? { text: "risque réduit", color: "text-emerald-400" }
-                  : null;
-                const hasLoot = step.third_option_loot_min != null && step.third_option_loot_max != null;
-                // Le chiffre seul ("138–321 or") ne dit pas si c'est de
-                // l'or gagné ou dépensé, ni comment il se compare au
-                // butin de Continuer juste au-dessus — d'où la confusion
-                // sur des options pourtant cohérentes (plus de risque
-                // pour plus de butin). On explicite les deux : "or à
-                // gagner" et la comparaison directe au butin de base.
-                const lootComparedToBase = hasLoot
-                  ? (step.third_option_loot_min! >= step.loot_max
-                      ? "butin plus élevé que Continuer"
-                      : step.third_option_loot_max! <= step.loot_min
-                        ? "butin plus faible que Continuer"
-                        : "butin comparable à Continuer")
-                  : null;
-                return (
-                  <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
-                    className="w-full py-2 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-xs">
-                    <span className="inline-flex items-center gap-2">
-                      <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain shrink-0" />
-                      <span>
-                        {step.third_option_label}
-                        {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
-                        {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
-                        {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
-                      </span>
-                    </span>
-                    {(riskTag || lootComparedToBase) && (
-                      <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag?.color ?? "text-muted-foreground"}`}>
-                        {riskTag && <>⚠ {riskTag.text} par rapport à Continuer</>}
-                        {riskTag && lootComparedToBase && " · "}
-                        {lootComparedToBase && lootComparedToBase}
-                      </span>
-                    )}
-                  </button>
-                );
-              })()
-            )}
 
-            {!step.resolving && !verdictPending && !revealingOutcome && (
-              <>
-                {/* ================= Actions individuelles — optionnelles, indépendantes du vote ================= */}
-                {(() => {
-              const isMarchandStep = step.event_type === "marchand" && !step.resolving && !step.resolved;
-              const hasVocationAction = !!myVocation && !myVote && (
-                (myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal")) ||
-                hasRiskReserveEffect ||
-                (myVocation === "Martyr" && !usedAbilities.has("martyr")) ||
-                usedAbilities.has("martyr") ||
-                (myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation")) ||
-                usedAbilities.has("martyr_provocation") ||
-                (myVocation === "Traitre" && !usedAbilities.has("traitre_gambit")) ||
-                usedAbilities.has("traitre_gambit") ||
-                (myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente")) ||
-                usedAbilities.has("traitre_vente")
-              );
-              return hasVocationAction || isMarchandStep;
-            })() && (
-              <div className="mb-4 px-3 py-3 border border-dashed border-border/40 bg-border/5">
-                <p className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground/70 mb-2 text-center flex items-center justify-center gap-1.5">
-                  <img src="/icons/scroll.webp" alt="" className="h-4 w-4 object-contain" />
-                  Actions individuelles, optionnelles
-                </p>
-                {myVocation && !myVote && (
-                  <div className="space-y-2">
-                    {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
-                      <button onClick={useReveal} disabled={vocationBusy === "reveal"}
-                        className="w-full text-xs uppercase tracking-[0.1em] border border-primary/40 text-primary px-3 py-2 hover:bg-primary/10 disabled:opacity-30">
-                        {vocationBusy === "reveal" ? "…" : "Révéler le risque (à toi seul)"}
-                      </button>
-                    )}
-                    {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
-                      <button onClick={useMartyr} disabled={vocationBusy === "martyr"}
-                        className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
-                        {vocationBusy === "martyr" ? "…" : "M'armer pour intercepter le plus gros coup (une fois par expédition)"}
-                      </button>
-                    )}
-                    {usedAbilities.has("martyr") && (
-                      <p className="text-xs text-red-400/70 italic">Si un coup mortel devait tomber sur quelqu'un d'autre cette étape, tu le prends à sa place.</p>
-                    )}
-                    {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
-                        <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"}
-                          className="w-full text-xs uppercase tracking-[0.1em] border border-red-400/40 text-red-400 px-3 py-2 hover:bg-red-400/10 disabled:opacity-30">
-                          {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
-                        </button>
-                      </div>
-                    )}
-                    {usedAbilities.has("martyr_provocation") && (
-                      <p className="text-xs text-red-400/70 italic">L'étape est déjà réglée, le résultat arrive.</p>
-                    )}
-                    {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
-                      <button onClick={useGambit} disabled={vocationBusy === "gambit"}
-                        className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
-                        {vocationBusy === "gambit" ? "…" : "Manigancer une mise trafiquée (+ butin, + risque du groupe)"}
-                      </button>
-                    )}
-                    {usedAbilities.has("traitre_gambit") && (
-                      <p className="text-xs text-amber-400/70 italic">La mise est lancée pour cette étape.</p>
-                    )}
-                    {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
-                      <div>
-                        <p className="text-[10px] text-muted-foreground/60 mb-1">Disponible car tu es Traître</p>
-                        <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"}
-                          className="w-full text-xs uppercase tracking-[0.1em] border border-amber-400/40 text-amber-400 px-3 py-2 hover:bg-amber-400/10 disabled:opacity-30">
-                          {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
-                        </button>
-                      </div>
-                    )}
-                    {usedAbilities.has("traitre_vente") && (
-                      <p className="text-xs text-amber-400/70 italic">Personne ne sait ce que tu as fait. Pour l'instant.</p>
-                    )}
-                    <LedgerError message={vocationError} />
-                  </div>
-                )}
-                {step.event_type === "marchand" && step.resolving === false && step.resolved === false && (
-                  <PotionShop step={step} character={character} expeditionId={expeditionId} />
-                )}
-              </div>
-            )}
-            <div className="mb-4">
-              <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">
-                Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}
-              </p>
-              <div className="flex gap-1">
-                {aliveParticipants.map((p) => (
-                  <div key={p.character_id}
-                    className={`h-2 flex-1 rounded-sm transition-colors duration-300 ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/30"}`} />
-                ))}
-              </div>
-            </div>
-              </>
-            )}
-            {verdictPending && (
-              /* Le calcul est déjà fait côté serveur, mais on ne le montre pas
-                 tout de suite : le joueur déclenche lui-même la révélation,
-                 plutôt qu'une jauge qui s'anime automatiquement dès que le
-                 résultat est prêt. */
-              <div className="text-center py-6">
-                <p className="text-sm text-muted-foreground italic mb-4">Le sort du groupe est scellé…</p>
-                <ImmersiveButton variant="clair" onClick={revealVerdict}>
-                  <span className="flex items-center justify-center gap-2">
-                    <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain" />
-                    Révéler le verdict
-                  </span>
-                </ImmersiveButton>
-              </div>
-            )}
-            {!verdictPending && (step.resolving || revealingOutcome) && (
-              <>
-                {/* Le risque et la jauge vivent maintenant dans le bandeau du
-                    haut (voir plus haut) — plus de gros bloc séparé ici. */}
-                {revealingOutcome ? (
-                  <p className="text-center text-sm text-muted-foreground mb-4 italic">…</p>
-                ) : (
-                  <>
-                    <p className="text-center text-sm text-muted-foreground mb-4">
-                      {isAsync ? "En attente que chacun agisse…" : secondsLeft > 0 ? `${formatCountdown(secondsLeft)} avant le verdict` : "Verdict imminent…"}
-                    </p>
-
-                    {/* Le bloc Intervenir/Fouiller/Potion vit aussi dans le panneau
-                        ci-dessus pendant le vote — ici, en résolution, il reste
-                        nécessaire puisque le panneau n'affiche cette rangée que
-                        pendant la phase de vote. */}
-                    {!!interventionsRemaining && (
-                      <div className="grid grid-cols-3 gap-1.5 mb-2">
-                        <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                          title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                          className="relative flex flex-col items-center gap-0.5 py-1.5 border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
-                          <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
-                          <span className="text-[8px] uppercase tracking-[0.04em]">Intervenir</span>
-                          <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
-                        </button>
-                        <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                          title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                          className="relative flex flex-col items-center gap-0.5 py-1.5 border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
-                          <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
-                          <span className="text-[8px] uppercase tracking-[0.04em]">Fouiller</span>
-                          <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
-                        </button>
-                        {hasPotion ? (
-                          <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                            title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
-                            className="relative flex flex-col items-center gap-0.5 py-1.5 border border-emerald-400/40 text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-30 rounded-sm">
-                            <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
-                            <span className="text-[8px] uppercase tracking-[0.04em]">Potion</span>
-                            <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
+                  {/* BLOC 2 — RÉSERVE PERSONNELLE : actions récurrentes, iconographiques. */}
+                  <div className="min-w-0 flex flex-col border-r border-border/20 pr-3">
+                    <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55 mb-1.5">Réserve personnelle</p>
+                    <div className="grid grid-cols-2 gap-1.5 content-start">
+                      {!!interventionsRemaining && (
+                        <>
+                          <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                            title="Intervenir" className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
+                            <img src="/icons/gauntlet.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Intervenir</span>
+                            <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                           </button>
-                        ) : <div />}
-                      </div>
-                    )}
+                          <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                            title="Fouiller" className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
+                            <img src="/icons/magnifier.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Fouiller</span>
+                            <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
+                          </button>
+                          {hasPotion ? (
+                            <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                              title="Boire une potion" className="relative min-h-[48px] flex flex-col items-center justify-center border border-emerald-400/30 bg-black/10 text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-25">
+                              <img src="/icons/potion.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Potion</span>
+                              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
+                            </button>
+                          ) : <div className="min-h-[48px] border border-border/10 opacity-20" />}
+                          <LarcenyButton compact expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />
+                        </>
+                      )}
+                    </div>
                     {(myIntervened || mySearched || myDrunk) && (
-                      <p className="text-[10px] text-center text-muted-foreground/70 mb-2">
-                        {myIntervened && "Intervention utilisée sur cette étape."}
-                        {mySearched && searchResult && (searchResult.found ? `Fouille : trouvé ${searchResult.name}.` : "Fouille infructueuse.")}
-                        {myDrunk && drinkResult !== null && `Potion bue, ${drinkResult} PV.`}
+                      <p className="mt-1 text-[8px] leading-tight text-muted-foreground/60 text-center">
+                        {myIntervened && "Intervention utilisée."}{mySearched && searchResult && (searchResult.found ? ` Trouvé : ${searchResult.name}.` : " Fouille infructueuse.")}{myDrunk && drinkResult !== null && ` Potion : ${drinkResult} PV.`}
                       </p>
                     )}
+                  </div>
 
-                    {allInterventionUsers.length > 0 && (
-                      <p className="text-xs text-amber-400/90 text-center mt-2">
-                        Déjà agi sur cette étape : {allInterventionUsers.map(u =>
-                          `${u.name} (${u.action === "aide" ? "intervention" : u.action === "fouille" ? "fouille" : "potion"})`
-                        ).join(", ")}
-                      </p>
+                  {/* BLOC 3 — CAPACITÉS CONTEXTUELLES : texte variable et marchand. */}
+                  <div className="min-w-0 min-h-0 flex flex-col">
+                    <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55 mb-1.5">Capacités & situation</p>
+                    <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 [scrollbar-width:thin]">
+                      {!step.resolving && myVocation && !myVote && (
+                        <>
+                          {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
+                            <button onClick={useReveal} disabled={vocationBusy === "reveal"} className="w-full text-[9px] leading-tight border border-primary/35 text-primary px-2 py-1.5 hover:bg-primary/10 disabled:opacity-30">
+                              {vocationBusy === "reveal" ? "…" : "Révéler le risque à toi seul"}
+                            </button>
+                          )}
+                          {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
+                            <button onClick={useMartyr} disabled={vocationBusy === "martyr"} className="w-full text-[9px] leading-tight border border-red-400/35 text-red-300 px-2 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
+                              {vocationBusy === "martyr" ? "…" : "M'armer pour intercepter le plus gros coup"}
+                            </button>
+                          )}
+                          {usedAbilities.has("martyr") && <p className="text-[9px] text-red-300/65 italic px-1">Tu intercepteras le plus gros coup mortel de cette étape.</p>}
+                          {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
+                            <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"} className="w-full text-[9px] leading-tight border border-red-400/35 text-red-300 px-2 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
+                              {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien — le groupe garde tout"}
+                            </button>
+                          )}
+                          {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
+                            <button onClick={useGambit} disabled={vocationBusy === "gambit"} className="w-full text-[9px] leading-tight border border-amber-400/35 text-amber-300 px-2 py-1.5 hover:bg-amber-400/10 disabled:opacity-30">
+                              {vocationBusy === "gambit" ? "…" : "Manigancer : + butin, + risque pour le groupe"}
+                            </button>
+                          )}
+                          {usedAbilities.has("traitre_gambit") && <p className="text-[9px] text-amber-300/65 italic px-1">La mise trafiquée est lancée.</p>}
+                          {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
+                            <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"} className="w-full text-[9px] leading-tight border border-amber-400/35 text-amber-300 px-2 py-1.5 hover:bg-amber-400/10 disabled:opacity-30">
+                              {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe — en secret"}
+                            </button>
+                          )}
+                          {usedAbilities.has("traitre_vente") && <p className="text-[9px] text-amber-300/65 italic px-1">Personne ne sait ce que tu as fait. Pour l'instant.</p>}
+                        </>
+                      )}
+                      {step.event_type === "marchand" && !step.resolving && !step.resolved && <PotionShop step={step} character={character} expeditionId={expeditionId} />}
+                      {allInterventionUsers.length > 0 && <p className="text-[9px] text-amber-300/65 px-1">Déjà agi : {allInterventionUsers.map(u => `${u.name} (${u.action})`).join(", ")}</p>}
+                      <LedgerError message={vocationError} />
+                      <LedgerError message={error} />
+                      {canResolve && error && (
+                        <button onClick={resolveStep} disabled={busy} className="w-full text-[9px] border border-primary/40 text-primary px-2 py-1.5">{busy ? "Résolution…" : "Réessayer"}</button>
+                      )}
+                      {availableBotsForIntervention.length > 0 && isAdmin && (
+                        <div className="flex flex-wrap gap-1 pt-1 border-t border-border/15">
+                          {availableBotsForIntervention.map(p => <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy} className="text-[8px] border border-amber-500/30 text-amber-300 px-1.5 py-1">Intervenir ({p.character.name})</button>)}
+                        </div>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <button onClick={copyDebugReport} className="shrink-0 mt-1 text-[8px] uppercase tracking-[0.08em] text-muted-foreground/45 hover:text-amber-300">
+                        {debugCopied ? "Rapport copié ✓" : "Copier le rapport de debug"}
+                      </button>
                     )}
-
-                    {availableBotsForIntervention.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
-                        {availableBotsForIntervention.map((p) => (
-                          <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy}
-                            className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
-                            Intervenir ({p.character.name})
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-            <LedgerError message={error} />
-            {canResolve && error && (
-              <button onClick={resolveStep} disabled={busy}
-                className="w-full rounded-sm border px-4 py-2.5 font-serif tracking-[0.16em] uppercase border-primary/60 text-primary hover:bg-primary/10 disabled:opacity-30">
-                {busy ? "Résolution…" : "Réessayer"}
-              </button>
-            )}
-            {step && <LarcenyButton expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />}
-            {isAdmin && (
-              <button onClick={copyDebugReport}
-                className="w-full mb-2 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
-                {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
-              </button>
-            )}
-            </div>
+                  </div>
+                </div>
+              )}
+            </section>
           </>
         )}
-      </div>
-      {/* Colonne droite : CHAT plein cadre, notifications en bas. */}
-      <div className="absolute z-10 top-0 bottom-0 flex flex-col pr-5 pl-11 pt-7 pb-7" style={{ right: 0, width: "20.4%" }}>
+      </main>
+
+      {/* DROITE — chat pleine hauteur, saisie ancrée en bas. */}
+      <aside className="absolute z-10 flex flex-col" style={{ right: "1.15%", top: "2.2%", bottom: "3.2%", width: "17.1%", padding: "0.4rem 0.55rem" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
-      </div>
+      </aside>
     {step && (!step.resolved || verdictPending || revealingOutcome) && (
       <>
               {/* Bouclier de groupe — texte narratif court à l'issue du
@@ -2055,9 +1845,10 @@ function NotificationsPanel({ character }: { character: Character | null }) {
   );
 }
 
-function LarcenyButton({ expeditionId, step, character, aliveParticipants }: {
+function LarcenyButton({ expeditionId, step, character, aliveParticipants, compact = false }: {
   expeditionId: string; step: Step; character: Character | null;
   aliveParticipants: { character_id: string; character: { name: string } }[];
+  compact?: boolean;
 }) {
   const [confirm, setConfirm] = useState(false);
   const [target, setTarget] = useState<string>("guilde");
@@ -2113,7 +1904,14 @@ function LarcenyButton({ expeditionId, step, character, aliveParticipants }: {
     return null;
   }
 
-  if (!confirm) return (
+  if (!confirm) return compact ? (
+    <button onClick={() => setConfirm(true)} title="Tenter un larcin"
+      className="relative min-h-[48px] flex flex-col items-center justify-center border border-amber-500/30 bg-black/10 text-amber-300 hover:bg-amber-500/10 transition-colors">
+      <img src="/icons/pouch_hand.webp" alt="" className="h-6 w-6 object-contain" />
+      <span className="text-[8px] uppercase">Larcin</span>
+      <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-amber-400/50 text-[8px] flex items-center justify-center">{remaining}</span>
+    </button>
+  ) : (
     <button onClick={() => setConfirm(true)}
       className="w-full mt-2 text-xs uppercase tracking-[0.1em] border border-border/30 text-muted-foreground/70 px-3 py-2 hover:border-amber-500/40 hover:text-amber-400 transition-colors">
       <span className="inline-flex items-center gap-2">
@@ -2123,8 +1921,8 @@ function LarcenyButton({ expeditionId, step, character, aliveParticipants }: {
     </button>
   );
 
-  return (
-    <div className="mt-2 border border-amber-500/30 px-3 py-2 text-center">
+  const confirmPanel = (
+    <div className="border border-amber-500/30 bg-[#12110f]/95 px-3 py-2 text-center shadow-2xl">
       <p className="text-xs text-amber-300/80 mb-2">60% de réussite.</p>
       <label className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground mb-1 text-left">Voler…</label>
       <select value={target} onChange={e => setTarget(e.target.value)}
@@ -2147,6 +1945,13 @@ function LarcenyButton({ expeditionId, step, character, aliveParticipants }: {
           Renoncer
         </button>
       </div>
+    </div>
+  );
+
+  if (!compact) return confirmPanel;
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 px-4" onClick={() => !busy && setConfirm(false)}>
+      <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>{confirmPanel}</div>
     </div>
   );
 }
