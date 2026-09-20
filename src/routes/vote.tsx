@@ -1422,7 +1422,7 @@ function VotePage() {
       {/* Colonne gauche : GROUPE — cadre fourni par game_frame.webp en fond,
           le contenu vient juste se poser dedans avec assez de marge pour ne
           pas chevaucher la bordure ornée. */}
-      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto" style={{ left: 0, width: "20.6%", paddingTop: "8%", paddingBottom: "8%", paddingLeft: "8%", paddingRight: "13%" }}>
+      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto pl-5 pr-11 pt-7 pb-7" style={{ left: 0, width: "20.6%" }}>
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1522,7 +1522,7 @@ function VotePage() {
             {/* Bandeau compact : étape/type + risque deux fois plus gros
                 qu'avant, jauge intégrée ici (réduite), plus de gros bloc
                 séparé plus bas. */}
-            <div className="absolute flex flex-col items-center justify-center gap-1 px-[6%] text-center" style={{ top: "2%", height: "16%", left: 0, right: 0 }}>
+            <div className="absolute flex flex-col items-center justify-center gap-0.5 px-[6%] text-center" style={{ top: "1%", height: "15%", left: 0, right: 0 }}>
               <p className="inline-flex items-center gap-2.5 text-2xl md:text-3xl font-serif tracking-[0.06em] text-primary">
                 {EVENT_TYPE_ICON[step.event_type] && (
                   <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-8 w-8 object-contain shrink-0" />
@@ -1583,40 +1583,40 @@ function VotePage() {
                 Continuer/Rentrer, la réserve personnelle, et le reste du
                 contenu variable (troisième option, capacités, votes,
                 larcin) y cohabitent sans jamais dépasser l'écran. ================= */}
-            <div className="absolute overflow-y-auto flex flex-col gap-2" style={{ top: "70.5%", bottom: "4%", left: "4%", right: "4%" }}>
+            <div className="absolute overflow-y-auto flex flex-col gap-1.5" style={{ top: "70.5%", bottom: "4%", left: "4%", right: "4%" }}>
             {!step.resolving && !verdictPending && !revealingOutcome && (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {isAsync ? (
-                  <p className="w-full text-[11px] tracking-[0.1em] uppercase text-muted-foreground text-center py-1">
+                  <p className="w-full text-[10px] tracking-[0.1em] uppercase text-muted-foreground text-center">
                     Aucune limite de temps — en attente que chacun agisse
                   </p>
                 ) : (
-                  <div className="w-full flex items-center justify-between px-1 text-xs">
+                  <div className="w-full flex items-center justify-between px-1 text-[11px]">
                     <span className="tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
-                    <span className={`font-mono text-base ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
+                    <span className={`font-mono text-sm ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
                       {timeLeft !== null ? fmt(timeLeft) : "—"}
                     </span>
                   </div>
                 )}
-                {/* Continuer/Rentrer : à part, plus gros, centraux — c'est LE
-                    choix qui compte, pas une action parmi d'autres. */}
+                {/* Continuer/Rentrer : à part, mais compacts — tout le bloc du
+                    bas doit tenir sans scroll. */}
                 {!myVote ? (
-                  <div className="flex gap-3">
-                    <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 !py-5 text-base">
+                  <div className="flex gap-2">
+                    <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
                       <span className="flex items-center justify-center gap-2">
-                        <img src="/icons/arrow_up.webp" alt="" className="h-6 w-6 object-contain" />
+                        <img src="/icons/arrow_up.webp" alt="" className="h-4 w-4 object-contain" />
                         Continuer
                       </span>
                     </ImmersiveButton>
-                    <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 !py-5 text-base">
+                    <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 !py-2.5">
                       <span className="flex items-center justify-center gap-2">
-                        <img src="/icons/door.webp" alt="" className="h-6 w-6 object-contain" />
+                        <img src="/icons/door.webp" alt="" className="h-4 w-4 object-contain" />
                         Rentrer
                       </span>
                     </ImmersiveButton>
                   </div>
                 ) : (
-                  <p className="w-full text-xs text-muted-foreground text-center py-1">Vote enregistré, en attente des autres…</p>
+                  <p className="w-full text-xs text-muted-foreground text-center">Vote enregistré, en attente des autres…</p>
                 )}
                 {/* Réserve personnelle — disponible dès le vote, pas seulement
                     une fois que tout le monde a voté : Intervenir/Fouiller/
@@ -1661,7 +1661,7 @@ function VotePage() {
               </div>
             )}
             {!step.resolving && !verdictPending && !revealingOutcome && !myVote && runningTotals && (
-              <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
+              <div className="text-xs text-muted-foreground text-center space-y-0.5">
                 <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
                 <p className="text-[10px] opacity-70">
                   Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
@@ -1675,7 +1675,7 @@ function VotePage() {
             )}
             {!step.resolving && !verdictPending && !revealingOutcome && !myVote && step.third_option_kind && step.third_option_label && (
               step.required_vocation && myVocation !== step.required_vocation ? (
-                <p className="w-full mt-2 mb-4 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
+                <p className="w-full py-1.5 text-center text-xs text-muted-foreground/50 italic border border-border/20">
                   {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
                 </p>
               ) : (() => {
@@ -1711,7 +1711,7 @@ function VotePage() {
                   : null;
                 return (
                   <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
-                    className="w-full mt-2 mb-4 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
+                    className="w-full py-2 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-xs">
                     <span className="inline-flex items-center gap-2">
                       <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain shrink-0" />
                       <span>
@@ -1935,7 +1935,7 @@ function VotePage() {
         )}
       </div>
       {/* Colonne droite : CHAT plein cadre, notifications en bas. */}
-      <div className="absolute z-10 top-0 bottom-0 flex flex-col" style={{ right: 0, width: "20.4%", paddingTop: "8%", paddingBottom: "8%", paddingRight: "8%", paddingLeft: "13%" }}>
+      <div className="absolute z-10 top-0 bottom-0 flex flex-col pr-5 pl-11 pt-7 pb-7" style={{ right: 0, width: "20.4%" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </div>
