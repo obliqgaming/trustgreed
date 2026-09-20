@@ -1422,7 +1422,7 @@ function VotePage() {
       {/* Colonne gauche : GROUPE — cadre fourni par game_frame.webp en fond,
           le contenu vient juste se poser dedans avec assez de marge pour ne
           pas chevaucher la bordure ornée. */}
-      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto px-4 py-6" style={{ left: 0, width: "20.6%" }}>
+      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto pl-4 pr-9 py-6" style={{ left: 0, width: "20.6%" }}>
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1522,45 +1522,43 @@ function VotePage() {
             {/* Bandeau compact : étape/type + risque deux fois plus gros
                 qu'avant, jauge intégrée ici (réduite), plus de gros bloc
                 séparé plus bas. */}
-            <div className="absolute flex items-center justify-between gap-4 px-[6%]" style={{ top: "3%", height: "11%", left: 0, right: 0 }}>
-              <div className="text-left min-w-0">
-                <p className="inline-flex items-center gap-2 text-xl font-serif tracking-[0.06em] text-primary truncate">
-                  {EVENT_TYPE_ICON[step.event_type] && (
-                    <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-6 w-6 object-contain shrink-0" />
-                  )}
-                  Étape {step.step_number}, {step.event_type}
-                </p>
-                <p className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-base mt-0.5">
-                  <span className={`font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
-                  <span className="text-amber-400 font-mono text-sm">Butin : {step.loot_min}–{step.loot_max} or</span>
-                  {visibleRisk !== null && <span className="text-xs font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
-                  {myPrivateRisk !== null && <span className="text-xs font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
-                </p>
+            <div className="absolute flex flex-col items-center justify-center gap-1.5 px-[6%] text-center" style={{ top: "3%", height: "13%", left: 0, right: 0 }}>
+              <p className="inline-flex items-center gap-2.5 text-2xl md:text-3xl font-serif tracking-[0.06em] text-primary">
+                {EVENT_TYPE_ICON[step.event_type] && (
+                  <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-8 w-8 object-contain shrink-0" />
+                )}
+                Étape {step.step_number}, {step.event_type}
+              </p>
+              <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1">
+                <span className={`text-base font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
+                <span className="text-sm text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
+                {visibleRisk !== null && <span className="text-xs font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
+                {myPrivateRisk !== null && <span className="text-xs font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+                {(() => {
+                  const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
+                  if (knownRisk == null) return null;
+                  const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
+                  return (
+                    <div className="w-48">
+                      <div className="h-2.5 border border-border/60 relative overflow-hidden rounded-sm">
+                        <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
+                          style={{ width: `${fillPct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[9px] uppercase tracking-[0.08em] text-muted-foreground mt-0.5">
+                        <span>Échec</span>
+                        <span>Réussite</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
-              {(() => {
-                const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
-                if (knownRisk == null) return null;
-                const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
-                return (
-                  <div className="shrink-0 w-28">
-                    <div className="h-1.5 border border-border/60 relative overflow-hidden rounded-sm">
-                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
-                        style={{ width: `${fillPct}%` }} />
-                    </div>
-                    <div className="flex justify-between text-[8px] uppercase tracking-[0.08em] text-muted-foreground mt-0.5">
-                      <span>Échec</span>
-                      <span>Réussite</span>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
 
             {/* Illustration 16:9, calée sur la zone parchemin de game_frame.webp. */}
             {step.description && (() => {
               const parchmentBg = pickParchmentBg(step);
               return (
-                <div className="absolute overflow-hidden rounded-sm" style={{ top: "14.5%", height: "55%", left: "4%", right: "4%" }}>
+                <div className="absolute overflow-hidden rounded-sm" style={{ top: "17%", height: "52%", left: "4%", right: "4%" }}>
                   {parchmentBg && (
                     <img src={parchmentBg} alt="" aria-hidden
                       className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none opacity-90" />
@@ -1572,7 +1570,7 @@ function VotePage() {
                           Conséquence d'un choix passé
                         </p>
                       )}
-                      <p className="text-xl md:text-2xl font-serif italic leading-snug text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)" }}>
+                      <p className="text-xl md:text-2xl font-sans italic leading-snug text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)" }}>
                         {step.description}
                       </p>
                     </div>
@@ -1937,7 +1935,7 @@ function VotePage() {
         )}
       </div>
       {/* Colonne droite : CHAT plein cadre, notifications en bas. */}
-      <div className="absolute z-10 top-0 bottom-0 flex flex-col px-4 py-6" style={{ right: 0, width: "20.4%" }}>
+      <div className="absolute z-10 top-0 bottom-0 flex flex-col pr-4 pl-9 py-6" style={{ right: 0, width: "20.4%" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </div>
