@@ -107,6 +107,19 @@ function pickEventBg(step: { id: string; event_type: string; risk_level: string;
   const idx = step.id.charCodeAt(0) % pool.length;
   return pool[idx] ?? pool[0] ?? "";
 }
+// Version de eventBg déjà fondue dans la texture du parchemin (traitement
+// fait une fois pour toutes en amont : éclaircie, désaturée, teintée sépia,
+// fusionnée en multiply à 62%, bords adoucis) — jamais un mix-blend-mode
+// live, qui ne peut pas reproduire ce résultat. Même nom de fichier avec le
+// préfixe "parchment_", un seul point à maintenir si de nouvelles
+// illustrations sont ajoutées : relancer le même traitement sur le nouveau
+// fichier et le déposer sous ce même nom préfixé.
+function pickParchmentBg(step: { id: string; event_type: string; risk_level: string; required_flag?: string | null }): string | null {
+  const bg = pickEventBg(step);
+  if (!bg) return null;
+  const slash = bg.lastIndexOf("/");
+  return bg.slice(0, slash + 1) + "parchment_" + bg.slice(slash + 1);
+}
 const STEP_RESULT_SUCCESS = "/step_success.png.webp";
 const STEP_RESULT_FAIL = "/step_fail.webp";
 const DEATH_SCREEN = "/death_screen.webp";
@@ -1428,23 +1441,42 @@ function VotePage() {
               {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort, connu de toi seul)</span>}
             </p>
 
-            {step.description && (
-              <Frame variant="journal" contentClassName="!items-center !justify-center" className="mb-4">
-                <div className="text-center">
-                  {step.required_flag_sentiment && (
-                    <p className={`text-[10px] uppercase tracking-[0.14em] mb-1.5 ${step.required_flag_sentiment === "positif" ? "text-emerald-400" : "text-red-400"}`}>
-                      Conséquence d'un choix passé
-                    </p>
+            {step.description && (() => {
+              const parchmentBg = pickParchmentBg(step);
+              return (
+                <div className="relative w-full mb-4" style={{ aspectRatio: "1144 / 641" }}>
+                  <img src="/panel_narrative.webp" alt="" aria-hidden
+                    className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
+                  {parchmentBg && (
+                    <img src={parchmentBg} alt="" aria-hidden
+                      className="absolute inset-[6%] w-[88%] h-[88%] object-cover rounded-sm pointer-events-none select-none" />
                   )}
-                  <p className={`text-lg md:text-xl italic leading-relaxed ${
-                    step.required_flag_sentiment === "positif" ? "text-emerald-300" :
-                    step.required_flag_sentiment === "negatif" ? "text-red-300" : ""
-                  }`}>
-                    {step.description}
-                  </p>
+                  <div className="absolute inset-0 flex items-center justify-center px-[10%] py-[8%] text-center">
+                    <div>
+                      {step.required_flag_sentiment && (
+                        <p className={`text-xs uppercase tracking-[0.14em] mb-2 font-sans font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-700" : "text-red-800"}`}>
+                          Conséquence d'un choix passé
+                        </p>
+                      )}
+                      {/* Texte "encre sur parchemin" — sombre avec un halo clair, plus
+                          gros qu'avant, plutôt que blanc à ombre noire : ça ne
+                          fonctionnait qu'avec un fond sombre, plus avec l'illustration
+                          claire fusionnée dans le parchemin en dessous. */}
+                      <p
+                        className="text-2xl md:text-3xl font-serif italic leading-snug font-semibold"
+                        style={{
+                          color: step.required_flag_sentiment === "positif" ? "#1a3d1a"
+                            : step.required_flag_sentiment === "negatif" ? "#4a1414" : "#2a1a0a",
+                          textShadow: "-1px -1px 0 rgba(235,220,190,0.8), 1px -1px 0 rgba(235,220,190,0.8), -1px 1px 0 rgba(235,220,190,0.8), 1px 1px 0 rgba(235,220,190,0.8), 0 0 10px rgba(235,220,190,0.55)",
+                        }}
+                      >
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </Frame>
-            )}
+              );
+            })()}
             {!step.resolving && !verdictPending && !revealingOutcome ? (
               <>
                 {isAsync ? (
@@ -1807,9 +1839,9 @@ function VotePage() {
         <>
           <div className="mt-4 border border-border/30 rounded-sm bg-card/60 p-3 xl:mt-0 xl:fixed xl:top-24 xl:right-6 xl:z-10 xl:w-72 xl:border-0 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
             <ChatBox expeditionId={expeditionId} character={character} />
+            <NotificationsPanel character={character} />
           </div>
           <div className="relative mt-4 pt-8 px-6 pb-6 xl:fixed xl:top-24 xl:left-6 xl:z-10 xl:w-64 xl:mt-0 xl:pt-3 xl:px-3 xl:pb-3 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
-                <NotificationsPanel character={character} />
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1823,15 +1855,21 @@ function VotePage() {
                     <FramedBox key={p.character_id} frame={5}
                       className={`px-2 py-1.5 ${!p.is_alive ? "opacity-30" : ""}`}>
                       <div className="flex items-center gap-2">
-                        <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={52} bordered={false} />
+                        <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={68} bordered={false} />
                         <div className="flex-1 min-w-0">
                           <p className={`text-xs ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
                             {(p.character as any)?.name}{!p.is_alive ? " ✝" : ""}
                           </p>
                           {p.is_alive && (
-                            <p className="text-[10px] font-mono flex items-center gap-0.5" style={{ color: hpColor }}>
-                              {hp}/{maxHp} <Heart size={9} className="fill-current" />
-                            </p>
+                            <>
+                              <div className="h-1.5 mt-1 mb-0.5 rounded-sm bg-black/50 border border-black/60 overflow-hidden">
+                                <div className="h-full rounded-sm transition-all duration-500"
+                                  style={{ width: `${Math.round(hpRatio * 100)}%`, backgroundColor: hpColor }} />
+                              </div>
+                              <p className="text-[10px] font-mono flex items-center gap-0.5" style={{ color: hpColor }}>
+                                {hp}/{maxHp} <Heart size={9} className="fill-current" />
+                              </p>
+                            </>
                           )}
                           {shield && shield.resolved && !shield.broken_reason && shield.holder_character_id === p.character_id && shield.steps_remaining !== null && shield.steps_remaining > 0 && (
                             <p className="text-[10px] font-mono flex items-center gap-1 text-sky-400" title={`Bouclier ${shield.rarity} : -${shield.reduction} dégâts`}>
@@ -1990,7 +2028,8 @@ function NotificationsPanel({ character }: { character: Character | null }) {
   if (!character || notifs.length === 0) return null;
 
   return (
-    <div className="mb-3 space-y-1.5">
+    <div className="mt-4 pt-3 border-t border-dashed border-amber-500/25 space-y-1.5">
+      <p className="text-[10px] tracking-[0.14em] uppercase text-amber-400/70 mb-1.5">Notifications</p>
       {notifs.map(n => (
         <div key={n.id} className="border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 flex items-start gap-2">
           <p className="text-[11px] text-amber-200 flex-1 leading-snug">{n.message}</p>
@@ -2160,7 +2199,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   const fetchMessages = useCallback(async () => {
     const { data } = await supabase
       .from("expedition_chat_messages")
-      .select("id, character_id, message, created_at, character:characters(name)")
+      .select("id, character_id, message, created_at, character:characters(name, portrait)")
       .eq("expedition_id", expeditionId)
       .order("created_at", { ascending: true })
       .limit(50);
@@ -2224,14 +2263,17 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
     <div className="relative mt-4 pt-6 px-4 pb-4">
       <DecorativeBorder variant="square" />
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
-      <div ref={scrollBoxRef} className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
+      <div ref={scrollBoxRef} className="h-40 overflow-y-auto space-y-1.5 mb-2 pr-1">
         {messages.length === 0
           ? <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
           : messages.map((m) => (
-            <div key={m.id} className={`text-xs ${m.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
-              <span className="font-semibold">{(m.character as any)?.name ?? "?"}</span>
-              <span className="mx-1 opacity-40">·</span>
-              <span>{m.message}</span>
+            <div key={m.id} className="flex items-start gap-1.5">
+              <PortraitDisplay portraitId={(m.character as any)?.portrait ?? "ombre"} size={20} bordered={false} />
+              <p className={`text-xs leading-snug ${m.character_id === character?.id ? "text-primary" : "text-muted-foreground"}`}>
+                <span className="font-semibold">{(m.character as any)?.name ?? "?"}</span>
+                <span className="mx-1 opacity-40">·</span>
+                <span>{m.message}</span>
+              </p>
             </div>
           ))}
         <div ref={bottomRef} />
