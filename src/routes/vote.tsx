@@ -239,6 +239,8 @@ function VotePage() {
   // pour savoir si on affiche un compte à rebours (synchrone) ou un simple
   // décompte de qui a agi (asynchrone, aucune limite de temps).
   const [isAsync, setIsAsync] = useState(false);
+  const [discordNotifsEnabled, setDiscordNotifsEnabled] = useState(true);
+  const [discordNotifsBusy, setDiscordNotifsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -642,7 +644,17 @@ function VotePage() {
       await fetchParticipants();
       const { data: expData } = await supabase
         .from("expeditions").select("vote_window_seconds").eq("id", expeditionId).maybeSingle();
-      setIsAsync(((expData as any)?.vote_window_seconds ?? 180) !== 180);
+      const asyncMode = ((expData as any)?.vote_window_seconds ?? 180) !== 180;
+      setIsAsync(asyncMode);
+      if (asyncMode && char?.id) {
+        const { data: notifPref } = await supabase
+          .from("expedition_participants")
+          .select("discord_notifications_enabled")
+          .eq("expedition_id", expeditionId)
+          .eq("character_id", char.id)
+          .maybeSingle();
+        setDiscordNotifsEnabled((notifPref as any)?.discord_notifications_enabled ?? true);
+      }
       let currentStep = await fetchStep();
       // Course possible : la page peut se monter une fraction de seconde
       // avant que generate_next_step (déclenché par "Lancer") n'ait fini
@@ -797,6 +809,20 @@ function VotePage() {
     const { error: rpcError } = await supabase.rpc("admin_revive_bot", { p_bot_character_id: botCharacterId });
     if (rpcError) setError(rpcError.message); else await fetchParticipants();
     setBotBusy(null);
+  }
+
+  async function toggleAsyncDiscordNotifications() {
+    if (!character || !isAsync || discordNotifsBusy) return;
+    const nextEnabled = !discordNotifsEnabled;
+    setDiscordNotifsBusy(true);
+    const { error: rpcError } = await supabase.rpc("set_async_discord_notifications" as any, {
+      p_expedition_id: expeditionId,
+      p_character_id: character.id,
+      p_enabled: nextEnabled,
+    });
+    if (rpcError) setError(rpcError.message);
+    else setDiscordNotifsEnabled(nextEnabled);
+    setDiscordNotifsBusy(false);
   }
 
   async function copyDebugReport() {
@@ -1000,26 +1026,9 @@ function VotePage() {
     const { data: beganStep, error: beginError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
     if (beginError) { setError(beginError.message); setBusy(false); return; }
 
-    const bs = beganStep as any;
-    if (bs?.resolved) {
-      // Certaines issues sont déjà entièrement résolues par begin_resolution.
-      // fetchStep déclenchera l'animation (ou le retour instantané).
-      await fetchStep();
-      setBusy(false);
-      return;
-    }
-
-    // Pour les issues probabilistes, on finalise tout de suite : aucune phase
-    // intermédiaire de cinq secondes ne doit subsister côté client.
-    const { error: finalizeError } = await supabase.rpc("finalize_resolution", { p_step_id: step.id });
-    if (finalizeError) {
-      setError(
-        `La résolution serveur n'a pas pu être finalisée immédiatement : ${finalizeError.message}`
-      );
-      setBusy(false);
-      return;
-    }
-
+    // begin_resolution finalise désormais lui-même les issues probabilistes
+    // côté serveur. Le client ne lance plus une seconde RPC et ne connaît plus
+    // de phase intermédiaire intervenir/fouiller/passer.
     await fetchStep();
     setBusy(false);
   }
@@ -1805,6 +1814,23 @@ function VotePage() {
 
       {/* DROITE — chat pleine hauteur, saisie ancrée en bas. */}
       <aside className="absolute z-10 flex flex-col" style={{ right: "1.55%", top: "3.1%", bottom: "3.4%", width: "18.05%", padding: "0.55rem 0.65rem 0.55rem 0.35rem" }}>
+        {isAsync && character && (
+          <div className="shrink-0 flex items-center justify-end mb-1 pr-0.5">
+            <button
+              type="button"
+              onClick={toggleAsyncDiscordNotifications}
+              disabled={discordNotifsBusy}
+              title="Activer ou désactiver tes notifications Discord pour cette expédition asynchrone"
+              className={`text-[9px] uppercase tracking-[0.08em] border px-2 py-1 ${
+                discordNotifsEnabled
+                  ? "border-emerald-400/35 text-emerald-300/80"
+                  : "border-border/30 text-muted-foreground/55"
+              } disabled:opacity-40`}
+            >
+              {discordNotifsBusy ? "Discord…" : `Discord : ${discordNotifsEnabled ? "activé" : "désactivé"}`}
+            </button>
+          </div>
+        )}
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </aside>

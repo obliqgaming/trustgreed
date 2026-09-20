@@ -125,8 +125,10 @@ export async function sendDM(discordUserId: string, content: string) {
 }
 
 // Envoie un DM à tous les participants VIVANTS d'une expédition qui ont
-// lié leur Discord. Utilisée par les 3 notifications "c'est ton tour"
-// (nouvelle étape, résolution ouverte, vote de bouclier).
+// lié leur Discord ET gardé les notifications activées pour cette expédition.
+// Utilisée par les notifications asynchrones "c'est ton tour" restantes
+// (nouvelle étape, vote de bouclier). L'ancienne notification
+// "résolution ouverte" n'est plus déclenchée depuis la fusion des phases.
 //
 // Écrit en 3 requêtes séparées et simples plutôt qu'une seule jointure
 // imbriquée PostgREST — plus verbeux, mais je ne peux pas tester la
@@ -140,8 +142,9 @@ export async function notifyAliveParticipants(
 ): Promise<void> {
   const { data: participants, error: partError } = await supabase
     .from("expedition_participants")
-    .select("character_id")
-    .eq("expedition_id", expeditionId);
+    .select("character_id, discord_notifications_enabled")
+    .eq("expedition_id", expeditionId)
+    .eq("discord_notifications_enabled", true);
   if (partError || !participants) {
     console.error("notifyAliveParticipants : échec lecture participants :", partError);
     return;

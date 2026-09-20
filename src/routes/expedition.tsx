@@ -19,7 +19,7 @@ export const Route = createFileRoute("/expedition")({
 type Character = { id: string; name: string; level: number; guild_id: string | null };
 type Expedition = { id: string; status: string; target_size: number; created_by_character_id: string; vote_window_seconds: number };
 
-type Participant = { character_id: string; ready: boolean; character: { name: string; level: number } };
+type Participant = { character_id: string; ready: boolean; discord_notifications_enabled?: boolean; character: { name: string; level: number } };
 
 const STAKES: { id: "forge" | "infirmerie" | "eclaireurs"; label: string; cost: number; description: string }[] = [
   { id: "forge", label: "Forge", cost: 4000, description: "+25% de butin sur toute l'expédition." },
@@ -48,11 +48,12 @@ function ExpeditionPage() {
   const [botAddBusy, setBotAddBusy] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [debugCopied, setDebugCopied] = useState(false);
+  const [discordNotifBusy, setDiscordNotifBusy] = useState(false);
 
   const loadParticipants = useCallback(async (expeditionId: string) => {
     const { data } = await supabase
       .from("expedition_participants")
-      .select("character_id, ready, character:characters(name, level)")
+      .select("character_id, ready, discord_notifications_enabled, character:characters(name, level)")
       .eq("expedition_id", expeditionId);
     setParticipants((data as any) ?? []);
   }, []);
@@ -218,6 +219,19 @@ function ExpeditionPage() {
     setReadyBusy(false);
   }
 
+  async function toggleAsyncDiscordNotifications(nextEnabled: boolean) {
+    if (!expedition || !character || expedition.vote_window_seconds === 180) return;
+    setError(null); setDiscordNotifBusy(true);
+    const { error: rpcError } = await supabase.rpc("set_async_discord_notifications" as any, {
+      p_expedition_id: expedition.id,
+      p_character_id: character.id,
+      p_enabled: nextEnabled,
+    });
+    if (rpcError) setError(rpcError.message);
+    else await loadParticipants(expedition.id);
+    setDiscordNotifBusy(false);
+  }
+
   async function addBotToExpedition(botId: string) {
     if (!expedition) return;
     setBotAddBusy(botId); setError(null);
@@ -363,8 +377,28 @@ function ExpeditionPage() {
             <p className="text-xs text-muted-foreground/70 mt-1">
               {expedition.vote_window_seconds === 180
                 ? "Mode session — mieux vaut être tous en ligne en même temps pour voter."
-                : "Mode asynchrone — chaque étape se poursuit dès que tout le monde a agi, sans aucune limite de temps."}
+                : "Mode asynchrone — chaque étape se poursuit dès que tout le monde a voté, sans aucune limite de temps."}
             </p>
+            {expedition.vote_window_seconds !== 180 && isParticipant && myParticipant && (
+              <div className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Notifications Discord de cette expédition</p>
+                  <p className="text-[10px] text-muted-foreground/55">Réglage personnel : les autres joueurs gardent leur propre choix.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleAsyncDiscordNotifications(!(myParticipant.discord_notifications_enabled ?? true))}
+                  disabled={discordNotifBusy}
+                  className={`shrink-0 px-3 py-1.5 text-[10px] uppercase tracking-[0.08em] border ${
+                    (myParticipant.discord_notifications_enabled ?? true)
+                      ? "border-emerald-400/40 text-emerald-300"
+                      : "border-border/40 text-muted-foreground"
+                  } disabled:opacity-40`}
+                >
+                  {discordNotifBusy ? "…" : (myParticipant.discord_notifications_enabled ?? true) ? "Activées" : "Désactivées"}
+                </button>
+              </div>
+            )}
           </div>
           <ul className="space-y-1 mb-4">
             {participants.map((p) => (
