@@ -5,7 +5,7 @@ import { getMaxHp } from "@/lib/titles";
 import { Heart } from "lucide-react";
 import { LedgerCard, LedgerError, LedgerPage, TextLink } from "@/components/ledger";
 import { PortraitDisplay } from "@/components/portraits";
-import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse } from "@/lib/sounds";
+import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre, soundAllVoted, soundRevealClick, soundSurvived, soundMortMembre, soundMaMort, soundRetourVictoire, soundRetourWipe, soundTensionPulse, soundTap } from "@/lib/sounds";
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 import { Frame, DecorativeBorder } from "@/components/frame";
 import { ImmersiveButton, FramedBox } from "@/components/immersive";
@@ -242,6 +242,7 @@ function VotePage() {
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
   const [revealingOutcome, setRevealingOutcome] = useState(false);
+  const [verdictPending, setVerdictPending] = useState(false);
   // Déterministe à partir de l'id de l'étape (pas Math.random()) : tout le
   // groupe doit voir exactement la même image de résultat, pas une par client.
   const finalizeAttemptedRef = useRef(false);
@@ -506,17 +507,12 @@ function VotePage() {
           await showStepResult(data.id, data.event_type, data.deaths_count, true);
           return;
         }
-        setRevealingOutcome(true);
-        const goodOutcome = data.deaths_count === 0;
-        const start = Date.now();
-        const animInterval = setInterval(() => {
-          const t = Math.min(1, (Date.now() - start) / 2200);
-          setGaugeWobble(goodOutcome ? 50 + t * 42 : 50 - t * 42);
-        }, 100);
-        await new Promise(r => setTimeout(r, 2400));
-        clearInterval(animInterval);
-        setRevealingOutcome(false);
-        await showStepResult(data.id, data.event_type, data.deaths_count);
+        // Le sort est déjà joué côté serveur (finalize_resolution a tourné),
+        // mais on ne l'affiche pas tout de suite : on pose juste un drapeau
+        // et le joueur déclenche lui-même la révélation d'un clic — plus
+        // épique qu'une jauge qui s'anime toute seule dès que le calcul est
+        // prêt, et ça laisse le temps de lire le chat avant le verdict.
+        setVerdictPending(true);
         return;
       }
 
@@ -997,6 +993,23 @@ function VotePage() {
     setBusy(false);
   }
 
+  async function revealVerdict() {
+    if (!step) return;
+    soundRevealClick();
+    setVerdictPending(false);
+    setRevealingOutcome(true);
+    const goodOutcome = step.deaths_count === 0;
+    const start = Date.now();
+    const animInterval = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / 2200);
+      setGaugeWobble(goodOutcome ? 50 + t * 42 : 50 - t * 42);
+    }, 100);
+    await new Promise(r => setTimeout(r, 2400));
+    clearInterval(animInterval);
+    setRevealingOutcome(false);
+    await showStepResult(step.id, step.event_type, step.deaths_count);
+  }
+
   async function useIntervention() {
     if (!step || !character || interventionBusy) return;
     setInterventionBusy(true); setError(null);
@@ -1212,152 +1225,14 @@ function VotePage() {
   const resolvingRisk = step?.resolution_type && step.resolution_type !== "continuer"
     ? step.third_option_death_pct ?? step.death_percentage
     : step?.death_percentage;
+  const secondsLeft = step?.resolution_deadline
+    ? Math.max(0, Math.ceil((new Date(step.resolution_deadline).getTime() - Date.now()) / 1000))
+    : 0;
+  const availableBotsForIntervention = isAdmin
+    ? participants.filter(p => p.character.is_bot && p.is_alive)
+    : [];
 
-  // Fenêtre de résolution active : jauge + interventions, avant le vrai résultat
-  if ((step?.resolving || revealingOutcome) && !result) {
-    const secondsLeft = step?.resolution_deadline
-      ? Math.max(0, Math.ceil((new Date(step.resolution_deadline).getTime() - Date.now()) / 1000))
-      : 0;
-    const availableBotsForIntervention = isAdmin
-      ? participants.filter(p => p.character.is_bot && p.is_alive)
-      : [];
-    return (
-      <LedgerPage>
-        {eventBg && (
-          <div style={{
-            position:"fixed", inset:0, zIndex:0,
-            backgroundImage:`url(${eventBg})`,
-            backgroundSize:"cover", backgroundPosition:"center",
-            filter: bgFilter,
-          }} />
-        )}
-        <LedgerCard title={revealingOutcome ? "Le verdict tombe…" : "Résolution en cours…"} subtitle="Le sort du groupe se joue maintenant.">
-          {resolvingRisk != null && (
-            <p className="text-center text-sm text-red-400 mb-3">Risque de cette étape : {Math.round(resolvingRisk * 100)}%</p>
-          )}
-          <div className="mb-6">
-            <div className="h-4 border border-border/60 relative overflow-hidden">
-              <div
-                className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-1000 ease-in-out"}`}
-                style={{ width: `${gaugeWobble}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] uppercase tracking-[0.1em] text-muted-foreground mt-1">
-              <span>Échec</span>
-              <span>Réussite</span>
-            </div>
-          </div>
 
-          {revealingOutcome ? (
-            <p className="text-center text-sm text-muted-foreground mb-4 italic">…</p>
-          ) : (
-            <>
-              <p className="text-center text-sm text-muted-foreground mb-4">
-                {secondsLeft > 0 ? `${formatCountdown(secondsLeft)} avant le verdict` : "Verdict imminent…"}
-              </p>
-
-              {secondsLeft > 0 && (
-                <button onClick={voteSkip} disabled={skipBusy || skipTally?.mine}
-                  className="w-full mb-4 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-2 hover:border-primary/40 hover:text-primary disabled:opacity-50">
-                  {skipBusy ? "…" : `Accélérer${skipTally ? ` ${skipTally.count}/${skipTally.total}` : ""}`}
-                </button>
-              )}
-
-              <LedgerError message={error} />
-
-              <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
-                <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Optionnel</p>
-                <p className="text-[11px] text-muted-foreground/80 text-center mb-1">
-                  Ta réserve personnelle ({interventionsRemaining ?? 0} restante{(interventionsRemaining ?? 0) > 1 ? "s" : ""}) — Intervenir, Fouiller et boire une potion y puisent tous les trois, et elle ne se recharge pas pendant l'expédition.
-                </p>
-
-                <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                  className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                  {myIntervened ? "Intervention déjà utilisée sur cette étape"
-                    : !interventionsRemaining ? "Plus d'intervention disponible"
-                    : interventionBusy ? "…" : (
-                      <>
-                        <span className="inline-flex items-center gap-2">
-                          <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
-                          Intervenir
-                        </span>
-                        <span className="block text-[10px] normal-case opacity-70 mt-0.5">
-                          ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
-                        </span>
-                      </>
-                    )}
-                </button>
-
-                {mySearched && searchResult ? (
-                  <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
-                    {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
-                  </p>
-                ) : (
-                  <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                    title="N'aide pas le groupe. Vérifie juste si toi tu as mis la main sur quelque chose."
-                    className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                    {mySearched ? "Fouille déjà tentée sur cette étape"
-                      : !interventionsRemaining ? "Plus d'intervention disponible"
-                      : searchBusy ? "…" : (
-                        <>
-                          <span className="inline-flex items-center gap-2">
-                            <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
-                            Fouiller
-                          </span>
-                          <span className="block text-[10px] normal-case opacity-70 mt-0.5">
-                            ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
-                          </span>
-                        </>
-                      )}
-                  </button>
-                )}
-
-                {hasPotion && (
-                  myDrunk ? (
-                    <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 text-center">
-                      {drinkResult !== null ? <>Potion bue, {drinkResult} <Heart size={11} className="inline -mt-0.5 fill-current" /></> : "Potion déjà bue sur cette étape"}
-                    </p>
-                  ) : (
-                    <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                      className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                      {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : (
-                        <span className="inline-flex items-center gap-2">
-                          <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
-                          Boire une potion
-                        </span>
-                      )}
-                    </button>
-                  )
-                )}
-              </div>
-
-              {allInterventionUsers.length > 0 && (
-                <p className="text-xs text-amber-400/90 text-center mt-2">
-                  Déjà agi sur cette étape : {allInterventionUsers.map(u =>
-                    `${u.name} (${u.action === "aide" ? "intervention" : u.action === "fouille" ? "fouille" : "potion"})`
-                  ).join(", ")}
-                </p>
-              )}
-
-              {availableBotsForIntervention.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
-                  {availableBotsForIntervention.map((p) => (
-                    <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy}
-                      className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
-                      Intervenir ({p.character.name})
-                    </button>
-                  ))}
-                </div>
-              )}
-              <ChatBox expeditionId={expeditionId} character={character} />
-            </>
-          )}
-        </LedgerCard>
-      </LedgerPage>
-    );
-  }
-
-  // Écran de résultat unique : succès/échec, morts, narration — tout en même temps
   if (result) {
     const isWipe = result.ended && result.loot === 0 && result.deadNames.length > 0;
     let resultBg: string;
@@ -1535,7 +1410,7 @@ function VotePage() {
         }} />
       )}
       <LedgerCard>
-        {step && !step.resolved && (
+        {step && (!step.resolved || verdictPending || revealingOutcome) && (
           <>
             <Frame variant="bar" className="mb-2">
               <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold inline-flex items-center gap-2 justify-center w-full">
@@ -1570,24 +1445,26 @@ function VotePage() {
                 </div>
               </Frame>
             )}
-            {isAsync ? (
-              <FramedBox frame={5} className="flex items-center justify-center mb-4 px-3 py-2">
-                <span className="text-xs tracking-[0.1em] uppercase text-muted-foreground text-center">
-                  Aucune limite de temps — en attente que chacun agisse
-                </span>
-              </FramedBox>
-            ) : (
-              <FramedBox frame={5} className="flex items-center justify-between mb-4 px-3 py-2">
-                <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
-                <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
-                  {timeLeft !== null ? fmt(timeLeft) : "—"}
-                </span>
-              </FramedBox>
-            )}
+            {!step.resolving && !verdictPending && !revealingOutcome ? (
+              <>
+                {isAsync ? (
+                  <FramedBox frame={5} className="flex items-center justify-center mb-4 px-3 py-2">
+                    <span className="text-xs tracking-[0.1em] uppercase text-muted-foreground text-center">
+                      Aucune limite de temps — en attente que chacun agisse
+                    </span>
+                  </FramedBox>
+                ) : (
+                  <FramedBox frame={5} className="flex items-center justify-between mb-4 px-3 py-2">
+                    <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
+                    <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
+                      {timeLeft !== null ? fmt(timeLeft) : "—"}
+                    </span>
+                  </FramedBox>
+                )}
 
-            {/* ================= TON VOTE — la décision qui compte ================= */}
-            {!myVote ? (
-              <div className="mb-4">
+                {/* ================= TON VOTE — la décision qui compte ================= */}
+                {!myVote ? (
+                  <div className="mb-4">
                 <p className="text-[10px] tracking-[0.18em] uppercase text-primary/70 mb-2 text-center">Ton vote</p>
                 {runningTotals && (
                   <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
@@ -1773,6 +1650,142 @@ function VotePage() {
                 ))}
               </div>
             </div>
+              </>
+            ) : verdictPending ? (
+              /* Le calcul est déjà fait côté serveur, mais on ne le montre pas
+                 tout de suite : le joueur déclenche lui-même la révélation,
+                 plutôt qu'une jauge qui s'anime automatiquement dès que le
+                 résultat est prêt. */
+              <div className="text-center py-6">
+                <p className="text-sm text-muted-foreground italic mb-4">Le sort du groupe est scellé…</p>
+                <ImmersiveButton variant="clair" onClick={revealVerdict}>
+                  <span className="flex items-center justify-center gap-2">
+                    <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain" />
+                    Révéler le verdict
+                  </span>
+                </ImmersiveButton>
+              </div>
+            ) : (
+              <>
+                {resolvingRisk != null && (
+                  <p className="text-center text-sm text-red-400 mb-3">Risque de cette étape : {Math.round(resolvingRisk * 100)}%</p>
+                )}
+                <div className="mb-6">
+                  <div className="h-4 border border-border/60 relative overflow-hidden">
+                    <div
+                      className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-1000 ease-in-out"}`}
+                      style={{ width: `${gaugeWobble}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] uppercase tracking-[0.1em] text-muted-foreground mt-1">
+                    <span>Échec</span>
+                    <span>Réussite</span>
+                  </div>
+                </div>
+
+                {revealingOutcome ? (
+                  <p className="text-center text-sm text-muted-foreground mb-4 italic">…</p>
+                ) : (
+                  <>
+                    <p className="text-center text-sm text-muted-foreground mb-4">
+                      {secondsLeft > 0 ? `${formatCountdown(secondsLeft)} avant le verdict` : "Verdict imminent…"}
+                    </p>
+
+                    {secondsLeft > 0 && (
+                      <button onClick={voteSkip} disabled={skipBusy || skipTally?.mine}
+                        className="w-full mb-4 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-2 hover:border-primary/40 hover:text-primary disabled:opacity-50">
+                        {skipBusy ? "…" : `Accélérer${skipTally ? ` ${skipTally.count}/${skipTally.total}` : ""}`}
+                      </button>
+                    )}
+
+                    <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
+                      <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Optionnel</p>
+                      <p className="text-[11px] text-muted-foreground/80 text-center mb-1">
+                        Ta réserve personnelle ({interventionsRemaining ?? 0} restante{(interventionsRemaining ?? 0) > 1 ? "s" : ""}) — Intervenir, Fouiller, boire une potion et le Larcin y puisent tous, et elle ne se recharge pas pendant l'expédition.
+                      </p>
+
+                      <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                        className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                        {myIntervened ? "Intervention déjà utilisée sur cette étape"
+                          : !interventionsRemaining ? "Plus d'intervention disponible"
+                          : interventionBusy ? "…" : (
+                            <>
+                              <span className="inline-flex items-center gap-2">
+                                <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
+                                Intervenir
+                              </span>
+                              <span className="block text-[10px] normal-case opacity-70 mt-0.5">
+                                ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
+                              </span>
+                            </>
+                          )}
+                      </button>
+
+                      {mySearched && searchResult ? (
+                        <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
+                          {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
+                        </p>
+                      ) : (
+                        <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                          title="N'aide pas le groupe. Vérifie juste si toi tu as mis la main sur quelque chose."
+                          className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                          {mySearched ? "Fouille déjà tentée sur cette étape"
+                            : !interventionsRemaining ? "Plus d'intervention disponible"
+                            : searchBusy ? "…" : (
+                              <>
+                                <span className="inline-flex items-center gap-2">
+                                  <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
+                                  Fouiller
+                                </span>
+                                <span className="block text-[10px] normal-case opacity-70 mt-0.5">
+                                  ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
+                                </span>
+                              </>
+                            )}
+                        </button>
+                      )}
+
+                      {hasPotion && (
+                        myDrunk ? (
+                          <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 text-center">
+                            {drinkResult !== null ? <>Potion bue, {drinkResult} <Heart size={11} className="inline -mt-0.5 fill-current" /></> : "Potion déjà bue sur cette étape"}
+                          </p>
+                        ) : (
+                          <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                            className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
+                            {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : (
+                              <span className="inline-flex items-center gap-2">
+                                <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
+                                Boire une potion
+                              </span>
+                            )}
+                          </button>
+                        )
+                      )}
+                    </div>
+
+                    {allInterventionUsers.length > 0 && (
+                      <p className="text-xs text-amber-400/90 text-center mt-2">
+                        Déjà agi sur cette étape : {allInterventionUsers.map(u =>
+                          `${u.name} (${u.action === "aide" ? "intervention" : u.action === "fouille" ? "fouille" : "potion"})`
+                        ).join(", ")}
+                      </p>
+                    )}
+
+                    {availableBotsForIntervention.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border/20 flex flex-wrap gap-2 justify-center">
+                        {availableBotsForIntervention.map((p) => (
+                          <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy}
+                            className="text-[10px] uppercase tracking-[0.08em] border border-amber-500/50 text-amber-300 px-2 py-1 hover:bg-amber-500/10 disabled:opacity-30">
+                            Intervenir ({p.character.name})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
             <LedgerError message={error} />
             {canResolve && error && (
               <button onClick={resolveStep} disabled={busy}
@@ -1780,7 +1793,7 @@ function VotePage() {
                 {busy ? "Résolution…" : "Réessayer"}
               </button>
             )}
-            <LarcenyButton expeditionId={expeditionId} character={character} />
+            {step && <LarcenyButton expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />}
             {isAdmin && (
               <button onClick={copyDebugReport}
                 className="w-full mb-2 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-1.5 hover:border-amber-500/40 hover:text-amber-300">
@@ -1790,12 +1803,13 @@ function VotePage() {
           </>
         )}
       </LedgerCard>
-      {step && !step.resolved && (
+      {step && (!step.resolved || verdictPending || revealingOutcome) && (
         <>
           <div className="mt-4 border border-border/30 rounded-sm bg-card/60 p-3 xl:mt-0 xl:fixed xl:top-24 xl:right-6 xl:z-10 xl:w-72 xl:border-0 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
             <ChatBox expeditionId={expeditionId} character={character} />
           </div>
           <div className="relative mt-4 pt-8 px-6 pb-6 xl:fixed xl:top-24 xl:left-6 xl:z-10 xl:w-64 xl:mt-0 xl:pt-3 xl:px-3 xl:pb-3 xl:bg-card/40 xl:backdrop-blur-sm xl:rounded-sm">
+                <NotificationsPanel character={character} />
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1939,27 +1953,87 @@ function VotePage() {
 
 type ChatMessage = { id: string; character_id: string; message: string; created_at: string; character: { name: string } };
 
-function LarcenyButton({ expeditionId, character }: { expeditionId: string; character: Character | null }) {
+function NotificationsPanel({ character }: { character: Character | null }) {
+  const [notifs, setNotifs] = useState<{ id: string; message: string }[]>([]);
+
+  const fetchNotifs = useCallback(async () => {
+    if (!character) return;
+    const { data } = await supabase
+      .from("character_notifications" as any)
+      .select("id, message")
+      .eq("character_id", character.id)
+      .is("read_at", null)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    setNotifs((data as any) ?? []);
+  }, [character]);
+
+  useEffect(() => {
+    if (!character) return;
+    void fetchNotifs();
+    const channel = supabase
+      .channel(`character_notifications_${character.id}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "character_notifications",
+        filter: `character_id=eq.${character.id}`,
+      }, () => { void fetchNotifs(); soundTap(); })
+      .subscribe();
+    const poll = setInterval(fetchNotifs, 10000);
+    return () => { supabase.removeChannel(channel); clearInterval(poll); };
+  }, [character, fetchNotifs]);
+
+  async function dismiss(id: string) {
+    setNotifs(prev => prev.filter(n => n.id !== id));
+    await supabase.from("character_notifications" as any).update({ read_at: new Date().toISOString() }).eq("id", id);
+  }
+
+  if (!character || notifs.length === 0) return null;
+
+  return (
+    <div className="mb-3 space-y-1.5">
+      {notifs.map(n => (
+        <div key={n.id} className="border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 flex items-start gap-2">
+          <p className="text-[11px] text-amber-200 flex-1 leading-snug">{n.message}</p>
+          <button onClick={() => dismiss(n.id)} className="text-amber-400/60 hover:text-amber-300 text-xs leading-none">✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LarcenyButton({ expeditionId, step, character, aliveParticipants }: {
+  expeditionId: string; step: Step; character: Character | null;
+  aliveParticipants: { character_id: string; character: { name: string } }[];
+}) {
   const [confirm, setConfirm] = useState(false);
+  const [target, setTarget] = useState<string>("guilde");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ success: boolean; amount: number } | null>(null);
   const [alreadyTried, setAlreadyTried] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const others = aliveParticipants.filter(p => p.character_id !== character?.id);
 
   useEffect(() => {
     if (!character) return;
     void (async () => {
-      const { data } = await supabase.from("larceny_attempts" as any)
-        .select("succeeded, amount").eq("expedition_id", expeditionId).eq("character_id", character.id).maybeSingle();
-      if (data) { setAlreadyTried(true); setResult(data as any); }
+      const [{ data: attempt }, { data: part }] = await Promise.all([
+        supabase.from("larceny_attempts" as any)
+          .select("succeeded, amount").eq("step_id", step.id).eq("character_id", character.id).maybeSingle(),
+        supabase.from("expedition_participants")
+          .select("interventions_remaining").eq("expedition_id", expeditionId).eq("character_id", character.id).maybeSingle(),
+      ]);
+      if (attempt) { setAlreadyTried(true); setResult(attempt as any); }
+      setRemaining((part as any)?.interventions_remaining ?? null);
     })();
-  }, [expeditionId, character]);
+  }, [expeditionId, step.id, character]);
 
   if (!character) return null;
   if (result) {
     return (
       <p className={`text-xs text-center mt-2 ${result.success ? "text-amber-400" : "text-red-400"}`}>
-        {result.success ? `Larcin réussi, +${Math.round(result.amount)} or personnel, en silence.` : "Larcin raté : la guilde le sait maintenant."}
+        {result.success ? `Larcin réussi, +${Math.round(result.amount)} or, en silence.` : "Larcin raté sur cette étape."}
       </p>
     );
   }
@@ -1967,10 +2041,22 @@ function LarcenyButton({ expeditionId, character }: { expeditionId: string; char
 
   async function attempt() {
     setBusy(true); setError(null);
-    const { data, error: rpcError } = await supabase.rpc("attempt_larceny" as any, { p_expedition_id: expeditionId, p_character_id: character!.id });
+    const { data, error: rpcError } = await supabase.rpc("attempt_larceny" as any, {
+      p_step_id: step.id,
+      p_character_id: character!.id,
+      p_target_type: target === "guilde" ? "guilde" : "joueur",
+      p_target_character_id: target === "guilde" ? null : target,
+    });
     if (rpcError) setError(rpcError.message);
-    else setResult(data as any);
+    else { setResult(data as any); setRemaining(r => (r ?? 1) - 1); }
     setBusy(false); setConfirm(false);
+  }
+
+  if (!remaining) {
+    // Pas de charge dans la réserve (partagée avec Intervenir/Fouiller/
+    // Potion) : rien à afficher, comme les autres actions de la réserve
+    // une fois épuisée.
+    return null;
   }
 
   if (!confirm) return (
@@ -1978,14 +2064,24 @@ function LarcenyButton({ expeditionId, character }: { expeditionId: string; char
       className="w-full mt-2 text-xs uppercase tracking-[0.1em] border border-border/30 text-muted-foreground/70 px-3 py-2 hover:border-amber-500/40 hover:text-amber-400 transition-colors">
       <span className="inline-flex items-center gap-2">
         <img src="/icons/pouch_hand.webp" alt="" className="h-5 w-5 object-contain" />
-        Tenter un larcin (secret, une fois par expédition)
+        Tenter un larcin ({remaining} restante{remaining > 1 ? "s" : ""})
       </span>
     </button>
   );
 
   return (
     <div className="mt-2 border border-amber-500/30 px-3 py-2 text-center">
-      <p className="text-xs text-amber-300/80 mb-2">60% de réussite. En cas d'échec, la guilde le saura. Une seule tentative par expédition.</p>
+      <p className="text-xs text-amber-300/80 mb-2">60% de réussite.</p>
+      <label className="block text-[10px] uppercase tracking-[0.1em] text-muted-foreground mb-1 text-left">Voler…</label>
+      <select value={target} onChange={e => setTarget(e.target.value)}
+        className="w-full mb-2 bg-transparent border border-amber-500/40 text-amber-200 text-xs px-2 py-1.5 focus:outline-none">
+        <option value="guilde" className="bg-background text-foreground">Le pot commun de la guilde (2% du butin — échec révélé à toute la guilde)</option>
+        {others.map(p => (
+          <option key={p.character_id} value={p.character_id} className="bg-background text-foreground">
+            {p.character.name} (20% de sa part estimée — reste secret quoi qu'il arrive)
+          </option>
+        ))}
+      </select>
       <LedgerError message={error} />
       <div className="flex gap-2">
         <button onClick={attempt} disabled={busy}
@@ -2055,6 +2151,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tensionRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -2072,25 +2169,52 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
 
   useEffect(() => {
     void fetchMessages();
+    // Même correctif que le chat de guilde : le temps réel fait le gros du
+    // travail, le sondage de 5s ne reste qu'un filet de sécurité — avant,
+    // c'était le sondage seul qui portait tout, avec les mêmes symptômes de
+    // "chat qui se fige".
+    const channel = supabase
+      .channel(`expedition_chat_${expeditionId}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "expedition_chat_messages",
+        filter: `expedition_id=eq.${expeditionId}`,
+      }, () => { void fetchMessages(); })
+      .subscribe();
     pollRef.current = setInterval(fetchMessages, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchMessages]);
+    return () => {
+      supabase.removeChannel(channel);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchMessages, expeditionId]);
 
+  // Ne fait défiler vers le bas que si on était déjà proche du bas (ou si
+  // c'est nous qui venons d'écrire) — avant, ça sautait tout en bas à
+  // chaque message reçu, y compris en train de relire plus haut.
   const prevMsgCount = useRef(0);
+  const sentByMeRef = useRef(false);
   useEffect(() => {
-    if (messages.length > prevMsgCount.current) {
+    const grew = messages.length > prevMsgCount.current;
+    prevMsgCount.current = messages.length;
+    if (!grew) return;
+    const box = scrollBoxRef.current;
+    const wasNearBottom = box
+      ? box.scrollHeight - box.scrollTop - box.clientHeight < 60
+      : true;
+    if (wasNearBottom || sentByMeRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-    prevMsgCount.current = messages.length;
+    sentByMeRef.current = false;
   }, [messages]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim() || !character || busy) return;
     setBusy(true);
-    await supabase.from("expedition_chat_messages").insert({
+    sentByMeRef.current = true;
+    const { error } = await supabase.from("expedition_chat_messages").insert({
       expedition_id: expeditionId, character_id: character.id, message: text.trim(),
     });
+    if (error) sentByMeRef.current = false;
     setText("");
     await fetchMessages();
     setBusy(false);
@@ -2100,7 +2224,7 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
     <div className="relative mt-4 pt-6 px-4 pb-4">
       <DecorativeBorder variant="square" />
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
-      <div className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
+      <div ref={scrollBoxRef} className="h-32 overflow-y-auto space-y-1 mb-2 pr-1">
         {messages.length === 0
           ? <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
           : messages.map((m) => (
