@@ -1422,7 +1422,7 @@ function VotePage() {
       {/* Colonne gauche : GROUPE — cadre fourni par game_frame.webp en fond,
           le contenu vient juste se poser dedans avec assez de marge pour ne
           pas chevaucher la bordure ornée. */}
-      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto px-5 py-10" style={{ left: 0, width: "21.8%" }}>
+      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto px-4 py-6" style={{ left: 0, width: "20.6%" }}>
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1516,28 +1516,51 @@ function VotePage() {
           d'actions — chacune calée sur les bandes mesurées dans
           game_frame.webp (bandeau ~5-16%, parchemin ~19-68%, zone
           d'actions ~71-99% de la hauteur du panneau). */}
-      <div className="absolute z-10 top-0 bottom-0 min-w-0" style={{ left: "21.8%", width: "56.2%" }}>
+      <div className="absolute z-10 top-0 bottom-0 min-w-0" style={{ left: "20.6%", width: "59%" }}>
         {step && (!step.resolved || verdictPending || revealingOutcome) && (
           <>
-            {/* Bandeau compact : étape/type, risque, butin, tout sur une ligne. */}
-            <div className="absolute flex items-center justify-center flex-wrap gap-x-4 gap-y-1 px-[6%] text-center" style={{ top: "5%", height: "11%", left: 0, right: 0 }}>
-              <span className="inline-flex items-center gap-2 text-sm font-serif tracking-[0.08em] text-primary">
-                {EVENT_TYPE_ICON[step.event_type] && (
-                  <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-5 w-5 object-contain" />
-                )}
-                Étape {step.step_number}, {step.event_type}
-              </span>
-              <span className={`text-xs font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
-              <span className="text-xs text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
-              {visibleRisk !== null && <span className="text-[11px] font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
-              {myPrivateRisk !== null && <span className="text-[11px] font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+            {/* Bandeau compact : étape/type + risque deux fois plus gros
+                qu'avant, jauge intégrée ici (réduite), plus de gros bloc
+                séparé plus bas. */}
+            <div className="absolute flex items-center justify-between gap-4 px-[6%]" style={{ top: "3%", height: "11%", left: 0, right: 0 }}>
+              <div className="text-left min-w-0">
+                <p className="inline-flex items-center gap-2 text-xl font-serif tracking-[0.06em] text-primary truncate">
+                  {EVENT_TYPE_ICON[step.event_type] && (
+                    <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-6 w-6 object-contain shrink-0" />
+                  )}
+                  Étape {step.step_number}, {step.event_type}
+                </p>
+                <p className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-base mt-0.5">
+                  <span className={`font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
+                  <span className="text-amber-400 font-mono text-sm">Butin : {step.loot_min}–{step.loot_max} or</span>
+                  {visibleRisk !== null && <span className="text-xs font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
+                  {myPrivateRisk !== null && <span className="text-xs font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+                </p>
+              </div>
+              {(() => {
+                const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
+                if (knownRisk == null) return null;
+                const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
+                return (
+                  <div className="shrink-0 w-28">
+                    <div className="h-1.5 border border-border/60 relative overflow-hidden rounded-sm">
+                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
+                        style={{ width: `${fillPct}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[8px] uppercase tracking-[0.08em] text-muted-foreground mt-0.5">
+                      <span>Échec</span>
+                      <span>Réussite</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Illustration 16:9, calée sur la zone parchemin de game_frame.webp. */}
             {step.description && (() => {
               const parchmentBg = pickParchmentBg(step);
               return (
-                <div className="absolute overflow-hidden rounded-sm" style={{ top: "19%", height: "49%", left: "4%", right: "4%" }}>
+                <div className="absolute overflow-hidden rounded-sm" style={{ top: "14.5%", height: "55%", left: "4%", right: "4%" }}>
                   {parchmentBg && (
                     <img src={parchmentBg} alt="" aria-hidden
                       className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none opacity-90" />
@@ -1562,7 +1585,7 @@ function VotePage() {
                 Continuer/Rentrer, la réserve personnelle, et le reste du
                 contenu variable (troisième option, capacités, votes,
                 larcin) y cohabitent sans jamais dépasser l'écran. ================= */}
-            <div className="absolute overflow-y-auto flex flex-col gap-2" style={{ top: "71%", bottom: "2%", left: "4%", right: "4%" }}>
+            <div className="absolute overflow-y-auto flex flex-col gap-2" style={{ top: "70.5%", bottom: "4%", left: "4%", right: "4%" }}>
             {!step.resolving && !verdictPending && !revealingOutcome && (
               <div className="flex flex-col gap-2">
                 {isAsync ? (
@@ -1824,22 +1847,8 @@ function VotePage() {
             )}
             {!verdictPending && (step.resolving || revealingOutcome) && (
               <>
-                {resolvingRisk != null && (
-                  <p className="text-center text-sm text-red-400 mb-3">Risque de cette étape : {Math.round(resolvingRisk * 100)}%</p>
-                )}
-                <div className="mb-6">
-                  <div className="h-4 border border-border/60 relative overflow-hidden">
-                    <div
-                      className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
-                      style={{ width: `${revealingOutcome ? gaugeWobble : Math.round((1 - (resolvingRisk ?? 0)) * 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] uppercase tracking-[0.1em] text-muted-foreground mt-1">
-                    <span>Échec</span>
-                    <span>Réussite</span>
-                  </div>
-                </div>
-
+                {/* Le risque et la jauge vivent maintenant dans le bandeau du
+                    haut (voir plus haut) — plus de gros bloc séparé ici. */}
                 {revealingOutcome ? (
                   <p className="text-center text-sm text-muted-foreground mb-4 italic">…</p>
                 ) : (
@@ -1928,7 +1937,7 @@ function VotePage() {
         )}
       </div>
       {/* Colonne droite : CHAT plein cadre, notifications en bas. */}
-      <div className="absolute z-10 top-0 bottom-0 flex flex-col px-5 py-10" style={{ right: 0, width: "22%" }}>
+      <div className="absolute z-10 top-0 bottom-0 flex flex-col px-4 py-6" style={{ right: 0, width: "20.4%" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </div>
