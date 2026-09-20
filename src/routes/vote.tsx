@@ -1443,156 +1443,162 @@ function VotePage() {
 
             {step.description && (() => {
               const parchmentBg = pickParchmentBg(step);
+              const showVoteInPanel = !step.resolving && !verdictPending && !revealingOutcome;
               return (
-                <div className="relative w-full mb-4" style={{ aspectRatio: "1144 / 641" }}>
-                  <img src="/panel_narrative.webp" alt="" aria-hidden
+                <div className="relative w-full mb-4" style={{ aspectRatio: "1191 / 1228" }}>
+                  <img src="/panel_vote.webp" alt="" aria-hidden
                     className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
-                  {parchmentBg && (
-                    <img src={parchmentBg} alt="" aria-hidden
-                      className="absolute inset-[6%] w-[88%] h-[88%] object-cover rounded-sm pointer-events-none select-none" />
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center px-[10%] py-[8%] text-center">
-                    <div>
-                      {step.required_flag_sentiment && (
-                        <p className={`text-xs uppercase tracking-[0.14em] mb-2 font-sans font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-700" : "text-red-800"}`}>
-                          Conséquence d'un choix passé
+                  <div className="absolute overflow-hidden rounded-sm" style={{ top: "1.5%", right: "2%", bottom: "46.3%", left: "2%" }}>
+                    {parchmentBg && (
+                      <img src={parchmentBg} alt="" aria-hidden
+                        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" />
+                    )}
+                    <div className="absolute inset-0 flex items-center justify-center px-[8%] py-[6%] text-center">
+                      <div>
+                        {step.required_flag_sentiment && (
+                          <p className={`text-xs uppercase tracking-[0.14em] mb-2 font-sans font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-700" : "text-red-800"}`}>
+                            Conséquence d'un choix passé
+                          </p>
+                        )}
+                        {/* Texte "encre sur parchemin" — sombre avec un halo clair, plus
+                            gros qu'avant, plutôt que blanc à ombre noire : ça ne
+                            fonctionnait qu'avec un fond sombre, plus avec l'illustration
+                            claire fusionnée dans le parchemin en dessous. */}
+                        <p
+                          className="text-2xl md:text-3xl font-serif italic leading-snug font-semibold"
+                          style={{
+                            color: step.required_flag_sentiment === "positif" ? "#1a3d1a"
+                              : step.required_flag_sentiment === "negatif" ? "#4a1414" : "#2a1a0a",
+                            textShadow: "-1px -1px 0 rgba(235,220,190,0.8), 1px -1px 0 rgba(235,220,190,0.8), -1px 1px 0 rgba(235,220,190,0.8), 1px 1px 0 rgba(235,220,190,0.8), 0 0 10px rgba(235,220,190,0.55)",
+                          }}
+                        >
+                          {step.description}
                         </p>
-                      )}
-                      {/* Texte "encre sur parchemin" — sombre avec un halo clair, plus
-                          gros qu'avant, plutôt que blanc à ombre noire : ça ne
-                          fonctionnait qu'avec un fond sombre, plus avec l'illustration
-                          claire fusionnée dans le parchemin en dessous. */}
-                      <p
-                        className="text-2xl md:text-3xl font-serif italic leading-snug font-semibold"
-                        style={{
-                          color: step.required_flag_sentiment === "positif" ? "#1a3d1a"
-                            : step.required_flag_sentiment === "negatif" ? "#4a1414" : "#2a1a0a",
-                          textShadow: "-1px -1px 0 rgba(235,220,190,0.8), 1px -1px 0 rgba(235,220,190,0.8), -1px 1px 0 rgba(235,220,190,0.8), 1px 1px 0 rgba(235,220,190,0.8), 0 0 10px rgba(235,220,190,0.55)",
-                        }}
-                      >
-                        {step.description}
-                      </p>
+                      </div>
                     </div>
                   </div>
+                  {/* Zone sombre : uniquement le minuteur + Continuer/Rentrer (ou
+                      "vote enregistré") — les seuls éléments dont la hauteur ne
+                      varie jamais. La troisième option, les capacités de vocation
+                      et le décompte des votes restent en dessous, hors du panneau :
+                      leur hauteur varie trop pour un cadre à ratio fixe. Pendant la
+                      résolution/le verdict, cette zone reste simplement vide — ce
+                      contenu-là est encore affiché plus bas, dans son habillage
+                      d'origine. */}
+                  {showVoteInPanel && (
+                    <div className="absolute flex flex-col justify-center gap-2.5 px-[2%]" style={{ top: "58%", right: "3%", bottom: "2.5%", left: "3%" }}>
+                      {isAsync ? (
+                        <p className="text-[11px] tracking-[0.1em] uppercase text-[#cfc2a0] text-center">
+                          Aucune limite de temps — en attente que chacun agisse
+                        </p>
+                      ) : (
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[11px] tracking-[0.14em] uppercase text-[#cfc2a0]">Temps restant</span>
+                          <span className={`font-mono text-base ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-amber-300"}`}>
+                            {timeLeft !== null ? fmt(timeLeft) : "—"}
+                          </span>
+                        </div>
+                      )}
+                      {!myVote ? (
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired}>
+                            <span className="flex items-center justify-center gap-2">
+                              <img src="/icons/arrow_up.webp" alt="" className="h-5 w-5 object-contain" />
+                              Continuer
+                            </span>
+                          </ImmersiveButton>
+                          <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired}>
+                            <span className="flex items-center justify-center gap-2">
+                              <img src="/icons/door.webp" alt="" className="h-5 w-5 object-contain" />
+                              Rentrer
+                            </span>
+                          </ImmersiveButton>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[#cfc2a0] text-center">Vote enregistré, en attente des autres…</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()}
-            {!step.resolving && !verdictPending && !revealingOutcome ? (
-              <>
-                {isAsync ? (
-                  <FramedBox frame={5} className="flex items-center justify-center mb-4 px-3 py-2">
-                    <span className="text-xs tracking-[0.1em] uppercase text-muted-foreground text-center">
-                      Aucune limite de temps — en attente que chacun agisse
+            {!step.resolving && !verdictPending && !revealingOutcome && !myVote && runningTotals && (
+              <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
+                <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
+                <p className="text-[10px] opacity-70">
+                  Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
+                  {myGoldAdjustment !== 0 && (
+                    <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
+                      {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment} suite à un larcin)
                     </span>
-                  </FramedBox>
-                ) : (
-                  <FramedBox frame={5} className="flex items-center justify-between mb-4 px-3 py-2">
-                    <span className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Temps restant</span>
-                    <span className={`font-mono text-lg ${timeLeft !== null && timeLeft < 30 ? "text-red-400" : "text-primary"}`}>
-                      {timeLeft !== null ? fmt(timeLeft) : "—"}
-                    </span>
-                  </FramedBox>
-                )}
-
-                {/* ================= TON VOTE — la décision qui compte ================= */}
-                {!myVote ? (
-                  <div className="mb-4">
-                <p className="text-[10px] tracking-[0.18em] uppercase text-primary/70 mb-2 text-center">Ton vote</p>
-                {runningTotals && (
-                  <div className="mb-3 text-xs text-muted-foreground text-center space-y-0.5">
-                    <p>Or de guilde accumulé cette expédition : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span> · XP gagnée : <span className="text-primary font-mono">{runningTotals.xp}</span></p>
-                    <p className="text-[10px] opacity-70">
-                      Si le groupe rentre maintenant, ta part personnelle serait d'environ {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
-                      {myGoldAdjustment !== 0 && (
-                        <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}>
-                          {" "}({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment} suite à un larcin)
-                        </span>
-                      )}.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-3">
-                  <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired}>
-                    <span className="flex items-center justify-center gap-2">
-                      <img src="/icons/arrow_up.webp" alt="" className="h-5 w-5 object-contain" />
-                      Continuer
-                    </span>
-                  </ImmersiveButton>
-                  <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired}>
-                    <span className="flex items-center justify-center gap-2">
-                      <img src="/icons/door.webp" alt="" className="h-5 w-5 object-contain" />
-                      Rentrer
-                    </span>
-                  </ImmersiveButton>
-                </div>
-                {step.third_option_kind && step.third_option_label && (
-                  step.required_vocation && myVocation !== step.required_vocation ? (
-                    <p className="w-full mt-2 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
-                      {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
-                    </p>
-                  ) : (() => {
-                    // Indicateur qualitatif du risque de la troisième option par
-                    // rapport au risque de base — jamais de pourcentage exact
-                    // affiché (comme pour Risque Faible/Moyen/Élevé plus haut),
-                    // mais sans indicateur du tout le joueur ne voit qu'un loot
-                    // plus élevé et aucune contrepartie visible, ce qui rend le
-                    // choix illisible (ex. "pillage" : +15 points de risque de
-                    // mort contre ×1,6 de butin, entièrement invisible avant).
-                    const delta = step.third_option_death_pct != null
-                      ? step.third_option_death_pct - step.death_percentage
-                      : null;
-                    const riskTag = delta === null ? null
-                      : delta > 0.08 ? { text: "risque nettement accru", color: "text-red-400" }
-                      : delta > 0 ? { text: "risque accru", color: "text-amber-400" }
-                      : delta < -0.08 ? { text: "risque nettement réduit", color: "text-emerald-400" }
-                      : delta < 0 ? { text: "risque réduit", color: "text-emerald-400" }
-                      : null;
-                    const hasLoot = step.third_option_loot_min != null && step.third_option_loot_max != null;
-                    // Le chiffre seul ("138–321 or") ne dit pas si c'est de
-                    // l'or gagné ou dépensé, ni comment il se compare au
-                    // butin de Continuer juste au-dessus — d'où la confusion
-                    // sur des options pourtant cohérentes (plus de risque
-                    // pour plus de butin). On explicite les deux : "or à
-                    // gagner" et la comparaison directe au butin de base.
-                    const lootComparedToBase = hasLoot
-                      ? (step.third_option_loot_min! >= step.loot_max
-                          ? "butin plus élevé que Continuer"
-                          : step.third_option_loot_max! <= step.loot_min
-                            ? "butin plus faible que Continuer"
-                            : "butin comparable à Continuer")
-                      : null;
-                    return (
-                      <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
-                        className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
-                        <span className="inline-flex items-center gap-2">
-                          <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain shrink-0" />
-                          <span>
-                            {step.third_option_label}
-                            {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
-                            {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
-                            {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
-                          </span>
-                        </span>
-                        {(riskTag || lootComparedToBase) && (
-                          <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag?.color ?? "text-muted-foreground"}`}>
-                            {riskTag && <>⚠ {riskTag.text} par rapport à Continuer</>}
-                            {riskTag && lootComparedToBase && " · "}
-                            {lootComparedToBase && lootComparedToBase}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })()
-                )}
-              </div>
-            ) : (
-              <div className="mb-4 px-3 py-3 border border-border/40 text-sm text-muted-foreground text-center">
-                Vote enregistré, en attente des autres…
+                  )}.
+                </p>
               </div>
             )}
+            {!step.resolving && !verdictPending && !revealingOutcome && !myVote && step.third_option_kind && step.third_option_label && (
+              step.required_vocation && myVocation !== step.required_vocation ? (
+                <p className="w-full mt-2 mb-4 py-2 text-center text-xs text-muted-foreground/50 italic border border-border/20">
+                  {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
+                </p>
+              ) : (() => {
+                // Indicateur qualitatif du risque de la troisième option par
+                // rapport au risque de base — jamais de pourcentage exact
+                // affiché (comme pour Risque Faible/Moyen/Élevé plus haut),
+                // mais sans indicateur du tout le joueur ne voit qu'un loot
+                // plus élevé et aucune contrepartie visible, ce qui rend le
+                // choix illisible (ex. "pillage" : +15 points de risque de
+                // mort contre ×1,6 de butin, entièrement invisible avant).
+                const delta = step.third_option_death_pct != null
+                  ? step.third_option_death_pct - step.death_percentage
+                  : null;
+                const riskTag = delta === null ? null
+                  : delta > 0.08 ? { text: "risque nettement accru", color: "text-red-400" }
+                  : delta > 0 ? { text: "risque accru", color: "text-amber-400" }
+                  : delta < -0.08 ? { text: "risque nettement réduit", color: "text-emerald-400" }
+                  : delta < 0 ? { text: "risque réduit", color: "text-emerald-400" }
+                  : null;
+                const hasLoot = step.third_option_loot_min != null && step.third_option_loot_max != null;
+                // Le chiffre seul ("138–321 or") ne dit pas si c'est de
+                // l'or gagné ou dépensé, ni comment il se compare au
+                // butin de Continuer juste au-dessus — d'où la confusion
+                // sur des options pourtant cohérentes (plus de risque
+                // pour plus de butin). On explicite les deux : "or à
+                // gagner" et la comparaison directe au butin de base.
+                const lootComparedToBase = hasLoot
+                  ? (step.third_option_loot_min! >= step.loot_max
+                      ? "butin plus élevé que Continuer"
+                      : step.third_option_loot_max! <= step.loot_min
+                        ? "butin plus faible que Continuer"
+                        : "butin comparable à Continuer")
+                  : null;
+                return (
+                  <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
+                    className="w-full mt-2 mb-4 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
+                    <span className="inline-flex items-center gap-2">
+                      <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain shrink-0" />
+                      <span>
+                        {step.third_option_label}
+                        {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
+                        {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
+                        {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
+                      </span>
+                    </span>
+                    {(riskTag || lootComparedToBase) && (
+                      <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag?.color ?? "text-muted-foreground"}`}>
+                        {riskTag && <>⚠ {riskTag.text} par rapport à Continuer</>}
+                        {riskTag && lootComparedToBase && " · "}
+                        {lootComparedToBase && lootComparedToBase}
+                      </span>
+                    )}
+                  </button>
+                );
+              })()
+            )}
 
-            {/* ================= Actions individuelles — optionnelles, indépendantes du vote ================= */}
-            {(() => {
+            {!step.resolving && !verdictPending && !revealingOutcome && (
+              <>
+                {/* ================= Actions individuelles — optionnelles, indépendantes du vote ================= */}
+                {(() => {
               const isMarchandStep = step.event_type === "marchand" && !step.resolving && !step.resolved;
               const hasVocationAction = !!myVocation && !myVote && (
                 (myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal")) ||
@@ -1683,7 +1689,8 @@ function VotePage() {
               </div>
             </div>
               </>
-            ) : verdictPending ? (
+            )}
+            {verdictPending && (
               /* Le calcul est déjà fait côté serveur, mais on ne le montre pas
                  tout de suite : le joueur déclenche lui-même la révélation,
                  plutôt qu'une jauge qui s'anime automatiquement dès que le
@@ -1697,7 +1704,8 @@ function VotePage() {
                   </span>
                 </ImmersiveButton>
               </div>
-            ) : (
+            )}
+            {!verdictPending && (step.resolving || revealingOutcome) && (
               <>
                 {resolvingRisk != null && (
                   <p className="text-center text-sm text-red-400 mb-3">Risque de cette étape : {Math.round(resolvingRisk * 100)}%</p>
