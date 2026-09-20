@@ -255,7 +255,7 @@ function VotePage() {
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [gaugeWobble, setGaugeWobble] = useState(50);
   const [revealingOutcome, setRevealingOutcome] = useState(false);
-  const [verdictPending, setVerdictPending] = useState(false);
+  const [outcomeFlash, setOutcomeFlash] = useState<"success" | "failure" | null>(null);
   // Déterministe à partir de l'id de l'étape (pas Math.random()) : tout le
   // groupe doit voir exactement la même image de résultat, pas une par client.
   const finalizeAttemptedRef = useRef(false);
@@ -510,22 +510,55 @@ function VotePage() {
       }
       setStep(data);
 
-      // Priorité absolue : si l'étape vient d'être résolue, basculer vers l'animation
-      // de révélation IMMÉDIATEMENT, avant tout autre appel réseau qui laisserait
-      // passer un rendu intermédiaire (flash visible entre les deux écrans).
-      // Un retour volontaire ("rentrer") ne passe jamais par la jauge.
+      // Dès que le serveur a résolu l'étape, on enchaîne automatiquement :
+      // la jauge bascule brièvement vers Échec ou Réussite, puis l'écran de
+      // résolution apparaît. Il n'existe plus de phase "verdict" à cliquer.
+      // Un retour volontaire ("rentrer") reste instantané et ne passe pas par
+      // cette animation.
       if (data.resolved && !resultShownRef.current) {
         resultShownRef.current = true;
         if (data.was_retreat) {
           await showStepResult(data.id, data.event_type, data.deaths_count, true);
           return;
         }
-        // Le sort est déjà joué côté serveur (finalize_resolution a tourné),
-        // mais on ne l'affiche pas tout de suite : on pose juste un drapeau
-        // et le joueur déclenche lui-même la révélation d'un clic — plus
-        // épique qu'une jauge qui s'anime toute seule dès que le calcul est
-        // prêt, et ça laisse le temps de lire le chat avant le verdict.
-        setVerdictPending(true);
+
+        // La notion visuelle de réussite suit la même logique que le récit :
+        // s'il y a eu des dégâts, on fait basculer la jauge côté Échec, même
+        // si personne n'est mort.
+        const { count: damageCount } = await supabase
+          .from("step_damage_log")
+          .select("id", { count: "exact", head: true })
+          .eq("step_id", data.id)
+          .gt("damage", 0);
+        const goodOutcome = data.deaths_count === 0 && (damageCount ?? 0) === 0;
+
+        setRevealingOutcome(true);
+        setOutcomeFlash(null);
+        soundRevealClick();
+
+        const startPct = Math.max(5, Math.min(95, Math.round((1 - (data.death_percentage ?? 0.5)) * 100)));
+        const targetPct = goodOutcome ? 96 : 4;
+        setGaugeWobble(startPct);
+
+        const startedAt = Date.now();
+        const duration = 1250;
+        const animInterval = setInterval(() => {
+          const t = Math.min(1, (Date.now() - startedAt) / duration);
+          // Ease-out : rapide au départ, ralentit en arrivant sur le verdict.
+          const eased = 1 - Math.pow(1 - t, 3);
+          setGaugeWobble(startPct + (targetPct - startPct) * eased);
+        }, 40);
+
+        await new Promise(r => setTimeout(r, duration));
+        clearInterval(animInterval);
+        setGaugeWobble(targetPct);
+        setOutcomeFlash(goodOutcome ? "success" : "failure");
+
+        // Petit temps pour lire le verdict lumineux avant l'écran de résultat.
+        await new Promise(r => setTimeout(r, 550));
+        setRevealingOutcome(false);
+        setOutcomeFlash(null);
+        await showStepResult(data.id, data.event_type, data.deaths_count);
         return;
       }
 
@@ -548,33 +581,6 @@ function VotePage() {
         const elapsedMs = Date.now() - new Date(data.resolved_at).getTime();
         if (elapsedMs >= 90000) {
           await supabase.rpc("acknowledge_step_result", { p_step_id: data.id, p_character_id: characterIdRef.current });
-        }
-      }
-
-      // Si la fenêtre d'intervention est écoulée, quelqu'un doit déclencher le vrai jet.
-      // Ou si tout le monde vivant a voté "Passer" : on accélère avant le délai.
-      // Best-effort : en cas de course entre plusieurs clients, un seul réussit vraiment,
-      // les autres échouent silencieusement et récupèrent le résultat au prochain poll.
-      if (data.resolving && !data.resolved && data.resolution_deadline) {
-        const deadlinePassed = new Date(data.resolution_deadline) <= new Date();
-        let shouldFinalize = deadlinePassed;
-        if (!shouldFinalize) {
-          const { data: aliveRows } = await supabase
-            .from("expedition_participants")
-            .select("character_id, characters!inner(is_alive)")
-            .eq("expedition_id", expeditionId);
-          const aliveIds = ((aliveRows as any[]) ?? []).filter((r) => r.characters?.is_alive).map((r) => r.character_id);
-          if (aliveIds.length > 0) {
-            const { data: skipRows } = await supabase.from("step_skip_votes").select("character_id").eq("step_id", data.id);
-            const skipIds = ((skipRows as any[]) ?? []).map((r) => r.character_id);
-            shouldFinalize = aliveIds.every((id) => skipIds.includes(id));
-          }
-        }
-        if (shouldFinalize) {
-          await supabase.rpc("finalize_resolution", { p_step_id: data.id });
-          // Pas de .catch() ici : supabase-js ne lève pas d'exception sur une RPC
-          // en échec, elle renvoie juste { error } — qu'on ignore volontairement
-          // (course normale entre plusieurs clients, un seul réussit vraiment).
         }
       }
     }
@@ -986,41 +992,36 @@ function VotePage() {
 
   async function resolveStep() {
     if (!step) return;
-    soundRevealClick();
     setBusy(true); setError(null);
-    const { data: beganStep, error: rpcError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
-    if (rpcError) { setError(rpcError.message); setBusy(false); return; }
+
+    // 3/3 votes (ou fin du délai en synchrone) => résolution serveur immédiate.
+    // Intervenir/Fouiller/Potion/Larcin sont disponibles pendant toute la phase
+    // de vote : il n'y a plus de fenêtre d'intervention après la fermeture.
+    const { data: beganStep, error: beginError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
+    if (beginError) { setError(beginError.message); setBusy(false); return; }
 
     const bs = beganStep as any;
-    if (bs) {
-      setStep(bs); // évite d'attendre le prochain sondage : la jauge démarre avec sa fenêtre pleine
-      if (bs.resolved) {
-        // Résolu instantanément côté serveur (rentrer, ignorer, interpreter,
-        // marchand_ward...), aucune jauge. was_retreat distingue le vrai
-        // retour des autres issues instantanées — ne jamais le déduire du
-        // simple fait que resolved soit déjà true.
-        resultShownRef.current = true;
-        await showStepResult(bs.id, bs.event_type, bs.deaths_count, !!bs.was_retreat);
-      }
+    if (bs?.resolved) {
+      // Certaines issues sont déjà entièrement résolues par begin_resolution.
+      // fetchStep déclenchera l'animation (ou le retour instantané).
+      await fetchStep();
+      setBusy(false);
+      return;
     }
-    setBusy(false);
-  }
 
-  async function revealVerdict() {
-    if (!step) return;
-    soundRevealClick();
-    setVerdictPending(false);
-    setRevealingOutcome(true);
-    const goodOutcome = step.deaths_count === 0;
-    const start = Date.now();
-    const animInterval = setInterval(() => {
-      const t = Math.min(1, (Date.now() - start) / 2200);
-      setGaugeWobble(goodOutcome ? 50 + t * 42 : 50 - t * 42);
-    }, 100);
-    await new Promise(r => setTimeout(r, 2400));
-    clearInterval(animInterval);
-    setRevealingOutcome(false);
-    await showStepResult(step.id, step.event_type, step.deaths_count);
+    // Pour les issues probabilistes, on finalise tout de suite : aucune phase
+    // intermédiaire de cinq secondes ne doit subsister côté client.
+    const { error: finalizeError } = await supabase.rpc("finalize_resolution", { p_step_id: step.id });
+    if (finalizeError) {
+      setError(
+        `La résolution serveur n'a pas pu être finalisée immédiatement : ${finalizeError.message}`
+      );
+      setBusy(false);
+      return;
+    }
+
+    await fetchStep();
+    setBusy(false);
   }
 
   async function useIntervention() {
@@ -1513,7 +1514,7 @@ function VotePage() {
 
       {/* CENTRE — positions calées sur game_frame.webp : bandeau / scène / actions. */}
       <main className="absolute z-10" style={{ left: "20.15%", right: "20.15%", top: 0, bottom: 0 }}>
-        {step && (!step.resolved || verdictPending || revealingOutcome) && (
+        {step && (!step.resolved || revealingOutcome) && (
           <>
             {/* 1 — BANDEAU : plus ample, presque sur toute la largeur utile du panneau central. */}
             <section className="absolute flex items-center justify-center text-center" style={{ left: 0, right: 0, top: "2.1%", height: "13.2%" }}>
@@ -1539,7 +1540,26 @@ function VotePage() {
                       <div className="h-2.5 border border-border/50 relative overflow-hidden">
                         <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200" : "transition-all duration-700"}`} style={{ width: `${fillPct}%` }} />
                       </div>
-                      <div className="flex justify-between text-[11px] uppercase tracking-[0.08em] text-muted-foreground/85 mt-0.5 px-[1px]"><span>Échec</span><span>Réussite</span></div>
+                      <div className="flex justify-between text-[11px] uppercase tracking-[0.08em] mt-0.5 px-[1px]">
+                      <span
+                        className={`transition-all duration-300 ${
+                          outcomeFlash === "failure"
+                            ? "text-red-300 scale-110 animate-pulse [text-shadow:0_0_8px_rgba(248,113,113,.95),0_0_18px_rgba(220,38,38,.8)]"
+                            : "text-muted-foreground/85"
+                        }`}
+                      >
+                        Échec
+                      </span>
+                      <span
+                        className={`transition-all duration-300 ${
+                          outcomeFlash === "success"
+                            ? "text-emerald-200 scale-110 animate-pulse [text-shadow:0_0_8px_rgba(110,231,183,.95),0_0_18px_rgba(16,185,129,.8)]"
+                            : "text-muted-foreground/85"
+                        }`}
+                      >
+                        Réussite
+                      </span>
+                    </div>
                     </div>
                   );
                 })()}
@@ -1601,15 +1621,10 @@ function VotePage() {
                 )}
               </div>
 
-              {verdictPending ? (
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <p className="text-xs text-muted-foreground italic mb-2">Le sort du groupe est scellé…</p>
-                  <ImmersiveButton variant="clair" onClick={revealVerdict} className="!py-2.5 px-8">
-                    <span className="flex items-center gap-2"><img src="/icons/scroll.webp" alt="" className="h-4 w-4" /> Révéler le verdict</span>
-                  </ImmersiveButton>
+              {revealingOutcome ? (
+                <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground/65 italic">
+                  Le verdict tombe…
                 </div>
-              ) : revealingOutcome ? (
-                <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground italic">…</div>
               ) : (
                 <div className="flex-1 min-h-0 grid grid-cols-[1.08fr_.78fr_1.34fr] gap-3">
                   {/* BLOC 1 — VOTE : choix principaux + éventuelle troisième option. */}
@@ -1626,7 +1641,7 @@ function VotePage() {
                       </div>
                     ) : (
                       <div className="border border-primary/20 bg-primary/5 px-2 py-2 text-center text-[10px] text-muted-foreground">
-                        {step.resolving ? "Vote clos — résolution en cours" : "Vote enregistré, en attente des autres…"}
+                        {step.resolving ? "Vote clos — résolution du serveur…" : "Vote enregistré, en attente des autres…"}
                       </div>
                     )}
 
@@ -1689,18 +1704,18 @@ function VotePage() {
                     <div className="grid grid-cols-2 gap-1.5 content-start">
                       {!!interventionsRemaining && (
                         <>
-                          <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                          <button onClick={useIntervention} disabled={step.resolving || interventionBusy || myIntervened || mySearched || !interventionsRemaining}
                             title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
                             <img src="/icons/gauntlet.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Intervenir</span>
                             <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                           </button>
-                          <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                          <button onClick={searchForCuriosity} disabled={step.resolving || searchBusy || myIntervened || mySearched || !interventionsRemaining}
                             title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
                             <img src="/icons/magnifier.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Fouiller</span>
                             <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                           </button>
                           {hasPotion ? (
-                            <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                            <button onClick={drinkPotion} disabled={step.resolving || drinkBusy || myIntervened || mySearched || !interventionsRemaining}
                               title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-emerald-400/30 bg-black/10 text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-25">
                               <img src="/icons/potion.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase leading-tight">Boire une potion</span>
                               <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
@@ -1793,7 +1808,7 @@ function VotePage() {
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </aside>
-    {step && (!step.resolved || verdictPending || revealingOutcome) && (
+    {step && (!step.resolved || revealingOutcome) && (
       <>
               {/* Bouclier de groupe — texte narratif court à l'issue du
                   vote (gagné, cassé, expiré), une fois par bouclier. */}
