@@ -1422,7 +1422,7 @@ function VotePage() {
       {/* Colonne gauche : GROUPE — cadre fourni par game_frame.webp en fond,
           le contenu vient juste se poser dedans avec assez de marge pour ne
           pas chevaucher la bordure ornée. */}
-      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto pl-4 pr-9 py-6" style={{ left: 0, width: "20.6%" }}>
+      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto" style={{ left: 0, width: "20.6%", paddingTop: "8%", paddingBottom: "8%", paddingLeft: "8%", paddingRight: "13%" }}>
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1522,7 +1522,7 @@ function VotePage() {
             {/* Bandeau compact : étape/type + risque deux fois plus gros
                 qu'avant, jauge intégrée ici (réduite), plus de gros bloc
                 séparé plus bas. */}
-            <div className="absolute flex flex-col items-center justify-center gap-1.5 px-[6%] text-center" style={{ top: "3%", height: "13%", left: 0, right: 0 }}>
+            <div className="absolute flex flex-col items-center justify-center gap-1 px-[6%] text-center" style={{ top: "2%", height: "16%", left: 0, right: 0 }}>
               <p className="inline-flex items-center gap-2.5 text-2xl md:text-3xl font-serif tracking-[0.06em] text-primary">
                 {EVENT_TYPE_ICON[step.event_type] && (
                   <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-8 w-8 object-contain shrink-0" />
@@ -1534,31 +1534,31 @@ function VotePage() {
                 <span className="text-sm text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
                 {visibleRisk !== null && <span className="text-xs font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
                 {myPrivateRisk !== null && <span className="text-xs font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
-                {(() => {
-                  const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
-                  if (knownRisk == null) return null;
-                  const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
-                  return (
-                    <div className="w-48">
-                      <div className="h-2.5 border border-border/60 relative overflow-hidden rounded-sm">
-                        <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
-                          style={{ width: `${fillPct}%` }} />
-                      </div>
-                      <div className="flex justify-between text-[9px] uppercase tracking-[0.08em] text-muted-foreground mt-0.5">
-                        <span>Échec</span>
-                        <span>Réussite</span>
-                      </div>
-                    </div>
-                  );
-                })()}
               </div>
+              {(() => {
+                const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
+                if (knownRisk == null) return null;
+                const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
+                return (
+                  <div className="w-56">
+                    <div className="h-2 border border-border/60 relative overflow-hidden rounded-sm">
+                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
+                        style={{ width: `${fillPct}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[9px] uppercase tracking-[0.08em] text-muted-foreground mt-0.5">
+                      <span>Échec</span>
+                      <span>Réussite</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Illustration 16:9, calée sur la zone parchemin de game_frame.webp. */}
             {step.description && (() => {
               const parchmentBg = pickParchmentBg(step);
               return (
-                <div className="absolute overflow-hidden rounded-sm" style={{ top: "17%", height: "52%", left: "4%", right: "4%" }}>
+                <div className="absolute overflow-hidden rounded-sm" style={{ top: "19.5%", height: "49.5%", left: "4%", right: "4%" }}>
                   {parchmentBg && (
                     <img src={parchmentBg} alt="" aria-hidden
                       className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none opacity-90" />
@@ -1935,7 +1935,7 @@ function VotePage() {
         )}
       </div>
       {/* Colonne droite : CHAT plein cadre, notifications en bas. */}
-      <div className="absolute z-10 top-0 bottom-0 flex flex-col pr-4 pl-9 py-6" style={{ right: 0, width: "20.4%" }}>
+      <div className="absolute z-10 top-0 bottom-0 flex flex-col" style={{ right: 0, width: "20.4%", paddingTop: "8%", paddingBottom: "8%", paddingRight: "8%", paddingLeft: "13%" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </div>
