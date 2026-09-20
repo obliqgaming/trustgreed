@@ -35,6 +35,20 @@ type Step = {
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
 type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[]; frontlineNarrative: string | null; eventType: string };
 
+// Icônes de type d'étape à côté du titre — un sous-ensemble a une icône
+// dédiée (fournie), les autres réutilisent l'icône la plus proche
+// thématiquement (porte/passage → porte, traces → loupe) plutôt que de
+// rester sans repère visuel.
+const EVENT_TYPE_ICON: Record<string, string> = {
+  coffre: "/icons/chest.webp",
+  gardien: "/icons/shield_swords.webp",
+  marchand: "/icons/market_stall.webp",
+  rencontre: "/icons/hooded_group.webp",
+  decouverte: "/icons/gem.webp",
+  porte: "/icons/door.webp",
+  passage: "/icons/door.webp",
+  traces: "/icons/magnifier.webp",
+};
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 
 function formatCountdown(totalSeconds: number): string {
@@ -1263,7 +1277,10 @@ function VotePage() {
                     : !interventionsRemaining ? "Plus d'intervention disponible"
                     : interventionBusy ? "…" : (
                       <>
-                        Intervenir
+                        <span className="inline-flex items-center gap-2">
+                          <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
+                          Intervenir
+                        </span>
                         <span className="block text-[10px] normal-case opacity-70 mt-0.5">
                           ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
                         </span>
@@ -1283,7 +1300,10 @@ function VotePage() {
                       : !interventionsRemaining ? "Plus d'intervention disponible"
                       : searchBusy ? "…" : (
                         <>
-                          Fouiller
+                          <span className="inline-flex items-center gap-2">
+                            <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
+                            Fouiller
+                          </span>
                           <span className="block text-[10px] normal-case opacity-70 mt-0.5">
                             ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
                           </span>
@@ -1300,7 +1320,12 @@ function VotePage() {
                   ) : (
                     <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
                       className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                      {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : "Boire une potion"}
+                      {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : (
+                        <span className="inline-flex items-center gap-2">
+                          <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
+                          Boire une potion
+                        </span>
+                      )}
                     </button>
                   )
                 )}
@@ -1513,7 +1538,10 @@ function VotePage() {
         {step && !step.resolved && (
           <>
             <Frame variant="bar" className="mb-2">
-              <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold">
+              <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold inline-flex items-center gap-2 justify-center w-full">
+                {EVENT_TYPE_ICON[step.event_type] && (
+                  <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-6 w-6 object-contain" />
+                )}
                 Étape {step.step_number}, {step.event_type}
               </span>
             </Frame>
@@ -1576,10 +1604,16 @@ function VotePage() {
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired}>
-                    Continuer
+                    <span className="flex items-center justify-center gap-2">
+                      <img src="/icons/arrow_up.webp" alt="" className="h-5 w-5 object-contain" />
+                      Continuer
+                    </span>
                   </ImmersiveButton>
                   <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired}>
-                    Rentrer
+                    <span className="flex items-center justify-center gap-2">
+                      <img src="/icons/door.webp" alt="" className="h-5 w-5 object-contain" />
+                      Rentrer
+                    </span>
                   </ImmersiveButton>
                 </div>
                 {step.third_option_kind && step.third_option_label && (
@@ -1621,11 +1655,14 @@ function VotePage() {
                     return (
                       <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
                         className="w-full mt-2 py-3 border border-amber-500/50 text-amber-300 font-serif tracking-[0.1em] uppercase rounded-sm hover:bg-amber-500/10 disabled:opacity-30 text-sm">
-                        <span>
-                          {step.third_option_label}
-                          {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
-                          {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
-                          {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
+                        <span className="inline-flex items-center gap-2">
+                          <img src="/icons/scroll.webp" alt="" className="h-5 w-5 object-contain shrink-0" />
+                          <span>
+                            {step.third_option_label}
+                            {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
+                            {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
+                            {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
+                          </span>
                         </span>
                         {(riskTag || lootComparedToBase) && (
                           <span className={`block mt-1 text-[11px] normal-case tracking-normal font-sans ${riskTag?.color ?? "text-muted-foreground"}`}>
@@ -1663,7 +1700,10 @@ function VotePage() {
               return hasVocationAction || isMarchandStep;
             })() && (
               <div className="mb-4 px-3 py-3 border border-dashed border-border/40 bg-border/5">
-                <p className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground/70 mb-2 text-center">Actions individuelles, optionnelles</p>
+                <p className="text-[10px] tracking-[0.14em] uppercase text-muted-foreground/70 mb-2 text-center flex items-center justify-center gap-1.5">
+                  <img src="/icons/scroll.webp" alt="" className="h-4 w-4 object-contain" />
+                  Actions individuelles, optionnelles
+                </p>
                 {myVocation && !myVote && (
                   <div className="space-y-2">
                     {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
@@ -1936,7 +1976,10 @@ function LarcenyButton({ expeditionId, character }: { expeditionId: string; char
   if (!confirm) return (
     <button onClick={() => setConfirm(true)}
       className="w-full mt-2 text-xs uppercase tracking-[0.1em] border border-border/30 text-muted-foreground/70 px-3 py-2 hover:border-amber-500/40 hover:text-amber-400 transition-colors">
-      Tenter un larcin (secret, une fois par expédition)
+      <span className="inline-flex items-center gap-2">
+        <img src="/icons/pouch_hand.webp" alt="" className="h-5 w-5 object-contain" />
+        Tenter un larcin (secret, une fois par expédition)
+      </span>
     </button>
   );
 
