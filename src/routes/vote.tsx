@@ -1109,18 +1109,19 @@ function VotePage() {
     setSkipBusy(false);
   }
 
-  // Pendant la fenêtre de résolution : jauge cosmétique (le vrai jet est
-  // recalculé côté serveur à la fin), compte à rebours, et suivi du pool
-  // d'interventions partagé.
+  // Réserve personnelle (Intervenir/Fouiller/Potion/Larcin) : suivie dès le
+  // vote, pas seulement pendant la fenêtre de résolution — ces actions sont
+  // désormais utilisables dès le début, plus seulement une fois que tout le
+  // monde a voté.
   useEffect(() => {
-    if (!step?.resolving || step.resolved) return;
+    if (!step || step.resolved) return;
     void refreshInterventionState();
     const t = setInterval(() => {
       void refreshInterventionState();
-      setGaugeWobble(w => Math.min(85, Math.max(15, w + (Math.random() - 0.5) * 18)));
+      if (step.resolving) setGaugeWobble(w => Math.min(85, Math.max(15, w + (Math.random() - 0.5) * 18)));
     }, 1500);
     return () => clearInterval(t);
-  }, [step?.resolving, step?.resolved, refreshInterventionState]);
+  }, [step?.id, step?.resolving, step?.resolved, refreshInterventionState]);
 
   // Participants vivants = ceux qui comptent pour le vote
   const allVoted = aliveParticipants.length > 0 && aliveParticipants.every(p => votedIds.includes(p.character_id));
@@ -1517,6 +1518,45 @@ function VotePage() {
                       ) : (
                         <p className="text-xs text-[#cfc2a0] text-center">Vote enregistré, en attente des autres…</p>
                       )}
+                      {/* Réserve personnelle — disponible dès le vote, pas seulement
+                          une fois que tout le monde a voté : Intervenir/Fouiller/
+                          Potion utilisent la même réserve que le Larcin (affiché
+                          plus bas), donc pas de raison de les réserver à une
+                          phase différente. */}
+                      {!!interventionsRemaining && (
+                        <div className="grid grid-cols-3 gap-1.5 mt-1">
+                          <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                            title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                            className="relative flex flex-col items-center gap-0.5 py-1.5 border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
+                            <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
+                            <span className="text-[8px] uppercase tracking-[0.04em]">Intervenir</span>
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
+                          </button>
+                          <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                            title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                            className="relative flex flex-col items-center gap-0.5 py-1.5 border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
+                            <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
+                            <span className="text-[8px] uppercase tracking-[0.04em]">Fouiller</span>
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
+                          </button>
+                          {hasPotion ? (
+                            <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                              title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                              className="relative flex flex-col items-center gap-0.5 py-1.5 border border-emerald-400/40 text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-30 rounded-sm">
+                              <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
+                              <span className="text-[8px] uppercase tracking-[0.04em]">Potion</span>
+                              <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
+                            </button>
+                          ) : <div />}
+                        </div>
+                      )}
+                      {(myIntervened || mySearched || myDrunk) && (
+                        <p className="text-[10px] text-center text-muted-foreground/70">
+                          {myIntervened && "Intervention utilisée sur cette étape."}
+                          {mySearched && searchResult && (searchResult.found ? `Fouille : trouvé ${searchResult.name}.` : "Fouille infructueuse.")}
+                          {myDrunk && drinkResult !== null && `Potion bue, ${drinkResult} PV.`}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1738,71 +1778,44 @@ function VotePage() {
                       </button>
                     )}
 
-                    <div className="px-3 py-3 border border-primary/20 bg-primary/5 space-y-2">
-                      <p className="text-[10px] tracking-[0.14em] uppercase text-primary/70 text-center mb-1">Optionnel</p>
-                      <p className="text-[11px] text-muted-foreground/80 text-center mb-1">
-                        Ta réserve personnelle ({interventionsRemaining ?? 0} restante{(interventionsRemaining ?? 0) > 1 ? "s" : ""}) — Intervenir, Fouiller, boire une potion et le Larcin y puisent tous, et elle ne se recharge pas pendant l'expédition.
-                      </p>
-
-                      <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                        className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                        {myIntervened ? "Intervention déjà utilisée sur cette étape"
-                          : !interventionsRemaining ? "Plus d'intervention disponible"
-                          : interventionBusy ? "…" : (
-                            <>
-                              <span className="inline-flex items-center gap-2">
-                                <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
-                                Intervenir
-                              </span>
-                              <span className="block text-[10px] normal-case opacity-70 mt-0.5">
-                                ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
-                              </span>
-                            </>
-                          )}
-                      </button>
-
-                      {mySearched && searchResult ? (
-                        <p className={`w-full text-xs uppercase tracking-[0.12em] border px-3 py-3 text-center ${searchResult.found ? "border-amber-400/60 text-amber-300" : "border-border/40 text-muted-foreground"}`}>
-                          {searchResult.found ? `Trouvé : ${searchResult.name}` : "Fouille infructueuse."}
-                        </p>
-                      ) : (
-                        <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                          title="N'aide pas le groupe. Vérifie juste si toi tu as mis la main sur quelque chose."
-                          className="w-full text-xs uppercase tracking-[0.12em] border border-primary/50 text-primary px-3 py-3 hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                          {mySearched ? "Fouille déjà tentée sur cette étape"
-                            : !interventionsRemaining ? "Plus d'intervention disponible"
-                            : searchBusy ? "…" : (
-                              <>
-                                <span className="inline-flex items-center gap-2">
-                                  <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
-                                  Fouiller
-                                </span>
-                                <span className="block text-[10px] normal-case opacity-70 mt-0.5">
-                                  ({interventionsRemaining} restante{interventionsRemaining > 1 ? "s" : ""})
-                                </span>
-                              </>
-                            )}
+                    {/* Le bloc Intervenir/Fouiller/Potion vit aussi dans le panneau
+                        ci-dessus pendant le vote — ici, en résolution, il reste
+                        nécessaire puisque le panneau n'affiche cette rangée que
+                        pendant la phase de vote. */}
+                    {!!interventionsRemaining && (
+                      <div className="grid grid-cols-3 gap-1.5 mb-2">
+                        <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                          title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                          className="relative flex flex-col items-center gap-0.5 py-1.5 border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
+                          <img src="/icons/gauntlet.webp" alt="" className="h-5 w-5 object-contain" />
+                          <span className="text-[8px] uppercase tracking-[0.04em]">Intervenir</span>
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
                         </button>
-                      )}
-
-                      {hasPotion && (
-                        myDrunk ? (
-                          <p className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 text-center">
-                            {drinkResult !== null ? <>Potion bue, {drinkResult} <Heart size={11} className="inline -mt-0.5 fill-current" /></> : "Potion déjà bue sur cette étape"}
-                          </p>
-                        ) : (
+                        <button onClick={searchForCuriosity} disabled={searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                          title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                          className="relative flex flex-col items-center gap-0.5 py-1.5 border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
+                          <img src="/icons/magnifier.webp" alt="" className="h-5 w-5 object-contain" />
+                          <span className="text-[8px] uppercase tracking-[0.04em]">Fouiller</span>
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/60 text-[9px] flex items-center justify-center text-primary">{interventionsRemaining}</span>
+                        </button>
+                        {hasPotion ? (
                           <button onClick={drinkPotion} disabled={drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                            className="w-full text-xs uppercase tracking-[0.12em] border border-emerald-400/50 text-emerald-300 px-3 py-3 hover:bg-emerald-500/10 disabled:opacity-30 disabled:cursor-not-allowed">
-                            {!interventionsRemaining ? "Plus d'intervention disponible" : drinkBusy ? "…" : (
-                              <span className="inline-flex items-center gap-2">
-                                <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
-                                Boire une potion
-                              </span>
-                            )}
+                            title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
+                            className="relative flex flex-col items-center gap-0.5 py-1.5 border border-emerald-400/40 text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 disabled:opacity-30 rounded-sm">
+                            <img src="/icons/potion.webp" alt="" className="h-5 w-5 object-contain" />
+                            <span className="text-[8px] uppercase tracking-[0.04em]">Potion</span>
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
                           </button>
-                        )
-                      )}
-                    </div>
+                        ) : <div />}
+                      </div>
+                    )}
+                    {(myIntervened || mySearched || myDrunk) && (
+                      <p className="text-[10px] text-center text-muted-foreground/70 mb-2">
+                        {myIntervened && "Intervention utilisée sur cette étape."}
+                        {mySearched && searchResult && (searchResult.found ? `Fouille : trouvé ${searchResult.name}.` : "Fouille infructueuse.")}
+                        {myDrunk && drinkResult !== null && `Potion bue, ${drinkResult} PV.`}
+                      </p>
+                    )}
 
                     {allInterventionUsers.length > 0 && (
                       <p className="text-xs text-amber-400/90 text-center mt-2">
