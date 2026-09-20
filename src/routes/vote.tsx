@@ -1413,19 +1413,16 @@ function VotePage() {
   }
 
   return (
-    <div className="h-[100dvh] w-full overflow-hidden flex bg-black relative">
-      {eventBg && (
-        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
-          backgroundImage:`url(${eventBg})`,
-          backgroundSize:"cover", backgroundPosition:"center",
-          filter: bgFilter,
-          transition:"filter 1s ease"
-        }} />
-      )}
-      {/* Colonne gauche : GROUPE, pleine hauteur, collée au bord — plus une
-          petite boîte flottante : un vrai contenant qui défile si le groupe
-          est grand, sans nombre de places prédéfini. */}
-      <div className="relative z-10 w-[21%] h-full overflow-y-auto border-r border-border/20 bg-black/50 backdrop-blur-sm p-3">
+    <div className="h-[100dvh] w-full overflow-hidden relative bg-black" style={{
+      backgroundImage: "url(/game_frame.webp)",
+      backgroundSize: "100% 100%",
+      backgroundRepeat: "no-repeat",
+      backgroundPosition: "center",
+    }}>
+      {/* Colonne gauche : GROUPE — cadre fourni par game_frame.webp en fond,
+          le contenu vient juste se poser dedans avec assez de marge pour ne
+          pas chevaucher la bordure ornée. */}
+      <div className="absolute z-10 top-0 bottom-0 overflow-y-auto px-5 py-10" style={{ left: 0, width: "21.8%" }}>
                 <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Groupe</p>
                 <div className="space-y-1.5">
                   {participants.map((p, idx) => {
@@ -1515,50 +1512,44 @@ function VotePage() {
                 </div>
               </div>
       {/* Colonne centrale : occupe tout l'espace restant. */}
-      <div className="relative z-10 flex-1 h-full overflow-y-auto p-4 flex flex-col min-w-0">
+      {/* Colonne centrale : bandeau compact, illustration 16:9, puis zone
+          d'actions — chacune calée sur les bandes mesurées dans
+          game_frame.webp (bandeau ~5-16%, parchemin ~19-68%, zone
+          d'actions ~71-99% de la hauteur du panneau). */}
+      <div className="absolute z-10 top-0 bottom-0 min-w-0" style={{ left: "21.8%", width: "56.2%" }}>
         {step && (!step.resolved || verdictPending || revealingOutcome) && (
           <>
-            <Frame variant="bar" className="mb-2">
-              <span className="text-base tracking-[0.12em] uppercase font-serif font-semibold inline-flex items-center gap-2 justify-center w-full">
+            {/* Bandeau compact : étape/type, risque, butin, tout sur une ligne. */}
+            <div className="absolute flex items-center justify-center flex-wrap gap-x-4 gap-y-1 px-[6%] text-center" style={{ top: "5%", height: "11%", left: 0, right: 0 }}>
+              <span className="inline-flex items-center gap-2 text-sm font-serif tracking-[0.08em] text-primary">
                 {EVENT_TYPE_ICON[step.event_type] && (
-                  <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-6 w-6 object-contain" />
+                  <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-5 w-5 object-contain" />
                 )}
                 Étape {step.step_number}, {step.event_type}
               </span>
-            </Frame>
+              <span className={`text-xs font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
+              <span className="text-xs text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
+              {visibleRisk !== null && <span className="text-[11px] font-mono opacity-80">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
+              {myPrivateRisk !== null && <span className="text-[11px] font-mono text-primary">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+            </div>
 
-            <p className={`text-sm font-semibold mb-4 text-center ${RISK_COLOR[step.risk_level]}`}>
-              ⚠ Risque {RISK_LABEL[step.risk_level]}
-              <span className="ml-2 text-amber-400 font-mono">· Butin : {step.loot_min}–{step.loot_max} or</span>
-              {visibleRisk !== null && <span className="ml-2 font-mono text-xs opacity-80">({Math.round(visibleRisk * 100)}% de mort exact, connu de tout le groupe)</span>}
-              {myPrivateRisk !== null && <span className="ml-2 font-mono text-xs text-primary">({Math.round(myPrivateRisk * 100)}% de mort, connu de toi seul)</span>}
-            </p>
-
+            {/* Illustration 16:9, calée sur la zone parchemin de game_frame.webp. */}
             {step.description && (() => {
               const parchmentBg = pickParchmentBg(step);
               return (
-                <div className="relative w-full shrink-0" style={{ aspectRatio: "1144 / 641" }}>
-                  <img src="/panel_narrative.webp" alt="" aria-hidden
-                    className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none" />
+                <div className="absolute overflow-hidden rounded-sm" style={{ top: "19%", height: "49%", left: "4%", right: "4%" }}>
                   {parchmentBg && (
                     <img src={parchmentBg} alt="" aria-hidden
-                      className="absolute inset-[6%] w-[88%] h-[88%] object-cover rounded-sm pointer-events-none select-none" />
+                      className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none opacity-90" />
                   )}
                   <div className="absolute inset-0 flex items-center justify-center px-[8%] py-[6%] text-center">
                     <div>
                       {step.required_flag_sentiment && (
-                        <p className={`text-xs uppercase tracking-[0.14em] mb-2 font-sans font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-700" : "text-red-800"}`}>
+                        <p className={`text-xs tracking-[0.1em] mb-2 font-sans font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-300" : "text-red-300"}`}>
                           Conséquence d'un choix passé
                         </p>
                       )}
-                      <p
-                        className="text-2xl md:text-3xl font-serif italic leading-snug font-semibold"
-                        style={{
-                          color: step.required_flag_sentiment === "positif" ? "#1a3d1a"
-                            : step.required_flag_sentiment === "negatif" ? "#4a1414" : "#2a1a0a",
-                          textShadow: "-1px -1px 0 rgba(235,220,190,0.8), 1px -1px 0 rgba(235,220,190,0.8), -1px 1px 0 rgba(235,220,190,0.8), 1px 1px 0 rgba(235,220,190,0.8), 0 0 10px rgba(235,220,190,0.55)",
-                        }}
-                      >
+                      <p className="text-xl md:text-2xl font-serif italic leading-snug text-white" style={{ textShadow: "0 2px 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)" }}>
                         {step.description}
                       </p>
                     </div>
@@ -1566,13 +1557,14 @@ function VotePage() {
                 </div>
               );
             })()}
-            {/* ================= Zone d'actions — une seule grille flexible,
-                pas des blocs empilés. Continuer/Rentrer, la réserve
-                personnelle (Intervenir/Fouiller/Potion), et le statut du
-                vote y cohabitent ; le nombre de boutons peut varier sans
-                casser la mise en page. ================= */}
+            {/* ================= Zone d'actions — une seule zone scrollable si
+                besoin, calée sur la bande sombre de game_frame.webp.
+                Continuer/Rentrer, la réserve personnelle, et le reste du
+                contenu variable (troisième option, capacités, votes,
+                larcin) y cohabitent sans jamais dépasser l'écran. ================= */}
+            <div className="absolute overflow-y-auto flex flex-col gap-2" style={{ top: "71%", bottom: "2%", left: "4%", right: "4%" }}>
             {!step.resolving && !verdictPending && !revealingOutcome && (
-              <div className="flex flex-wrap gap-2 items-stretch mt-3 shrink-0">
+              <div className="flex flex-col gap-2">
                 {isAsync ? (
                   <p className="w-full text-[11px] tracking-[0.1em] uppercase text-muted-foreground text-center py-1">
                     Aucune limite de temps — en attente que chacun agisse
@@ -1585,21 +1577,23 @@ function VotePage() {
                     </span>
                   </div>
                 )}
+                {/* Continuer/Rentrer : à part, plus gros, centraux — c'est LE
+                    choix qui compte, pas une action parmi d'autres. */}
                 {!myVote ? (
-                  <>
-                    <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 min-w-[140px]">
+                  <div className="flex gap-3">
+                    <ImmersiveButton variant="clair" onClick={() => castVote("continuer")} disabled={busy || deadlineExpired} className="flex-1 !py-5 text-base">
                       <span className="flex items-center justify-center gap-2">
-                        <img src="/icons/arrow_up.webp" alt="" className="h-5 w-5 object-contain" />
+                        <img src="/icons/arrow_up.webp" alt="" className="h-6 w-6 object-contain" />
                         Continuer
                       </span>
                     </ImmersiveButton>
-                    <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 min-w-[140px]">
+                    <ImmersiveButton variant="sombre" onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired} className="flex-1 !py-5 text-base">
                       <span className="flex items-center justify-center gap-2">
-                        <img src="/icons/door.webp" alt="" className="h-5 w-5 object-contain" />
+                        <img src="/icons/door.webp" alt="" className="h-6 w-6 object-contain" />
                         Rentrer
                       </span>
                     </ImmersiveButton>
-                  </>
+                  </div>
                 ) : (
                   <p className="w-full text-xs text-muted-foreground text-center py-1">Vote enregistré, en attente des autres…</p>
                 )}
@@ -1607,9 +1601,10 @@ function VotePage() {
                     une fois que tout le monde a voté : Intervenir/Fouiller/
                     Potion utilisent la même réserve que le Larcin (affiché
                     plus bas), donc pas de raison de les réserver à une
-                    phase différente. */}
+                    phase différente. Rangée à part, plus discrète que
+                    Continuer/Rentrer. */}
                 {!!interventionsRemaining && (
-                  <>
+                  <div className="flex flex-wrap gap-2">
                     <button onClick={useIntervention} disabled={interventionBusy || myIntervened || mySearched || !interventionsRemaining}
                       title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`}
                       className="relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[84px] border border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 disabled:opacity-30 rounded-sm">
@@ -1633,7 +1628,7 @@ function VotePage() {
                         <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/60 text-[9px] flex items-center justify-center text-emerald-300">{interventionsRemaining}</span>
                       </button>
                     )}
-                  </>
+                  </div>
                 )}
                 {(myIntervened || mySearched || myDrunk) && (
                   <p className="w-full text-[10px] text-center text-muted-foreground/70">
@@ -1835,8 +1830,8 @@ function VotePage() {
                 <div className="mb-6">
                   <div className="h-4 border border-border/60 relative overflow-hidden">
                     <div
-                      className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-1000 ease-in-out"}`}
-                      style={{ width: `${gaugeWobble}%` }}
+                      className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/60 via-amber-400/60 to-emerald-500/60 ${revealingOutcome ? "transition-all duration-200 ease-out" : "transition-all duration-700 ease-out"}`}
+                      style={{ width: `${revealingOutcome ? gaugeWobble : Math.round((1 - (resolvingRisk ?? 0)) * 100)}%` }}
                     />
                   </div>
                   <div className="flex justify-between text-[10px] uppercase tracking-[0.1em] text-muted-foreground mt-1">
@@ -1852,13 +1847,6 @@ function VotePage() {
                     <p className="text-center text-sm text-muted-foreground mb-4">
                       {isAsync ? "En attente que chacun agisse…" : secondsLeft > 0 ? `${formatCountdown(secondsLeft)} avant le verdict` : "Verdict imminent…"}
                     </p>
-
-                    {secondsLeft > 0 && (
-                      <button onClick={voteSkip} disabled={skipBusy || skipTally?.mine}
-                        className="w-full mb-4 text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-3 py-2 hover:border-primary/40 hover:text-primary disabled:opacity-50">
-                        {skipBusy ? "…" : `Accélérer${skipTally ? ` ${skipTally.count}/${skipTally.total}` : ""}`}
-                      </button>
-                    )}
 
                     {/* Le bloc Intervenir/Fouiller/Potion vit aussi dans le panneau
                         ci-dessus pendant le vote — ici, en résolution, il reste
@@ -1935,11 +1923,12 @@ function VotePage() {
                 {debugCopied ? "Copié ✓" : "Copier le rapport de debug (partage-le-moi)"}
               </button>
             )}
+            </div>
           </>
         )}
       </div>
-      {/* Colonne droite : CHAT, pleine hauteur, collée au bord. */}
-      <div className="relative z-10 w-[21%] h-full overflow-y-auto border-l border-border/20 bg-black/50 backdrop-blur-sm p-3">
+      {/* Colonne droite : CHAT plein cadre, notifications en bas. */}
+      <div className="absolute z-10 top-0 bottom-0 flex flex-col px-5 py-10" style={{ right: 0, width: "22%" }}>
         <ChatBox expeditionId={expeditionId} character={character} />
         <NotificationsPanel character={character} />
       </div>
@@ -2042,7 +2031,7 @@ function NotificationsPanel({ character }: { character: Character | null }) {
   if (!character || notifs.length === 0) return null;
 
   return (
-    <div className="mt-4 pt-3 border-t border-dashed border-amber-500/25 space-y-1.5">
+    <div className="shrink-0 mt-4 pt-3 border-t border-dashed border-amber-500/25 space-y-1.5">
       <p className="text-[10px] tracking-[0.14em] uppercase text-amber-400/70 mb-1.5">Notifications</p>
       {notifs.map(n => (
         <div key={n.id} className="border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 flex items-start gap-2">
@@ -2274,10 +2263,9 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   }
 
   return (
-    <div className="relative mt-4 pt-6 px-4 pb-4">
-      <DecorativeBorder variant="square" />
+    <div className="flex-1 min-h-0 flex flex-col">
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Chat</p>
-      <div ref={scrollBoxRef} className="h-40 overflow-y-auto space-y-1.5 mb-2 pr-1">
+      <div ref={scrollBoxRef} className="flex-1 min-h-0 overflow-y-auto space-y-1.5 mb-2 pr-1">
         {messages.length === 0
           ? <p className="text-xs text-muted-foreground/40 italic">Silence.</p>
           : messages.map((m) => (
