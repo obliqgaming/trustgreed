@@ -16,6 +16,7 @@ type EventTemplate = {
   id: string; event_type: string; risk_level: string;
   loot_base_min: number; loot_base_max: number; death_percentage: number; flavor_texts: EventSituation[];
 };
+type TemplateProvenance = { id: string; is_community: boolean; author_name: string | null; guild_name: string | null; image_path: string | null };
 type ProfileRow = { id: string; username: string; last_seen_at: string | null };
 type CommunityEvent = {
   id: string; character_name: string; guild_name: string; event_type: string; risk_level: string;
@@ -56,6 +57,8 @@ function AdminPage() {
   // Templates d'événements
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
   const [editingTemplate, setEditingTemplate] = useState<EventTemplate | null>(null);
+  const [templateProvenance, setTemplateProvenance] = useState<Record<string, TemplateProvenance>>({});
+  const [templateImageDraft, setTemplateImageDraft] = useState<string>("");
 
   // Recherche joueur
   const [playerSearch, setPlayerSearch] = useState("");
@@ -78,7 +81,7 @@ function AdminPage() {
   async function loadAll() {
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
-    const [guildsRes, expRes, activeRes, feedRes, templatesRes, settingsRes, pricesRes, pendingRes] = await Promise.all([
+    const [guildsRes, expRes, activeRes, feedRes, templatesRes, settingsRes, pricesRes, pendingRes, provenanceRes] = await Promise.all([
       supabase.from("guilds").select("id, name, gold"),
       supabase.from("expeditions").select("id, status, guild_id, guild:guilds(name)").in("status", ["waiting", "active"]),
       supabase.from("profiles").select("id", { count: "exact", head: true }).gte("last_seen_at", dayAgo),
@@ -87,6 +90,7 @@ function AdminPage() {
       supabase.from("app_settings" as any).select("value").eq("key", "maintenance").maybeSingle(),
       supabase.from("app_settings" as any).select("value").eq("key", "prices").maybeSingle(),
       supabase.rpc("admin_list_community_events" as any, { p_status: "pending_review" }),
+      supabase.rpc("admin_list_event_template_provenance" as any),
     ]);
 
     const enrichedGuilds: GuildRow[] = await Promise.all((guildsRes.data ?? []).map(async (g) => {
@@ -112,6 +116,9 @@ function AdminPage() {
     setMaintenanceMessage(maint?.message ?? "");
     setPrices((pricesRes.data as any)?.value ?? null);
     setPendingEvents((pendingRes.data as any) ?? []);
+    const provenanceMap: Record<string, TemplateProvenance> = {};
+    for (const row of (provenanceRes.data as any[]) ?? []) provenanceMap[row.id] = row;
+    setTemplateProvenance(provenanceMap);
   }
 
   useEffect(() => {
@@ -426,11 +433,20 @@ function AdminPage() {
         <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Templates d'événements ({templates.length})</p>
         <ScrollBox maxHeight="20rem">
           <ul className="space-y-1.5 mb-4">
-            {templates.map((t) => (
+            {templates.map((t) => {
+              const prov = templateProvenance[t.id];
+              return (
               <li key={t.id} className="text-xs border border-border/30 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span>{t.event_type} — {t.risk_level} · {t.loot_base_min}-{t.loot_base_max} or · {Math.round(t.death_percentage * 100)}% mort</span>
-                  <button onClick={() => setEditingTemplate(editingTemplate?.id === t.id ? null : { ...t })}
+                  <span>
+                    {t.event_type} — {t.risk_level} · {t.loot_base_min}-{t.loot_base_max} or · {Math.round(t.death_percentage * 100)}% mort
+                    {prov?.is_community && (
+                      <span className="ml-2 text-[9px] uppercase border border-amber-500/40 text-amber-400 px-1.5 py-0.5 rounded-sm">
+                        Communautaire{prov.author_name ? ` — ${prov.author_name}` : ""}{prov.guild_name ? ` (${prov.guild_name})` : ""}
+                      </span>
+                    )}
+                  </span>
+                  <button onClick={() => { const opening = editingTemplate?.id !== t.id; setEditingTemplate(opening ? { ...t } : null); setTemplateImageDraft(opening ? (prov?.image_path ?? "") : ""); }}
                     className="text-[10px] uppercase border border-border/40 text-muted-foreground px-2 py-1 hover:border-primary/40 hover:text-primary flex-shrink-0">
                     {editingTemplate?.id === t.id ? "Fermer" : "Éditer"}
                   </button>
@@ -503,12 +519,19 @@ function AdminPage() {
                         + Ajouter une situation
                       </button>
                     </div>
+                    <label className="block text-[10px] text-muted-foreground">
+                      Image dédiée (même format que les autres — chemin dans public/, ex. /event_ma_scene.webp). Vide = pool générique type+risque.<br />
+                      <input value={templateImageDraft} onChange={(e) => setTemplateImageDraft(e.target.value)}
+                        placeholder="/event_xxx.webp"
+                        className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs mt-1" />
+                    </label>
                     <button disabled={busy === `tpl-${t.id}`}
                       onClick={() => runAction(`tpl-${t.id}`, () => supabase.rpc("admin_update_event_template" as any, {
                         p_id: t.id, p_risk_level: editingTemplate.risk_level,
                         p_loot_base_min: editingTemplate.loot_base_min, p_loot_base_max: editingTemplate.loot_base_max,
                         p_death_percentage: editingTemplate.death_percentage,
                         p_flavor_texts: editingTemplate.flavor_texts.filter(s => s.situation.trim()),
+                        p_image_path: templateImageDraft.trim() || null,
                       }).then((res) => { if (!res.error) setEditingTemplate(null); return res; }))}
                       className="text-[10px] uppercase border border-primary/40 text-primary px-2 py-1 hover:bg-primary/10 disabled:opacity-30">
                       {busy === `tpl-${t.id}` ? "…" : "Enregistrer"}
@@ -516,7 +539,8 @@ function AdminPage() {
                   </div>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </ScrollBox>
 
