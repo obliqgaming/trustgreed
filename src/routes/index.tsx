@@ -220,6 +220,9 @@ function Index() {
             <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/boutique" })} className="w-[150px] !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
               Boutique
             </ImmersiveButton>
+            <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/ecrire-rencontre" })} className="w-[150px] !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
+              Investir au Donjon
+            </ImmersiveButton>
             <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/carte" })} className="w-[150px] pl-3 !py-3 shrink-0 inline-flex items-center justify-center whitespace-nowrap text-sm">
               Carte
             </ImmersiveButton>

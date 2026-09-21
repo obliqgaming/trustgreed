@@ -17,6 +17,12 @@ type EventTemplate = {
   loot_base_min: number; loot_base_max: number; death_percentage: number; flavor_texts: EventSituation[];
 };
 type ProfileRow = { id: string; username: string; last_seen_at: string | null };
+type CommunityEvent = {
+  id: string; character_name: string; guild_name: string; event_type: string; risk_level: string;
+  status: string; situation_text: string; success_text: string; failure_text: string;
+  cost_paid: number; created_at: string; submitted_at: string | null;
+};
+type Prices = { potion_base: number; potion_growth: number; potion_step_scale: number; community_event_cost: number };
 
 const RISK_LEVELS = ["faible", "moyen", "eleve"] as const;
 
@@ -60,16 +66,26 @@ function AdminPage() {
   const [maintenanceActive, setMaintenanceActive] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState("");
 
+  // Prix ajustables
+  const [prices, setPrices] = useState<Prices | null>(null);
+
+  // Rencontres communautaires — modération
+  const [pendingEvents, setPendingEvents] = useState<CommunityEvent[]>([]);
+  const [imageDraft, setImageDraft] = useState<Record<string, string>>({});
+  const [rejectDraft, setRejectDraft] = useState<Record<string, string>>({});
+
   async function loadAll() {
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
-    const [guildsRes, expRes, activeRes, feedRes, templatesRes, settingsRes] = await Promise.all([
+    const [guildsRes, expRes, activeRes, feedRes, templatesRes, settingsRes, pricesRes, pendingRes] = await Promise.all([
       supabase.from("guilds").select("id, name, gold"),
       supabase.from("expeditions").select("id, status, guild_id, guild:guilds(name)").in("status", ["waiting", "active"]),
       supabase.from("profiles").select("id", { count: "exact", head: true }).gte("last_seen_at", dayAgo),
       supabase.from("guild_history_events").select("id, description, created_at, guild:guilds(name)").order("created_at", { ascending: false }).limit(50),
       supabase.rpc("admin_list_event_templates" as any),
       supabase.from("app_settings" as any).select("value").eq("key", "maintenance").maybeSingle(),
+      supabase.from("app_settings" as any).select("value").eq("key", "prices").maybeSingle(),
+      supabase.rpc("admin_list_community_events" as any, { p_status: "pending_review" }),
     ]);
 
     const enrichedGuilds: GuildRow[] = await Promise.all((guildsRes.data ?? []).map(async (g) => {
@@ -93,6 +109,8 @@ function AdminPage() {
     const maint = (settingsRes.data as any)?.value;
     setMaintenanceActive(!!maint?.active);
     setMaintenanceMessage(maint?.message ?? "");
+    setPrices((pricesRes.data as any)?.value ?? null);
+    setPendingEvents((pendingRes.data as any) ?? []);
   }
 
   useEffect(() => {
@@ -156,6 +174,26 @@ function AdminPage() {
     setBusy(null);
   }
 
+  async function moderateEvent(id: string, action: "approve" | "reject") {
+    setBusy(`mod-${id}`); setError(null);
+    const { error: rpcError } = await supabase.rpc("admin_moderate_community_event" as any, {
+      p_event_id: id, p_action: action,
+      p_image_path: action === "approve" ? (imageDraft[id]?.trim() || null) : null,
+      p_rejection_reason: action === "reject" ? (rejectDraft[id]?.trim() || null) : null,
+    });
+    if (rpcError) setError(rpcError.message);
+    else await loadAll();
+    setBusy(null);
+  }
+
+  async function savePrices() {
+    if (!prices) return;
+    setBusy("prices"); setError(null);
+    const { error: rpcError } = await supabase.rpc("admin_set_prices" as any, { p_prices: prices });
+    if (rpcError) setError(rpcError.message);
+    setBusy(null);
+  }
+
   const abandonedCount = guilds.filter(g => g.member_count === 0 && g.history_count === 0).length;
 
   if (checking) return <LedgerPage><LedgerCard title="Admin">Vérification…</LedgerCard></LedgerPage>;
@@ -209,6 +247,79 @@ function AdminPage() {
             {busy === "maintenance" ? "…" : "Enregistrer"}
           </button>
         </div>
+
+        {/* Prix ajustables */}
+        <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Prix</p>
+        {prices && (
+          <div className="border border-border/30 px-3 py-2 mb-4">
+            <div className="grid grid-cols-2 gap-3 mb-2">
+              <label className="text-[10px] text-muted-foreground">
+                Potion — prix de base<br />
+                <input value={prices.potion_base} onChange={(e) => setPrices({ ...prices, potion_base: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs" />
+              </label>
+              <label className="text-[10px] text-muted-foreground">
+                Potion — multiplicateur par achat<br />
+                <input value={prices.potion_growth} onChange={(e) => setPrices({ ...prices, potion_growth: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs" />
+              </label>
+              <label className="text-[10px] text-muted-foreground">
+                Potion — hausse par étape (0-1)<br />
+                <input value={prices.potion_step_scale} onChange={(e) => setPrices({ ...prices, potion_step_scale: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs" />
+              </label>
+              <label className="text-[10px] text-muted-foreground">
+                Écrire une rencontre (or de guilde)<br />
+                <input value={prices.community_event_cost} onChange={(e) => setPrices({ ...prices, community_event_cost: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs" />
+              </label>
+            </div>
+            <button disabled={busy === "prices"} onClick={savePrices}
+              className="text-[10px] uppercase border border-primary/40 text-primary px-2 py-1 hover:bg-primary/10 disabled:opacity-30">
+              {busy === "prices" ? "…" : "Enregistrer les prix"}
+            </button>
+          </div>
+        )}
+
+        {/* Rencontres communautaires — modération */}
+        <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Rencontres en attente de modération ({pendingEvents.length})</p>
+        {pendingEvents.length === 0 ? (
+          <p className="text-xs text-muted-foreground/60 italic mb-4">Aucune.</p>
+        ) : (
+          <ScrollBox maxHeight="28rem">
+            <ul className="space-y-2 mb-4">
+              {pendingEvents.map((e) => (
+                <li key={e.id} className="text-xs border border-amber-500/30 px-3 py-2">
+                  <p className="mb-1.5">
+                    <span className="text-primary">{e.character_name}</span> ({e.guild_name}) — {e.event_type} · risque {e.risk_level} · {e.cost_paid} or payé
+                  </p>
+                  <p className="mb-1"><span className="text-muted-foreground">Situation :</span> {e.situation_text}</p>
+                  <p className="mb-1 text-emerald-300/90"><span className="text-muted-foreground">Réussite :</span> {e.success_text}</p>
+                  <p className="mb-2 text-red-300/90"><span className="text-muted-foreground">Échec :</span> {e.failure_text}</p>
+                  <label className="block text-[10px] text-muted-foreground mb-2">
+                    Image (même format que les autres — chemin dans public/, ex. /event_ma_scene.webp). Laisser vide = parchemin nu en attendant.<br />
+                    <input value={imageDraft[e.id] ?? ""} onChange={(ev) => setImageDraft({ ...imageDraft, [e.id]: ev.target.value })}
+                      placeholder="/event_xxx.webp"
+                      className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs mt-1" />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button disabled={busy === `mod-${e.id}`} onClick={() => moderateEvent(e.id, "approve")}
+                      className="text-[10px] uppercase border border-emerald-400/40 text-emerald-400 px-2 py-1 hover:bg-emerald-400/10 disabled:opacity-30">
+                      {busy === `mod-${e.id}` ? "…" : "Approuver"}
+                    </button>
+                    <input value={rejectDraft[e.id] ?? ""} onChange={(ev) => setRejectDraft({ ...rejectDraft, [e.id]: ev.target.value })}
+                      placeholder="Motif de refus (optionnel, pour toi)"
+                      className="flex-1 min-w-[140px] bg-transparent border border-border/40 px-1.5 py-1 text-[10px]" />
+                    <button disabled={busy === `mod-${e.id}`} onClick={() => moderateEvent(e.id, "reject")}
+                      className="text-[10px] uppercase border border-red-400/40 text-red-400 px-2 py-1 hover:bg-red-400/10 disabled:opacity-30">
+                      {busy === `mod-${e.id}` ? "…" : "Refuser"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </ScrollBox>
+        )}
 
         {/* Expéditions bloquées */}
         <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Expéditions en cours ({expeditions.length})</p>
