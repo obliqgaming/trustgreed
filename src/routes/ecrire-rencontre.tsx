@@ -138,7 +138,7 @@ function EcrireRencontrePage() {
   if (loading) return <LedgerPage><LedgerCard title="Chroniqueur">Un instant…</LedgerCard></LedgerPage>;
 
   return (
-    <LedgerPage>
+    <LedgerPage bg="/register_book.webp">
       <style>{`
         @keyframes ce-pop { 0% { opacity: 0; transform: scale(0.7); } 100% { opacity: 1; transform: scale(1); } }
         .ce-pop { animation: ce-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
@@ -170,13 +170,13 @@ function EcrireRencontrePage() {
                 registre de la guilde. ============ */}
             <div
               className="relative overflow-hidden px-6 py-8 mb-5 text-center rounded-sm"
-              style={{ backgroundImage: "url(/register_book.webp)", backgroundSize: "cover", backgroundPosition: "center" }}
+              style={{ backgroundImage: "url(/panel_narrative.webp)", backgroundSize: "cover", backgroundPosition: "center" }}
             >
-              <div className="absolute inset-0 bg-black/55" />
+              <div className="absolute inset-0 bg-black/25" />
               <div className="relative">
                 {revealStage === "sealed" && (
                   <div className="ce-pop">
-                    <p className="text-sm text-amber-100/90 mb-5" style={{ textShadow: "0 2px 4px #000" }}>
+                    <p className="text-sm text-[#2a1a0a] mb-5 font-semibold" style={{ textShadow: "0 1px 2px rgba(255,255,255,0.5)" }}>
                       Le registre attend d'être ouvert.
                     </p>
                     <ImmersiveButton variant="clair" onClick={() => setRevealStage("type_revealed")}>
@@ -187,8 +187,8 @@ function EcrireRencontrePage() {
                 {revealStage === "type_revealed" && (
                   <div className="ce-pop">
                     <img src={EVENT_TYPE_ICON[draft.event_type]} alt="" className="h-14 w-14 object-contain mx-auto mb-2" />
-                    <p className="text-xl font-serif text-amber-100 mb-3" style={{ textShadow: "0 2px 4px #000" }}>{EVENT_TYPE_LABEL[draft.event_type]}</p>
-                    <p className="text-xs text-amber-50/85 max-w-md mx-auto mb-4" style={{ textShadow: "0 1px 3px #000" }}>{EVENT_TYPE_GUIDE[draft.event_type]}</p>
+                    <p className="text-xl font-serif text-[#2a1a0a] mb-3 font-semibold" style={{ textShadow: "0 1px 2px rgba(255,255,255,0.5)" }}>{EVENT_TYPE_LABEL[draft.event_type]}</p>
+                    <p className="text-xs text-[#3a2a18] max-w-md mx-auto mb-4">{EVENT_TYPE_GUIDE[draft.event_type]}</p>
                     <ImmersiveButton variant="clair" onClick={() => setRevealStage("risk_revealed")}>
                       Révéler le niveau de risque
                     </ImmersiveButton>
@@ -197,11 +197,11 @@ function EcrireRencontrePage() {
                 {revealStage === "risk_revealed" && (
                   <div className="ce-pop">
                     <img src={EVENT_TYPE_ICON[draft.event_type]} alt="" className="h-10 w-10 object-contain mx-auto mb-2 opacity-90" />
-                    <p className="text-sm text-amber-50/85 mb-1" style={{ textShadow: "0 1px 3px #000" }}>{EVENT_TYPE_LABEL[draft.event_type]}</p>
-                    <p className={`inline-block border ${RISK_BORDER[draft.risk_level]} px-3 py-1 text-lg font-serif mb-4 ${RISK_COLOR[draft.risk_level]}`} style={{ textShadow: "0 1px 3px #000" }}>
+                    <p className="text-sm text-[#3a2a18] mb-1">{EVENT_TYPE_LABEL[draft.event_type]}</p>
+                    <p className={`inline-block border ${RISK_BORDER[draft.risk_level]} px-3 py-1 text-lg font-serif mb-4 ${RISK_COLOR[draft.risk_level]}`}>
                       ⚠ Risque {RISK_LABEL[draft.risk_level]}
                     </p>
-                    <p className="text-sm text-amber-50/90 max-w-md mx-auto" style={{ textShadow: "0 1px 3px #000" }}>
+                    <p className="text-sm text-[#3a2a18] max-w-md mx-auto">
                       Tu viens de tirer les contraintes de ton événement. À toi maintenant d'imaginer une situation originale
                       qui respecte ce type et ce niveau de danger. Ton événement sera envoyé en modération avant d'intégrer le jeu.
                     </p>
