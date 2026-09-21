@@ -126,7 +126,7 @@ const DEATH_SCREEN = "/death_screen.webp";
 const RETURN_SUCCESS_IMGS = ["/return_success.webp", "/rentrer_safe.webp"];
 const RETURN_WIPE = "/return_wipe.webp";
 const CINEMATIC_TPK_IMG = "/cinematic_wipe.webp";
-const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death_bis.webp"]; // fallback générique quand le event_type n'a pas d'image d'échec dédiée
+const CINEMATIC_DEATH_IMGS = ["/step_fail.webp", "/cinematic_death.webp", "/cinematic_death_bis.webp"]; // fallback générique quand le event_type n'a pas d'image d'échec dédiée
 // Image d'échec spécifique par type d'événement — un mort après un coffre
 // piégé n'a plus le même visuel qu'un mort après un gardien. S'ajoute au
 // pool générique ci-dessus plutôt que de le remplacer, pour les types qui
@@ -1332,24 +1332,27 @@ function VotePage() {
     } else if (result.ended) {
       resultBg = isWipe ? CINEMATIC_TPK_IMG : result.deadNames.length > 0 ? RETURN_WIPE
         : ((resultImageVariant < 0.5 ? RETURN_SUCCESS_IMGS[0] : RETURN_SUCCESS_IMGS[1]) ?? RETURN_SUCCESS_IMGS[0]!);
-    } else if (result.deaths > 0) {
+    } else if (result.deaths > 0 || result.damageLog.length > 0) {
+      // Dégâts sans mort = échec côté image aussi, comme pour le texte
+      // (wentWrong) — avant, seule une mort faisait basculer l'image côté
+      // échec ; une étape avec dégâts mais sans mort tombait dans le pool
+      // de réussite, en contradiction avec le texte affiché juste à côté.
       // Image liée au type de l'événement qui vient de faire des dégâts,
       // quand elle existe ; repli sur le pool générique sinon.
       const echecPool = EVENT_ECHEC_IMAGES[result.eventType] ?? CINEMATIC_DEATH_IMGS;
       resultBg = echecPool[Math.floor(resultImageVariant * echecPool.length)] ?? echecPool[0]!;
     } else {
-      // L'image de l'étape elle-même rejoint le pool générique, tout comme
-      // l'image de réussite dédiée au type (coffre ouvert, découverte
-      // révélée...) quand elle existe, pour que "étape franchie" garde un
-      // vrai lien visuel avec ce qui vient de se passer plutôt que d'être
-      // toujours déconnecté de l'événement.
+      // L'image de réussite dédiée au type (coffre ouvert, découverte
+      // révélée...) passe en priorité quand elle existe. L'image de base
+      // (eventBg, celle du coffre encore fermé pendant le vote) ne sert de
+      // repli que s'il n'existe AUCUNE image de réussite dédiée pour ce
+      // type — avant, les deux étaient mélangées dans le même tirage
+      // aléatoire, donc une réussite pouvait montrer, par pur hasard, le
+      // coffre encore fermé.
       const reussitePool = EVENT_REUSSITE_IMAGES[result.eventType] ?? [];
-      const successPool = [
-        ...(eventBg ? [eventBg] : []),
-        ...reussitePool,
-        STEP_RESULT_SUCCESS,
-        ...CINEMATIC_SURVIVE_IMGS,
-      ];
+      const successPool = reussitePool.length > 0
+        ? [...reussitePool, STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS]
+        : [...(eventBg ? [eventBg] : []), STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS];
       resultBg = successPool[Math.floor(resultImageVariant * successPool.length)] ?? successPool[0]!;
     }
     // "Étape franchie" ne doit jamais s'afficher au-dessus d'un récit
