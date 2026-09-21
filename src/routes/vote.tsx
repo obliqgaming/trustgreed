@@ -233,6 +233,13 @@ function VotePage() {
   const [myDeathInheritance, setMyDeathInheritance] = useState<number>(0);
   const [myDeathDetails, setMyDeathDetails] = useState<{ level: number; goldLost: number; highestStep: number | null; damageTaken: number } | null>(null);
   const [step, setStep] = useState<Step | null>(null);
+  // Étape venant d'un événement communautaire : image dédiée (fournie par
+  // la modération, pas passée par le fondu parchemin — à préparer par
+  // Lils si elle veut le même traitement) + provenance affichée
+  // discrètement. Reste tout à null pour une étape normale (pas de
+  // template lié, ou template pas communautaire) : rien ne change alors
+  // dans l'affichage.
+  const [communityInfo, setCommunityInfo] = useState<{ isCommunity: boolean; imagePath: string | null; authorName: string | null; guildName: string | null } | null>(null);
   const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
   const [myGoldAdjustment, setMyGoldAdjustment] = useState(0);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -1224,6 +1231,21 @@ function VotePage() {
       setMyGoldAdjustment((myPart as any)?.personal_gold_adjustment ?? 0);
     })();
   }, [step?.id, step?.resolving, step?.resolved, expeditionId, character]);
+  // Une étape peut venir d'un template communautaire : image dédiée (si
+  // Lils en a attribué une en modération) et provenance à afficher
+  // discrètement. Un seul appel par étape.
+  useEffect(() => {
+    if (!step?.id) { setCommunityInfo(null); return; }
+    void (async () => {
+      const { data } = await supabase.rpc("get_step_community_info" as any, { p_step_id: step.id });
+      const row = (data as any)?.[0];
+      if (row?.is_community) {
+        setCommunityInfo({ isCommunity: true, imagePath: row.image_path ?? null, authorName: row.author_name ?? null, guildName: row.guild_name ?? null });
+      } else {
+        setCommunityInfo(null);
+      }
+    })();
+  }, [step?.id]);
   const deadlineExpired = !isAsync && timeLeft !== null && timeLeft <= 0;
   const canResolve = (allVoted || deadlineExpired) && step && !step.resolved && !step.resolving && !busy;
   const prevAllVoted = useRef(false);
@@ -1651,7 +1673,11 @@ function VotePage() {
             {/* 2 — SCÈNE : l'illustration seule, strictement 16:9, centrée dans le parchemin. */}
             <section className="absolute flex items-center justify-center overflow-hidden" style={{ left: "1.5%", right: "1.5%", top: "15.2%", height: "53.6%" }}>
               {step.description && (() => {
-                const parchmentBg = pickParchmentBg(step);
+                // Image dédiée d'un événement communautaire en priorité —
+                // pas encore passée par le fondu parchemin (Lils fournit
+                // le chemin tel quel en modération) ; sinon, le pool
+                // générique type+risque comme avant.
+                const parchmentBg = communityInfo?.imagePath || pickParchmentBg(step);
                 return (
                   <div className="relative overflow-hidden" style={{ height: "86%", aspectRatio: "16 / 9", maxWidth: "92%" }}>
                     {parchmentBg && <img src={parchmentBg} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" />}
@@ -1668,6 +1694,12 @@ function VotePage() {
                         </p>
                       </div>
                     </div>
+                    {communityInfo?.isCommunity && (
+                      <p className="absolute bottom-1 right-1.5 text-[9px] text-white/70 italic" style={{ textShadow: "0 1px 3px #000" }}>
+                        Événement imaginé par {communityInfo.authorName ?? "un joueur"}
+                        {communityInfo.guildName && <> — {communityInfo.guildName}</>}
+                      </p>
+                    )}
                   </div>
                 );
               })()}
