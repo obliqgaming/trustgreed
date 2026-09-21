@@ -73,6 +73,7 @@ function AdminPage() {
   const [pendingEvents, setPendingEvents] = useState<CommunityEvent[]>([]);
   const [imageDraft, setImageDraft] = useState<Record<string, string>>({});
   const [rejectDraft, setRejectDraft] = useState<Record<string, string>>({});
+  const [textDraft, setTextDraft] = useState<Record<string, { situation: string; success: string; failure: string }>>({});
 
   async function loadAll() {
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
@@ -176,10 +177,14 @@ function AdminPage() {
 
   async function moderateEvent(id: string, action: "approve" | "reject") {
     setBusy(`mod-${id}`); setError(null);
+    const edited = textDraft[id];
     const { error: rpcError } = await supabase.rpc("admin_moderate_community_event" as any, {
       p_event_id: id, p_action: action,
       p_image_path: action === "approve" ? (imageDraft[id]?.trim() || null) : null,
       p_rejection_reason: action === "reject" ? (rejectDraft[id]?.trim() || null) : null,
+      p_situation: action === "approve" ? (edited?.situation?.trim() || null) : null,
+      p_success: action === "approve" ? (edited?.success?.trim() || null) : null,
+      p_failure: action === "approve" ? (edited?.failure?.trim() || null) : null,
     });
     if (rpcError) setError(rpcError.message);
     else await loadAll();
@@ -282,7 +287,12 @@ function AdminPage() {
         )}
 
         {/* Rencontres communautaires — modération */}
-        <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Rencontres en attente de modération ({pendingEvents.length})</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground">Rencontres en attente de modération ({pendingEvents.length})</p>
+          <button onClick={() => void loadAll()} className="text-[10px] uppercase border border-border/40 text-muted-foreground px-2 py-1 hover:border-primary/40 hover:text-primary">
+            Actualiser
+          </button>
+        </div>
         {pendingEvents.length === 0 ? (
           <p className="text-xs text-muted-foreground/60 italic mb-4">Aucune.</p>
         ) : (
@@ -293,9 +303,18 @@ function AdminPage() {
                   <p className="mb-1.5">
                     <span className="text-primary">{e.character_name}</span> ({e.guild_name}) — {e.event_type} · risque {e.risk_level} · {e.cost_paid} or payé
                   </p>
-                  <p className="mb-1"><span className="text-muted-foreground">Situation :</span> {e.situation_text}</p>
-                  <p className="mb-1 text-emerald-300/90"><span className="text-muted-foreground">Réussite :</span> {e.success_text}</p>
-                  <p className="mb-2 text-red-300/90"><span className="text-muted-foreground">Échec :</span> {e.failure_text}</p>
+                  <label className="block text-[10px] text-muted-foreground mb-0.5">Situation (corrigeable avant validation)</label>
+                  <textarea value={textDraft[e.id]?.situation ?? e.situation_text} rows={2}
+                    onChange={(ev) => setTextDraft({ ...textDraft, [e.id]: { situation: ev.target.value, success: textDraft[e.id]?.success ?? e.success_text, failure: textDraft[e.id]?.failure ?? e.failure_text } })}
+                    className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs mb-1.5" />
+                  <label className="block text-[10px] text-emerald-400/80 mb-0.5">Réussite</label>
+                  <textarea value={textDraft[e.id]?.success ?? e.success_text} rows={2}
+                    onChange={(ev) => setTextDraft({ ...textDraft, [e.id]: { situation: textDraft[e.id]?.situation ?? e.situation_text, success: ev.target.value, failure: textDraft[e.id]?.failure ?? e.failure_text } })}
+                    className="w-full bg-transparent border border-emerald-400/30 px-1.5 py-1 text-xs mb-1.5" />
+                  <label className="block text-[10px] text-red-400/80 mb-0.5">Échec</label>
+                  <textarea value={textDraft[e.id]?.failure ?? e.failure_text} rows={2}
+                    onChange={(ev) => setTextDraft({ ...textDraft, [e.id]: { situation: textDraft[e.id]?.situation ?? e.situation_text, success: textDraft[e.id]?.success ?? e.success_text, failure: ev.target.value } })}
+                    className="w-full bg-transparent border border-red-400/30 px-1.5 py-1 text-xs mb-2" />
                   <label className="block text-[10px] text-muted-foreground mb-2">
                     Image (même format que les autres — chemin dans public/, ex. /event_ma_scene.webp). Laisser vide = parchemin nu en attendant.<br />
                     <input value={imageDraft[e.id] ?? ""} onChange={(ev) => setImageDraft({ ...imageDraft, [e.id]: ev.target.value })}

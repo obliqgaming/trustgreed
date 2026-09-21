@@ -142,8 +142,6 @@ function EcrireRencontrePage() {
       <style>{`
         @keyframes ce-pop { 0% { opacity: 0; transform: scale(0.7); } 100% { opacity: 1; transform: scale(1); } }
         .ce-pop { animation: ce-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
-        @keyframes ce-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-        .ce-pulse { animation: ce-pulse 1.8s ease-in-out infinite; }
       `}</style>
       <LedgerCard title="Investir une page de Donjon" subtitle="Paie, découvre ce que le sort t'impose, puis écris avec.">
         <LedgerError message={error} />
@@ -155,10 +153,6 @@ function EcrireRencontrePage() {
 
         {!draft || draft.status === "rejected" ? (
           <>
-            <p className="text-sm text-muted-foreground mb-2">
-              Tu ne choisis ni le type d'événement, ni son niveau de risque — les deux sont tirés au sort dès que tu paies.
-              À toi ensuite d'imaginer une situation originale qui respecte ce que le sort t'a donné.
-            </p>
             <p className="text-sm text-muted-foreground mb-4">
               Une fois validée, ta page rejoint le donjon commun. Toi et ta guilde touchez un peu d'or à chaque fois qu'un
               groupe tombe dessus — et davantage encore si c'est une guilde différente de la tienne qui la traverse.
@@ -172,40 +166,48 @@ function EcrireRencontrePage() {
           </>
         ) : draft.status === "drafting" ? (
           <>
-            {/* ============ Mise en scène du tirage, en deux temps ============ */}
-            <div className="border border-border/30 px-4 py-6 mb-5 text-center">
-              {revealStage === "sealed" && (
-                <div className="ce-pop">
-                  <p className="text-4xl mb-3 ce-pulse">❔</p>
-                  <p className="text-xs text-muted-foreground mb-4">Le tirage a eu lieu. Le sort a choisi — reste à le découvrir.</p>
-                  <ImmersiveButton variant="clair" onClick={() => setRevealStage("type_revealed")}>
-                    Révéler le type d'événement
-                  </ImmersiveButton>
-                </div>
-              )}
-              {revealStage === "type_revealed" && (
-                <div className="ce-pop">
-                  <img src={EVENT_TYPE_ICON[draft.event_type]} alt="" className="h-14 w-14 object-contain mx-auto mb-2" />
-                  <p className="text-xl font-serif text-primary mb-3">{EVENT_TYPE_LABEL[draft.event_type]}</p>
-                  <p className="text-xs text-muted-foreground/80 max-w-md mx-auto mb-4">{EVENT_TYPE_GUIDE[draft.event_type]}</p>
-                  <ImmersiveButton variant="clair" onClick={() => setRevealStage("risk_revealed")}>
-                    Révéler le niveau de risque
-                  </ImmersiveButton>
-                </div>
-              )}
-              {revealStage === "risk_revealed" && (
-                <div className="ce-pop">
-                  <img src={EVENT_TYPE_ICON[draft.event_type]} alt="" className="h-10 w-10 object-contain mx-auto mb-2 opacity-80" />
-                  <p className="text-sm text-muted-foreground mb-1">{EVENT_TYPE_LABEL[draft.event_type]}</p>
-                  <p className={`inline-block border ${RISK_BORDER[draft.risk_level]} px-3 py-1 text-lg font-serif mb-4 ${RISK_COLOR[draft.risk_level]}`}>
-                    ⚠ Risque {RISK_LABEL[draft.risk_level]}
-                  </p>
-                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                    Tu viens de tirer les contraintes de ton événement. À toi maintenant d'imaginer une situation originale
-                    qui respecte ce type et ce niveau de danger. Ton événement sera envoyé en modération avant d'intégrer le jeu.
-                  </p>
-                </div>
-              )}
+            {/* ============ Mise en scène du tirage, en deux temps, sur le
+                registre de la guilde. ============ */}
+            <div
+              className="relative overflow-hidden px-6 py-8 mb-5 text-center rounded-sm"
+              style={{ backgroundImage: "url(/register_book.webp)", backgroundSize: "cover", backgroundPosition: "center" }}
+            >
+              <div className="absolute inset-0 bg-black/55" />
+              <div className="relative">
+                {revealStage === "sealed" && (
+                  <div className="ce-pop">
+                    <p className="text-sm text-amber-100/90 mb-5" style={{ textShadow: "0 2px 4px #000" }}>
+                      Le registre attend d'être ouvert.
+                    </p>
+                    <ImmersiveButton variant="clair" onClick={() => setRevealStage("type_revealed")}>
+                      Tourner la page
+                    </ImmersiveButton>
+                  </div>
+                )}
+                {revealStage === "type_revealed" && (
+                  <div className="ce-pop">
+                    <img src={EVENT_TYPE_ICON[draft.event_type]} alt="" className="h-14 w-14 object-contain mx-auto mb-2" />
+                    <p className="text-xl font-serif text-amber-100 mb-3" style={{ textShadow: "0 2px 4px #000" }}>{EVENT_TYPE_LABEL[draft.event_type]}</p>
+                    <p className="text-xs text-amber-50/85 max-w-md mx-auto mb-4" style={{ textShadow: "0 1px 3px #000" }}>{EVENT_TYPE_GUIDE[draft.event_type]}</p>
+                    <ImmersiveButton variant="clair" onClick={() => setRevealStage("risk_revealed")}>
+                      Révéler le niveau de risque
+                    </ImmersiveButton>
+                  </div>
+                )}
+                {revealStage === "risk_revealed" && (
+                  <div className="ce-pop">
+                    <img src={EVENT_TYPE_ICON[draft.event_type]} alt="" className="h-10 w-10 object-contain mx-auto mb-2 opacity-90" />
+                    <p className="text-sm text-amber-50/85 mb-1" style={{ textShadow: "0 1px 3px #000" }}>{EVENT_TYPE_LABEL[draft.event_type]}</p>
+                    <p className={`inline-block border ${RISK_BORDER[draft.risk_level]} px-3 py-1 text-lg font-serif mb-4 ${RISK_COLOR[draft.risk_level]}`} style={{ textShadow: "0 1px 3px #000" }}>
+                      ⚠ Risque {RISK_LABEL[draft.risk_level]}
+                    </p>
+                    <p className="text-sm text-amber-50/90 max-w-md mx-auto" style={{ textShadow: "0 1px 3px #000" }}>
+                      Tu viens de tirer les contraintes de ton événement. À toi maintenant d'imaginer une situation originale
+                      qui respecte ce type et ce niveau de danger. Ton événement sera envoyé en modération avant d'intégrer le jeu.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {revealStage === "risk_revealed" && (

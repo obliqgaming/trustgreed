@@ -53,6 +53,21 @@ export function FramedBox({ frame, children, className = "" }: { frame: 2 | 3 | 
 // Boutons immersifs — deux ambiances opposées à dessein : "sombre" pour une
 // action de repli/renoncement, "clair" pour une action qui donne envie
 // d'avancer. Ne pas neutraliser cette opposition en les traitant pareil.
+//
+// Rendu en border-image (9-slice), comme FramedBox : avant, l'image de
+// fond était en `background-size: cover` sur une boîte dont la largeur
+// suit le texte — correct pour un texte court ("Carte"), mais dès qu'un
+// bouton porte une phrase plus longue ("Payer 300 or et tenter le
+// tirage"), la boîte s'élargit et l'image (sceau de cire à gauche, ruban
+// à droite, largeur fixe) se recadrait n'importe comment au lieu de
+// s'adapter. Avec border-image, les deux extrémités décoratives restent
+// fixes quelle que soit la largeur, seul le centre s'étire.
+// Slice mesuré sur le fichier réel (déjà recadré à sa zone opaque) — à
+// ajuster si un bouton très large ou très étroit montre encore un souci.
+const IMMERSIVE_SLICE: Record<"sombre" | "clair", string> = {
+  sombre: "90 260 140 300 fill",
+  clair: "90 260 140 300 fill",
+};
 export function ImmersiveButton({
   variant, onClick, disabled, children, className = "",
 }: {
@@ -67,12 +82,13 @@ export function ImmersiveButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`relative py-4 font-serif tracking-[0.14em] uppercase whitespace-nowrap inline-flex items-center justify-center transition-opacity disabled:opacity-30 hover:opacity-90 ${className}`}
+      className={`relative px-5 py-4 font-serif tracking-[0.14em] uppercase inline-flex items-center justify-center transition-opacity disabled:opacity-30 hover:opacity-90 ${className}`}
       style={{
-        backgroundImage: `url(/boutonimmersif${isSombre ? "" : "2"}.webp)`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
+        borderStyle: "solid",
+        borderWidth: "16px 50px 22px 55px",
+        borderImageSource: `url(/boutonimmersif${isSombre ? "" : "2"}.webp)`,
+        borderImageSlice: IMMERSIVE_SLICE[variant],
+        borderImageRepeat: "stretch",
         color: isSombre ? "#e8dcc0" : "#1a140a",
         textShadow: isSombre ? "0 1px 3px rgba(0,0,0,0.9)" : "0 1px 2px rgba(255,255,255,0.4)",
       }}
