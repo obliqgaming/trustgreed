@@ -449,8 +449,26 @@ function VotePage() {
 
     if (!row.resolved) {
       await fetchShieldVotes(row.id);
+
+      // Bug réel corrigé ici : en asynchrone, vote_deadline est fixé à
+      // +100 ans (voir finalize_resolution), donc la vérification du délai
+      // juste en dessous ne se déclenche jamais. Sans ce check d'unanimité
+      // — couvert à la fois par ce sondage toutes les 5s et par chaque
+      // vote individuel — même un vote unanime ne finalisait jamais le
+      // bouclier : il restait pendant jusqu'à ce que l'expédition se
+      // termine, et mourait avec elle (broken_reason: expedition_terminee)
+      // sans avoir jamais été porté par personne.
+      const { data: freshVotes } = await supabase
+        .from("step_shield_votes")
+        .select("target_character_id")
+        .eq("shield_id", row.id);
+      const tallyNow: Record<string, number> = {};
+      for (const v of (freshVotes as any[]) ?? []) tallyNow[v.target_character_id] = (tallyNow[v.target_character_id] ?? 0) + 1;
+      const aliveNow = aliveParticipants.length;
+      const unanimousTarget = aliveNow > 0 ? Object.entries(tallyNow).find(([, count]) => count >= aliveNow) : null;
+
       const deadlinePassed = new Date(row.vote_deadline) <= new Date();
-      if (deadlinePassed) {
+      if (deadlinePassed || unanimousTarget) {
         await supabase.rpc("resolve_shield_vote" as any, { p_shield_id: row.id });
         // Pas de garde ici : même principe que finalize_resolution plus haut
         // (course normale entre clients, la fonction est idempotente côté
@@ -463,7 +481,7 @@ function VotePage() {
         if (fresh) setShield(fresh as any);
       }
     }
-  }, [expeditionId, fetchShieldVotes]);
+  }, [expeditionId, fetchShieldVotes, aliveParticipants]);
 
   async function voteShield(targetId: string) {
     if (!shield || !character) return;
@@ -474,7 +492,10 @@ function VotePage() {
       p_shield_id: shield.id, p_voter_character_id: character.id, p_target_character_id: next,
     });
     if (rpcError) setError(rpcError.message);
-    await fetchShieldVotes(shield.id);
+    // fetchShield() (pas juste fetchShieldVotes) : elle vérifie aussi si ce
+    // vote vient d'atteindre l'unanimité et finalise le bouclier si c'est
+    // le cas — voir le commentaire dans fetchShield.
+    await fetchShield();
     setShieldBusy(false);
   }
 
