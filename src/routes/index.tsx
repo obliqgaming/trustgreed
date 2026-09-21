@@ -325,18 +325,23 @@ function Index() {
 
             {/* Bouton expédition */}
             {!activeExpedition && (
-              <div className="mb-4">
+              <div className="mb-2">
                 <p className="text-xs text-muted-foreground text-center mb-1.5">
                   {members.length} membre{members.length > 1 ? "s" : ""} vivant{members.length > 1 ? "s" : ""} dans la guilde
                 </p>
-                <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/expedition" })} className="w-full mb-2">
+                <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/expedition" })} className="w-full">
                   Partir en expédition
-                </ImmersiveButton>
-                <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/ecrire-rencontre" })} className="w-full">
-                  Investir le Donjon
                 </ImmersiveButton>
               </div>
             )}
+            {/* Toujours visible, qu'une expédition soit en cours ou non —
+                écrire une rencontre n'a aucun lien avec le fait d'être
+                actuellement en expédition. */}
+            <div className="mb-4">
+              <ImmersiveButton variant="clair" onClick={() => navigate({ to: "/ecrire-rencontre" })} className="w-full">
+                Investir le Donjon
+              </ImmersiveButton>
+            </div>
 
             {/* Historique — dans le grand cadre, c'est ce qui grandit le plus */}
             <Frame variant="journal" contentClassName="!flex-col !items-stretch !justify-start text-left !inset-[14%_16%_15%_18%]">
