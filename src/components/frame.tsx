@@ -114,7 +114,12 @@ export function DecorativeBorder({ variant = "wide", className = "" }: { variant
         borderImageSource: `url(${cfg.src})`,
         borderImageSlice: `${cfg.slice} fill`,
         borderImageWidth: "8%",
-        borderImageRepeat: "round",
+        // "round" (avant) tentait de répéter un nombre entier de fois sur
+        // la longueur du bord, ce qui crée des coutures/déformations
+        // visibles dès que ça ne tombe pas juste — même défaut que sur les
+        // boutons, même correctif : un étirement continu, sans essayer de
+        // faire un nombre entier de motifs.
+        borderImageRepeat: "stretch",
       }}
     />
   );
