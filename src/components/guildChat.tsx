@@ -43,15 +43,22 @@ export function GuildChatBox({ guildId, characterId }: { guildId: string; charac
   }, [guildId, fetchMessages]);
 
   // Ne fait défiler automatiquement vers le bas que si le joueur était déjà
-  // proche du bas (ou que c'est lui qui vient d'envoyer un message) — avant,
-  // ça sautait tout en bas à chaque nouveau message reçu, même en train de
-  // relire plus haut, ce qui rendait le chat pénible sur mobile.
+  // proche du bas (ou que c'est lui qui vient d'envoyer un message) — sauf
+  // au tout premier chargement, qui doit toujours atterrir en bas (pas de
+  // position de lecture à respecter à l'arrivée).
   const prevMsgCount = useRef(0);
   const sentByMeRef = useRef(false);
+  const initialScrollDone = useRef(false);
   useEffect(() => {
     const grew = messages.length > prevMsgCount.current;
+    const isInitialLoad = !initialScrollDone.current && messages.length > 0;
     prevMsgCount.current = messages.length;
-    if (!grew) return;
+    if (!grew && !isInitialLoad) return;
+    if (isInitialLoad) {
+      initialScrollDone.current = true;
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      return;
+    }
     const box = scrollBoxRef.current;
     const wasNearBottom = box
       ? box.scrollHeight - box.scrollTop - box.clientHeight < 60

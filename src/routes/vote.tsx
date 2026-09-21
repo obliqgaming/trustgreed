@@ -880,6 +880,21 @@ function VotePage() {
   }
 
   async function showStepResult(stepId: string, eventType: string, deathsCountHint: number, isRetreat: boolean = false) {
+    try {
+      await showStepResultInner(stepId, eventType, deathsCountHint, isRetreat);
+    } catch (err) {
+      // Si une des requêtes de ce récapitulatif échoue (ex. la mort vient de
+      // se produire et une requête annexe — comme l'or hérité — bute sur un
+      // souci passager), on ne doit surtout pas rester bloqué indéfiniment :
+      // resultShownRef avait déjà été mis à true avant cet appel, donc sans
+      // ce filet, plus aucune tentative automatique ne se relance et seul un
+      // F5 (qui réinitialise l'état React) permet de revoir l'écran.
+      console.error("[showStepResult] échec, nouvelle tentative au prochain sondage", err);
+      resultShownRef.current = false;
+    }
+  }
+
+  async function showStepResultInner(stepId: string, eventType: string, deathsCountHint: number, isRetreat: boolean = false) {
     const { data: resolvedStep } = await supabase
       .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded, resolution_type, situation_success_text, situation_failure_text").eq("id", stepId).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
@@ -1535,7 +1550,11 @@ function VotePage() {
                       title="Pousser cette personne devant pour la prochaine étape"
                       className={`text-[10px] uppercase tracking-[0.05em] border px-1.5 py-0.5 whitespace-nowrap ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/25 text-muted-foreground/55 hover:border-amber-400/40 hover:text-amber-300"}`}
                     >
-                      Pousser devant{votes > 0 ? ` (${votes})` : ""}
+                      {/* Le compte de votes reste caché à la personne visée
+                          elle-même — sinon voir "on veut te pousser" en
+                          boucle décourage de continuer à jouer. Les autres
+                          le voient normalement. */}
+                      Pousser devant{votes > 0 && !isMe ? ` (${votes})` : ""}
                     </button>
                   )}
                   {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
@@ -1650,7 +1669,7 @@ function VotePage() {
             <section className="absolute flex flex-col px-[4.5%] pt-1.5 pb-2" style={{ left: 0, right: 0, top: "69.8%", bottom: "2.1%" }}>
               <div className="shrink-0 flex flex-col items-center justify-center gap-1.5 mb-2 min-h-[34px] text-center">
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground/78 max-w-[94%]">
-                  <span>{isAsync ? "Aucune limite de temps — en attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
+                  <span>{isAsync ? "En attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
                   <span className="opacity-40">•</span>
                   <span>Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}</span>
                 </div>
@@ -1721,7 +1740,7 @@ function VotePage() {
                               ? "butin plus élevé que Continuer"
                               : step.third_option_loot_max! <= step.loot_min
                                 ? "butin plus faible que Continuer"
-                                : "butin comparable à Continuer")
+                                : null)
                           : null;
                         return (
                           <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
@@ -2076,7 +2095,7 @@ function LarcenyButton({ expeditionId, step, character, aliveParticipants, compa
         <option value="guilde" className="bg-background text-foreground">Le pot commun de la guilde (2% du butin — échec révélé à toute la guilde)</option>
         {others.map(p => (
           <option key={p.character_id} value={p.character_id} className="bg-background text-foreground">
-            {p.character.name} (20% de sa part estimée — reste secret quoi qu'il arrive)
+            {p.character.name} (20% de sa part estimée — succès anonyme, mais en cas d'échec elle apprendra ton nom)
           </option>
         ))}
       </select>
@@ -2193,14 +2212,23 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   }, [fetchMessages, expeditionId]);
 
   // Ne fait défiler vers le bas que si on était déjà proche du bas (ou si
-  // c'est nous qui venons d'écrire) — avant, ça sautait tout en bas à
-  // chaque message reçu, y compris en train de relire plus haut.
+  // c'est nous qui venons d'écrire) — sauf au tout premier chargement, où
+  // il n'y a pas de "position de lecture" à respecter : on doit atterrir
+  // en bas d'office, comme n'importe quel chat. Avant, arriver sur une
+  // conversation déjà longue ouvrait en haut plutôt qu'en bas.
   const prevMsgCount = useRef(0);
   const sentByMeRef = useRef(false);
+  const initialScrollDone = useRef(false);
   useEffect(() => {
     const grew = messages.length > prevMsgCount.current;
+    const isInitialLoad = !initialScrollDone.current && messages.length > 0;
     prevMsgCount.current = messages.length;
-    if (!grew) return;
+    if (!grew && !isInitialLoad) return;
+    if (isInitialLoad) {
+      initialScrollDone.current = true;
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      return;
+    }
     const box = scrollBoxRef.current;
     const wasNearBottom = box
       ? box.scrollHeight - box.scrollTop - box.clientHeight < 60
