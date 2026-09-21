@@ -76,6 +76,11 @@ const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string
   gardien: { faible: "/event_gardien_faible.webp", moyen: "/event_gardien_moyen.webp", eleve: "/event_gardien_eleve.webp" },
   porte: { faible: "/event_porte_faible.webp", moyen: "/event_porte_moyen.webp", eleve: "/event_porte_eleve.webp" },
   passage: { faible: "/event_passage_faible.webp", moyen: "/event_passage_moyen.webp", eleve: "/event_passage_eleve.webp" },
+  // Découverte n'avait encore aucune variante de risque (toutes les
+  // étapes, quel que soit le palier, partageaient la même image
+  // générique) — celle-ci ne sert que pour le palier élevé, les
+  // paliers faible/moyen retombent toujours sur le pool générique.
+  decouverte: { eleve: "/event_decouverte_eleve.webp" },
 };
 // Callbacks avec une image dédiée plutôt que le pool générique de leur type.
 const CALLBACK_IMAGES: Record<string, string> = {
