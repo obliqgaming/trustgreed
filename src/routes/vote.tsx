@@ -33,7 +33,7 @@ type Step = {
   death_percentage: number; third_option_death_pct: number | null;
 };
 type Participant = { character_id: string; is_alive: boolean; character: { name: string; portrait: string; declared_vocation: string | null; is_bot?: boolean; hp?: number; level?: number } };
-type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[]; frontlineNarrative: string | null; eventType: string };
+type Result = { deaths: number; loot: number; ended: boolean; deadNames: string[]; cinematic: string; iDied: boolean; stepLoot: number; totalSoFar: number; xpAwarded: number; survivorNames: string[]; resolutionType: string | null; damageLog: { name: string; damage: number }[]; frontlineNarrative: string | null; eventType: string; riskLevel: string };
 
 // Icônes de type d'étape à côté du titre — un sous-ensemble a une icône
 // dédiée (fournie), les autres réutilisent l'icône la plus proche
@@ -187,6 +187,18 @@ const EVENT_ECHEC_IMAGES: Partial<Record<string, string[]>> = {
   marchand: ["/marchand_echec_v1.webp"],
   decouverte: ["/decouverte_echec.webp"],
 };
+// Variantes d'échec pour les paliers moyen/élevé — mutualisées entre les
+// deux (l'écart d'enjeu entre moyen et élevé ne justifie pas 2 images
+// séparées), le pool générique ci-dessus reste le fallback pour faible.
+const EVENT_ECHEC_IMAGES_HIGH_RISK: Partial<Record<string, string>> = {
+  coffre: "/coffre_echec_v2.webp",
+  gardien: "/gardien_echec_v2.webp",
+  porte: "/porte_echec_v2.webp",
+  passage: "/passage_echec_v2.webp",
+  rencontre: "/rencontre_echec_v2.webp",
+  traces: "/traces_echec_v3.webp",
+  decouverte: "/decouverte_echec_v2.webp",
+};
 const CINEMATIC_SURVIVE_IMGS = ["/cinematic_survive.webp", "/cinematic_survive_bis.webp"];
 // Symétrique de EVENT_ECHEC_IMAGES côté réussite — une réussite de coffre
 // (couvercle ouvert, or qui déborde) n'a rien à voir avec une réussite de
@@ -202,6 +214,17 @@ const EVENT_REUSSITE_IMAGES: Partial<Record<string, string[]>> = {
   porte: ["/porte_reussite.webp"],
   rencontre: ["/rencontre_reussite.webp"],
   traces: ["/traces_reussite.webp"],
+};
+// Variantes de réussite pour les paliers moyen/élevé — même logique de
+// mutualisation que EVENT_ECHEC_IMAGES_HIGH_RISK.
+const EVENT_REUSSITE_IMAGES_HIGH_RISK: Partial<Record<string, string>> = {
+  coffre: "/coffre_reussite_v3.webp",
+  gardien: "/gardien_reussite_v2.webp",
+  porte: "/porte_reussite_v2.webp",
+  passage: "/passage_reussite_v2.webp",
+  rencontre: "/rencontre_reussite_v2.webp",
+  traces: "/traces_reussite_v2.webp",
+  decouverte: "/decouverte_reussite_v3.webp",
 };
 const PILLAGE_SUCCESS_IMG = "/pillage_reussi.webp";
 const PILLAGE_FAIL_IMG = "/pillage_echoue.webp";
@@ -1005,7 +1028,7 @@ function VotePage() {
 
   async function showStepResultInner(stepId: string, eventType: string, deathsCountHint: number, isRetreat: boolean = false) {
     const { data: resolvedStep } = await supabase
-      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded, resolution_type, situation_success_text, situation_failure_text").eq("id", stepId).maybeSingle();
+      .from("expedition_steps").select("deaths_count, loot_earned, xp_awarded, resolution_type, situation_success_text, situation_failure_text, risk_level").eq("id", stepId).maybeSingle();
     const deaths = resolvedStep?.deaths_count ?? deathsCountHint ?? 0;
     const resolutionType = resolvedStep?.resolution_type ?? null;
 
@@ -1167,6 +1190,7 @@ function VotePage() {
       damageLog,
       frontlineNarrative,
       eventType,
+      riskLevel: resolvedStep?.risk_level ?? "faible",
     });
   }
 
@@ -1463,8 +1487,11 @@ function VotePage() {
       // de réussite, en contradiction avec le texte affiché juste à côté.
       // Image liée au type de l'événement qui vient de faire des dégâts,
       // quand elle existe ; repli sur le pool générique sinon.
+      // Palier moyen/élevé : l'image plus intense passe en priorité quand
+      // elle existe pour ce type ; sinon on retombe sur le pool générique.
+      const echecHigh = result.riskLevel !== "faible" ? EVENT_ECHEC_IMAGES_HIGH_RISK[result.eventType] : undefined;
       const echecPool = EVENT_ECHEC_IMAGES[result.eventType] ?? CINEMATIC_DEATH_IMGS;
-      resultBg = echecPool[Math.floor(resultImageVariant * echecPool.length)] ?? echecPool[0]!;
+      resultBg = echecHigh ?? (echecPool[Math.floor(resultImageVariant * echecPool.length)] ?? echecPool[0]!);
     } else {
       // L'image de réussite dédiée au type (coffre ouvert, découverte
       // révélée...) passe en priorité quand elle existe. L'image de base
@@ -1473,11 +1500,12 @@ function VotePage() {
       // type — avant, les deux étaient mélangées dans le même tirage
       // aléatoire, donc une réussite pouvait montrer, par pur hasard, le
       // coffre encore fermé.
+      const reussiteHigh = result.riskLevel !== "faible" ? EVENT_REUSSITE_IMAGES_HIGH_RISK[result.eventType] : undefined;
       const reussitePool = EVENT_REUSSITE_IMAGES[result.eventType] ?? [];
       const successPool = reussitePool.length > 0
         ? [...reussitePool, STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS]
         : [...(eventBg ? [eventBg] : []), STEP_RESULT_SUCCESS, ...CINEMATIC_SURVIVE_IMGS];
-      resultBg = successPool[Math.floor(resultImageVariant * successPool.length)] ?? successPool[0]!;
+      resultBg = reussiteHigh ?? (successPool[Math.floor(resultImageVariant * successPool.length)] ?? successPool[0]!);
     }
     // "Étape franchie" ne doit jamais s'afficher au-dessus d'un récit
     // d'échec accompagné de dégâts réels — avant, le titre ne regardait que
