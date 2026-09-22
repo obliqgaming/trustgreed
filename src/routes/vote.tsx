@@ -94,8 +94,12 @@ const EVENT_IMAGES: Record<string, string[]> = {
 };
 // Variantes supplémentaires selon le palier de risque — s'ajoutent au pool
 // ci-dessus, ne le remplacent jamais.
-const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string>>>> = {
-  coffre: { faible: "/event_coffre_faible.webp", moyen: "/event_coffre_moyen.webp", eleve: "/event_coffre_eleve.webp" },
+const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string | string[]>>>> = {
+  coffre: {
+    faible: ["/event_coffre_faible.webp", "/event_c_cassette.webp", "/event_c_couverture.webp"],
+    moyen: ["/event_coffre_moyen.webp", "/event_c_chaines.webp", "/event_c_trois.webp", "/event_c_cire.webp"],
+    eleve: "/event_coffre_eleve.webp",
+  },
   gardien: { faible: "/event_gardien_faible.webp", moyen: "/event_gardien_moyen.webp", eleve: "/event_gardien_eleve.webp" },
   porte: { faible: "/event_porte_faible.webp", moyen: "/event_porte_moyen.webp", eleve: "/event_porte_eleve.webp" },
   passage: { faible: "/event_passage_faible.webp", moyen: "/event_passage_moyen.webp", eleve: "/event_passage_eleve.webp" },
@@ -126,7 +130,13 @@ function pickEventBg(step: { id: string; event_type: string; risk_level: string;
   // indépendant du risque réellement affiché au joueur ("Risque Élevé" à
   // l'écran, mais l'image neutre affichée une fois sur deux, ou l'inverse).
   const riskVariant = EVENT_IMAGES_BY_RISK[step.event_type]?.[step.risk_level];
-  if (riskVariant) return riskVariant;
+  if (riskVariant) {
+    if (Array.isArray(riskVariant)) {
+      const idx = step.id.charCodeAt(0) % riskVariant.length;
+      return riskVariant[idx] ?? riskVariant[0] ?? "";
+    }
+    return riskVariant;
+  }
   // Sinon (type sans variante de risque dédiée), tirage par hash dans le
   // pool générique du type, comme avant — là, la variété n'a pas besoin
   // d'être ancrée sur quoi que ce soit.
