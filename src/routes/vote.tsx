@@ -105,7 +105,11 @@ const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string
     moyen: ["/event_gardien_moyen.webp", "/event_g_chaines_porte.webp", "/event_g_immobile.webp"],
     eleve: ["/event_gardien_eleve.webp", "/event_g_geant.webp", "/event_g_pierre.webp"],
   },
-  porte: { faible: "/event_porte_faible.webp", moyen: "/event_porte_moyen.webp", eleve: "/event_porte_eleve.webp" },
+  porte: {
+    faible: ["/event_porte_faible.webp", "/event_po_trou.webp", "/event_po_noms.webp", "/event_po_cle.webp"],
+    moyen: ["/event_porte_moyen.webp", "/event_po_barres.webp", "/event_po_rouille.webp", "/event_po_notes.webp"],
+    eleve: ["/event_porte_eleve.webp", "/event_po_griffures.webp", "/event_po_cloches.webp", "/event_po_sang.webp"],
+  },
   passage: {
     faible: ["/event_passage_faible.webp", "/event_pa_racines.webp"],
     moyen: "/event_passage_moyen.webp",
@@ -1528,8 +1532,13 @@ function VotePage() {
       : "Le groupe avance.";
     return (
       <LedgerPage maxWidthClass="max-w-2xl">
-        <div style={{position:"fixed",inset:0,zIndex:0,backgroundImage:`url(${resultBg})`,backgroundSize:"cover",backgroundPosition:"center",filter:"brightness(0.25)"}} />
         <LedgerCard title={title} subtitle={subtitle}>
+          {/* Image en fenêtre 16:9, comme le panneau de vote — les crops de
+              planches groupées n'ont pas la résolution native pour couvrir
+              tout l'écran sans flou, donc on ne le tente plus. */}
+          <div className="relative overflow-hidden mx-auto mb-5 rounded-sm" style={{ aspectRatio: "16 / 9", maxWidth: "50%" }}>
+            <img src={resultBg} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" />
+          </div>
           <p className="text-lg md:text-xl text-muted-foreground italic mb-4 leading-relaxed text-center">{result.cinematic}</p>
 
           {result.frontlineNarrative && (
