@@ -1017,30 +1017,6 @@ function VocationPanel({ vocationId, characterId, declaredVocation }: { vocation
       <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-1">Ta vocation</p>
       <p className="text-sm font-serif text-primary">{vocationLabel(vocationId)}</p>
       <p className="text-xs text-muted-foreground mt-1">{VOCATIONS.find(v => v.id === vocationId)?.description}</p>
-
-      {vocationId === "Traitre" && (
-        <div className="mt-3 pt-3 border-t border-border/20">
-          <p className="text-xs text-muted-foreground mb-2">
-            Vocation actuellement déclarée publiquement : <span className="text-primary font-serif">{currentDeclared ? vocationLabel(currentDeclared) : vocationLabel(vocationId)}</span>
-            {currentDeclared && currentDeclared !== vocationId && <span className="text-amber-400"> (mensonge actif)</span>}
-          </p>
-          {!declaring ? (
-            <button onClick={() => setDeclaring(true)} className="text-xs uppercase tracking-[0.1em] border border-border/40 text-muted-foreground px-2.5 py-1 hover:bg-white/5">
-              Mentir sur ma vocation déclarée
-            </button>
-          ) : (
-            <>
-              <VocationPicker value={lie} onChange={setLie} title="Vocation à déclarer publiquement (modifiable à volonté)" />
-              <LedgerError message={error} />
-              {notice && <p className="text-xs text-emerald-400 mt-2">{notice}</p>}
-              <button onClick={submitLie} disabled={!lie || busy}
-                className="mt-3 w-full text-xs uppercase tracking-[0.1em] border border-primary/50 text-primary px-3 py-1.5 hover:bg-primary/10 disabled:opacity-30">
-                {busy ? "…" : "Valider ce mensonge"}
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }

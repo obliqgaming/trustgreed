@@ -846,15 +846,6 @@ function VotePage() {
     setVocationBusy(null);
   }
 
-  async function useGambit() {
-    if (!step || !character) return;
-    setVocationError(null); setVocationBusy("gambit");
-    const { error: rpcError } = await supabase.rpc("trigger_traitre_gambit", { p_step_id: step.id, p_character_id: character.id });
-    if (rpcError) setVocationError(rpcError.message);
-    else setUsedAbilities(prev => new Set(prev).add("traitre_gambit"));
-    setVocationBusy(null);
-  }
-
   async function useMartyrProvocation() {
     if (!step || !character) return;
     setVocationError(null); setVocationBusy("martyr_provocation");
@@ -864,12 +855,21 @@ function VotePage() {
     setVocationBusy(null);
   }
 
-  async function useTraitreVente() {
+  async function useMiracleBet() {
     if (!step || !character) return;
-    setVocationError(null); setVocationBusy("traitre_vente");
-    const { error: rpcError } = await supabase.rpc("trigger_traitre_vente" as any, { p_step_id: step.id, p_character_id: character.id });
+    setVocationError(null); setVocationBusy("miracle_bet");
+    const { error: rpcError } = await supabase.rpc("use_miracle_bet" as any, { p_step_id: step.id, p_character_id: character.id });
     if (rpcError) setVocationError(rpcError.message);
-    else setUsedAbilities(prev => new Set(prev).add("traitre_vente"));
+    else setUsedAbilities(prev => new Set(prev).add("miracle_bet"));
+    setVocationBusy(null);
+  }
+
+  async function useTresorierSecure() {
+    if (!character) return;
+    setVocationError(null); setVocationBusy("tresorier_secure");
+    const { error: rpcError } = await supabase.rpc("use_tresorier_secure" as any, { p_character_id: character.id, p_expedition_id: expeditionId });
+    if (rpcError) setVocationError(rpcError.message);
+    else setUsedAbilities(prev => new Set(prev).add("tresorier_secure"));
     setVocationBusy(null);
   }
 
@@ -1904,21 +1904,18 @@ function VotePage() {
                           {usedAbilities.has("martyr_provocation") && (
                             <p className="text-[10px] text-red-300/65 italic px-1">L'étape est déjà réglée, le résultat arrive.</p>
                           )}
-                          {myVocation === "Traitre" && !usedAbilities.has("traitre_gambit") && (
-                            <button onClick={useGambit} disabled={vocationBusy === "gambit"} className="w-full text-[10px] leading-tight border border-amber-400/35 text-amber-300 px-2 py-1.5 hover:bg-amber-400/10 disabled:opacity-30">
-                              {vocationBusy === "gambit" ? "…" : "Manigancer une mise trafiquée (+ butin, + risque du groupe)"}
+                          {myVocation === "Miracule" && !usedAbilities.has("miracle_bet") && (
+                            <button onClick={useMiracleBet} disabled={vocationBusy === "miracle_bet"} className="w-full text-[10px] leading-tight border border-sky-400/35 text-sky-300 px-2 py-1.5 hover:bg-sky-400/10 disabled:opacity-30">
+                              {vocationBusy === "miracle_bet" ? "…" : "Miser mon miracle sur cette étape (une fois par expédition)"}
                             </button>
                           )}
-                          {usedAbilities.has("traitre_gambit") && <p className="text-[10px] text-amber-300/65 italic px-1">La mise est lancée pour cette étape.</p>}
-                          {myVocation === "Traitre" && step.event_type === "marchand" && !usedAbilities.has("traitre_vente") && (
-                            <div>
-                              <p className="text-[9px] text-muted-foreground/60 mb-1">Disponible car tu es Traître</p>
-                              <button onClick={useTraitreVente} disabled={vocationBusy === "traitre_vente"} className="w-full text-[10px] leading-tight border border-amber-400/35 text-amber-300 px-2 py-1.5 hover:bg-amber-400/10 disabled:opacity-30">
-                                {vocationBusy === "traitre_vente" ? "…" : "Vendre la position du groupe (or personnel, en secret)"}
-                              </button>
-                            </div>
+                          {usedAbilities.has("miracle_bet") && <p className="text-[10px] text-sky-300/65 italic px-1">Si tu devais mourir à cette résolution, tu survis à 1 PV.</p>}
+                          {myVocation === "Tresorier" && !usedAbilities.has("tresorier_secure") && (
+                            <button onClick={useTresorierSecure} disabled={vocationBusy === "tresorier_secure"} className="w-full text-[10px] leading-tight border border-amber-400/35 text-amber-300 px-2 py-1.5 hover:bg-amber-400/10 disabled:opacity-30">
+                              {vocationBusy === "tresorier_secure" ? "…" : "Mettre 30% du butin à l'abri (une fois par expédition)"}
+                            </button>
                           )}
-                          {usedAbilities.has("traitre_vente") && <p className="text-[10px] text-amber-300/65 italic px-1">Personne ne sait ce que tu as fait. Pour l'instant.</p>}
+                          {usedAbilities.has("tresorier_secure") && <p className="text-[10px] text-amber-300/65 italic px-1">Cette part est acquise même si l'expédition tourne mal.</p>}
                         </>
                       )}
                       {step.event_type === "marchand" && !step.resolving && !step.resolved && <PotionShop step={step} character={character} expeditionId={expeditionId} />}

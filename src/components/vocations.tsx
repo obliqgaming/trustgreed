@@ -1,13 +1,12 @@
-export type VocationId = "Eclaireur" | "Tresorier" | "Miracule" | "Pingre" | "Martyr" | "Traitre" | "Inquisiteur";
+export type VocationId = "Eclaireur" | "Tresorier" | "Miracule" | "Pingre" | "Martyr" | "Inquisiteur";
 
 export const VOCATIONS: { id: VocationId; label: string; description: string }[] = [
-  { id: "Eclaireur", label: "Éclaireur", description: "Peut se révéler à lui-même le vrai risque de mort de l'étape en cours (1×/expédition)." },
-  { id: "Tresorier", label: "Trésorier", description: "Réduit la ponction sur le trésor commun en cas de mort pendant l'expédition." },
-  { id: "Miracule", label: "Miraculé", description: "Échappe automatiquement au tirage au sort des morts, une seule fois dans sa vie." },
-  { id: "Pingre", label: "Pingre", description: "Augmente le butin de l'expédition, mais s'expose davantage lui-même au tirage des morts." },
-  { id: "Martyr", label: "Martyr", description: "Peut s'armer pour intercepter, à sa place, le plus gros coup qui aurait tué quelqu'un d'autre à l'étape en cours (1×/expédition)." },
-  { id: "Traitre", label: "Traître", description: "Peut mentir sur sa vocation déclarée, et manigancer une mise trafiquée : plus de butin, mais plus de risque pour tout le groupe (1×/expédition)." },
-  { id: "Inquisiteur", label: "Inquisiteur", description: "Peut vérifier en privé si la vocation déclarée d'un personnage est authentique." },
+  { id: "Eclaireur", label: "Éclaireur", description: "Voit en permanence, et pour lui seul, le pourcentage de risque exact de l'étape en cours." },
+  { id: "Tresorier", label: "Trésorier", description: "Une fois par expédition, met 30% du butin accumulé à l'abri d'un anéantissement total — guilde et part personnelle de chacun." },
+  { id: "Miracule", label: "Miraculé", description: "Une fois par expédition, peut miser son miracle sur l'étape en cours : s'il devait mourir à cette résolution, il survit à 1 PV." },
+  { id: "Pingre", label: "Opportuniste", description: "Une fois par expédition, augmente publiquement le butin de l'étape de 50% — en échange, reçoit le plus gros paquet de dégâts si l'étape échoue." },
+  { id: "Martyr", label: "Martyr", description: "Désigne quelqu'un à chaque étape : si cette personne devait recevoir un coup mortel, le Martyr le prend à sa place. Redésignable gratuitement tant que ça ne s'est jamais déclenché." },
+  { id: "Inquisiteur", label: "Inquisiteur", description: "Une fois par expédition, désigne un joueur pour l'étape : à la résolution, voit son vote réel, qui il a tenté de pousser devant, s'il a tenté un larcin, et s'il a utilisé une capacité secrète." },
 ];
 
 export function vocationLabel(id: string | null | undefined): string {
