@@ -73,9 +73,23 @@ const EVENT_IMAGES: Record<string, string[]> = {
   porte: ["/event_porte.webp"],
   gardien: ["/event_gardien.webp"],
   passage: ["/event_passage.webp"],
-  rencontre: ["/event_rencontre.webp", "/event_rencontre_bis.webp"],
-  decouverte: ["/event_decouverte.webp"],
-  traces: ["/event_traces.webp"],
+  rencontre: [
+    "/event_rencontre.webp", "/event_rencontre_bis.webp",
+    "/event_r_feu.webp", "/event_r_barricade.webp",
+    "/event_r_procession.webp", "/event_r_table.webp",
+  ],
+  decouverte: [
+    "/event_decouverte.webp",
+    "/event_d_masque.webp", "/event_d_cloche.webp",
+    "/event_d_livre.webp", "/event_d_bottes.webp",
+    "/event_d_main.webp",
+  ],
+  traces: [
+    "/event_traces.webp",
+    "/event_t_fleches1.webp", "/event_t_fleches2.webp",
+    "/event_t_cle1.webp", "/event_t_cle2.webp",
+    "/event_t_pendu.webp", "/event_t_mains.webp",
+  ],
   marchand: ["/event_marchand.webp", "/event_marchand_bis.webp"],
 };
 // Variantes supplémentaires selon le palier de risque — s'ajoutent au pool
