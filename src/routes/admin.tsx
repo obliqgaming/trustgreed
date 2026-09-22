@@ -23,7 +23,7 @@ type CommunityEvent = {
   status: string; situation_text: string; success_text: string; failure_text: string;
   cost_paid: number; created_at: string; submitted_at: string | null;
 };
-type Prices = { potion_base: number; potion_growth: number; potion_step_scale: number; community_event_cost: number };
+type Prices = { potion_base: number; potion_growth: number; potion_step_scale: number; community_event_cost: number; community_event_author_gold: number; community_event_guild_gold: number; community_event_cross_guild_multiplier: number };
 
 const RISK_LEVELS = ["faible", "moyen", "eleve"] as const;
 
@@ -208,6 +208,16 @@ function AdminPage() {
 
   const abandonedCount = guilds.filter(g => g.member_count === 0 && g.history_count === 0).length;
 
+  const [poolRisk, setPoolRisk] = useState<"faible" | "moyen" | "eleve">("faible");
+  const [poolResults, setPoolResults] = useState<{ id: string; event_type: string; is_community: boolean; author_name: string | null; guild_name: string | null; situation_preview: string }[] | null>(null);
+  const [poolLoading, setPoolLoading] = useState(false);
+  async function loadPool(risk: "faible" | "moyen" | "eleve") {
+    setPoolRisk(risk); setPoolLoading(true);
+    const { data } = await supabase.rpc("admin_preview_risk_pool" as any, { p_risk_level: risk });
+    setPoolResults((data as any) ?? []);
+    setPoolLoading(false);
+  }
+
   if (checking) return <LedgerPage><LedgerCard title="Admin">Vérification…</LedgerCard></LedgerPage>;
   if (!isAdmin) return null;
 
@@ -285,6 +295,21 @@ function AdminPage() {
                 <input value={prices.community_event_cost} onChange={(e) => setPrices({ ...prices, community_event_cost: Number(e.target.value) })}
                   className="w-full bg-transparent border border-border/40 px-1.5 py-1 text-xs" />
               </label>
+              <label className="text-[10px] text-amber-400/80">
+                Rencontre jouée — or perso pour l'auteur<br />
+                <input value={prices.community_event_author_gold} onChange={(e) => setPrices({ ...prices, community_event_author_gold: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-amber-500/30 px-1.5 py-1 text-xs" />
+              </label>
+              <label className="text-[10px] text-amber-400/80">
+                Rencontre jouée — or pour la guilde d'origine<br />
+                <input value={prices.community_event_guild_gold} onChange={(e) => setPrices({ ...prices, community_event_guild_gold: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-amber-500/30 px-1.5 py-1 text-xs" />
+              </label>
+              <label className="text-[10px] text-amber-400/80">
+                Multiplicateur si une autre guilde la joue<br />
+                <input value={prices.community_event_cross_guild_multiplier} onChange={(e) => setPrices({ ...prices, community_event_cross_guild_multiplier: Number(e.target.value) })}
+                  className="w-full bg-transparent border border-amber-500/30 px-1.5 py-1 text-xs" />
+              </label>
             </div>
             <button disabled={busy === "prices"} onClick={savePrices}
               className="text-[10px] uppercase border border-primary/40 text-primary px-2 py-1 hover:bg-primary/10 disabled:opacity-30">
@@ -346,6 +371,39 @@ function AdminPage() {
             </ul>
           </ScrollBox>
         )}
+
+        {/* Aperçu du pool de tirage — pour vérifier concrètement qu'un
+            template (communautaire ou non) est bien candidat au tirage
+            plutôt que de deviner ou d'attendre de tomber dessus par hasard
+            en jouant. */}
+        <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Aperçu du pool de tirage</p>
+        <div className="border border-border/30 px-3 py-2 mb-4">
+          <div className="flex gap-2 mb-2">
+            {(["faible", "moyen", "eleve"] as const).map(r => (
+              <button key={r} onClick={() => void loadPool(r)}
+                className={`text-[10px] uppercase border px-2 py-1 ${poolRisk === r && poolResults ? "border-primary text-primary" : "border-border/40 text-muted-foreground hover:border-primary/40"}`}>
+                {r}
+              </button>
+            ))}
+          </div>
+          {poolLoading && <p className="text-[10px] text-muted-foreground italic">Chargement…</p>}
+          {poolResults && !poolLoading && (
+            <>
+              <p className="text-[10px] text-muted-foreground mb-1.5">
+                {poolResults.length} template{poolResults.length > 1 ? "s" : ""} en concurrence pour le risque « {poolRisk} » — 1 chance sur {poolResults.length} à chaque tirage de ce palier.
+              </p>
+              <ul className="space-y-1">
+                {poolResults.map(r => (
+                  <li key={r.id} className="text-[10px] flex items-center gap-2">
+                    <span className={r.is_community ? "text-amber-400" : "text-muted-foreground"}>{r.event_type}</span>
+                    {r.is_community && <span className="text-amber-400/70">— {r.author_name}{r.guild_name ? ` (${r.guild_name})` : ""}</span>}
+                    <span className="text-muted-foreground/60 truncate">{r.situation_preview}…</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
 
         {/* Expéditions bloquées */}
         <p className="text-xs tracking-[0.14em] uppercase text-muted-foreground mb-2">Expéditions en cours ({expeditions.length})</p>

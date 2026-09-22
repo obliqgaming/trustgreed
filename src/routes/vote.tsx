@@ -49,6 +49,15 @@ const EVENT_TYPE_ICON: Record<string, string> = {
   passage: "/icons/door.webp",
   traces: "/icons/magnifier.webp",
 };
+// Affichage seulement — la valeur interne event_type reste "gardien" en
+// base (colonnes, comparaisons SQL, mapping d'icônes ci-dessus) : renommer
+// la valeur elle-même toucherait event_templates, expedition_steps et
+// plusieurs fonctions SQL (ex. finalize_resolution compare littéralement
+// event_type = 'gardien'). Seul ce que le joueur lit change.
+const EVENT_TYPE_LABEL: Record<string, string> = {
+  coffre: "Coffre", gardien: "Adversaire", marchand: "Marchand", rencontre: "Rencontre",
+  decouverte: "Découverte", porte: "Porte", passage: "Passage", traces: "Traces",
+};
 const RISK_LABEL: Record<string, string> = { faible: "Faible", moyen: "Moyen", eleve: "Élevé" };
 
 function formatCountdown(totalSeconds: number): string {
@@ -183,7 +192,7 @@ const CINEMATICS: Record<string, { survive: string[]; die: string[] }> = {
   },
   gardien: {
     survive: ["Le combat est court. Brutal. Le groupe continue, essoufflé.", "Il tombe. Vous passez. On ne regarde pas en arrière.", "Il n'était pas seul : ses gardes tombent aussi. Vous repartez quand même."],
-    die: ["Le gardien était plus rapide qu'il n'en avait l'air.", "La formation s'effondre. L'un d'eux ne se relève pas.", "Il n'a fallu qu'une ouverture. Une seule."],
+    die: ["L'adversaire était plus rapide qu'il n'en avait l'air.", "La formation s'effondre. L'un d'eux ne se relève pas.", "Il n'a fallu qu'une ouverture. Une seule."],
   },
   passage: {
     survive: ["Le passage est étroit, instable. Vous traversez. Tous.", "Le vide en dessous. Les mains qui s'agrippent. Ça tient.", "De l'autre côté, enfin. Le groupe reprend son souffle.", "Un pas après l'autre, sans un mot. Personne ne regarde en bas.", "Le sol tient bon, contre toute attente. Vous êtes déjà loin quand vous osez y repenser."],
@@ -984,8 +993,8 @@ function VotePage() {
         ?? "Votre Éclaireur lit les traces avec soin, mais elles ne livrent rien de plus que ce que vous saviez déjà.";
     } else if (resolutionType === "martyr_provocation") {
       cinematicText = wentWrong
-        ? "Un seul d'entre vous s'est avancé pour réveiller le gardien. Le reste du groupe n'a rien risqué, mais ce silence a un prix."
-        : "Un seul d'entre vous s'est avancé pour réveiller le gardien, et l'a emporté. Le reste du groupe passe sans une égratignure.";
+        ? "Un seul d'entre vous s'est avancé pour réveiller l'adversaire. Le reste du groupe n'a rien risqué, mais ce silence a un prix."
+        : "Un seul d'entre vous s'est avancé pour réveiller l'adversaire, et l'a emporté. Le reste du groupe passe sans une égratignure.";
     } else if (resolutionType === "payer_passage") {
       cinematicText = "La guilde paie sans discuter. Le passage s'ouvre, tranquille, et le butin reste entier.";
     } else if (resolutionType === "marchand_achete") {
@@ -998,8 +1007,8 @@ function VotePage() {
         : "L'affaire est vite faite. Vous repartez plus riches, et un peu plus lourds sur la conscience.";
     } else if (resolutionType === "discretion") {
       cinematicText = wentWrong
-        ? "Le gardien remue dans son sommeil, trop tard pour reculer. La discrétion ne suffit plus."
-        : "Vous passez presque sans un bruit, laissant le gardien à son sommeil. Prudent, mais les mains vides.";
+        ? "L'adversaire remue dans son sommeil, trop tard pour reculer. La discrétion ne suffit plus."
+        : "Vous passez presque sans un bruit, laissant l'adversaire à son sommeil. Prudent, mais les mains vides.";
     } else if (resolutionType === "couper_terrain") {
       cinematicText = wentWrong
         ? "Le raccourci se referme mal sur vous. Le terrain ne pardonne pas l'impatience."
@@ -1647,7 +1656,7 @@ function VotePage() {
                 <div className="flex items-center justify-center gap-2 min-w-0 max-w-full">
                   {EVENT_TYPE_ICON[step.event_type] && <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-7 w-7 object-contain shrink-0" />}
                   <h1 className="font-serif text-[clamp(1.7rem,2.8vw,2.7rem)] tracking-[0.08em] uppercase text-primary truncate">
-                    Étape {step.step_number} — {step.event_type}
+                    Étape {step.step_number} — {EVENT_TYPE_LABEL[step.event_type] ?? step.event_type}
                   </h1>
                 </div>
                 <div className="mt-1.5 w-full flex items-center justify-center flex-wrap gap-x-5 gap-y-1 text-[14px]">
@@ -1888,7 +1897,7 @@ function VotePage() {
                             <div>
                               <p className="text-[9px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
                               <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"} className="w-full text-[10px] leading-tight border border-red-400/35 text-red-300 px-2 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
-                                {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul le gardien (risque seul, le groupe garde tout)"}
+                                {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul l'adversaire (risque seul, le groupe garde tout)"}
                               </button>
                             </div>
                           )}

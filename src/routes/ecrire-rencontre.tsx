@@ -34,7 +34,7 @@ const EVENT_TYPE_ICON: Record<string, string> = {
   traces: "/icons/magnifier.webp",
 };
 const EVENT_TYPE_LABEL: Record<string, string> = {
-  coffre: "Coffre", porte: "Porte", gardien: "Gardien", passage: "Passage",
+  coffre: "Coffre", porte: "Porte", gardien: "Adversaire", passage: "Passage",
   rencontre: "Rencontre", traces: "Traces", decouverte: "Découverte",
 };
 // À interpréter au sens large, pas littéralement — affiché juste après le
@@ -42,7 +42,7 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
 const EVENT_TYPE_GUIDE: Record<string, string> = {
   coffre: "N'importe quel contenant, cache ou dépôt de valeur : un coffre, mais aussi un autel, un reliquaire, une réserve abandonnée, une salle au trésor, un mécanisme de récompense…",
   porte: "Tout passage qui bloque ou filtre : une porte, mais aussi un seuil, une barrière, une frontière, un rituel d'entrée, un obstacle à franchir…",
-  gardien: "Tout ce qui s'oppose activement : un monstre, mais aussi un groupe hostile, une créature, une entité, un piège vivant, un adversaire de toute nature…",
+  gardien: "Tout ce qui s'oppose activement : un monstre, un groupe hostile, une créature, une entité, un piège vivant, ou tout autre obstacle vivant…",
   passage: "Tout trajet risqué à traverser : un pont ou un couloir, mais aussi un gouffre, une zone instable, un lieu qu'il faut simplement réussir à franchir…",
   rencontre: "Tout être qu'on croise : un voyageur, mais aussi un prisonnier, une faction, un étrange personnage, une créature intelligente…",
   traces: "Tout indice d'un événement passé : un cadavre, mais aussi des marques, des objets abandonnés, des signes qu'on interprète…",
