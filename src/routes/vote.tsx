@@ -101,9 +101,9 @@ const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string
     eleve: ["/event_coffre_eleve.webp", "/event_c_cage.webp", "/event_c_cendres.webp", "/event_c_squelettes.webp"],
   },
   gardien: {
-    faible: ["/event_gardien_faible.webp", "/event_g_priere.webp"],
-    moyen: ["/event_gardien_moyen.webp", "/event_g_chaines_porte.webp", "/event_g_immobile.webp"],
-    eleve: ["/event_gardien_eleve.webp", "/event_g_geant.webp", "/event_g_pierre.webp"],
+    faible: ["/event_gardien_faible.webp", "/event_g_priere.webp", "/event_g_cle_poignet.webp"],
+    moyen: ["/event_gardien_moyen.webp", "/event_g_chaines_porte.webp", "/event_g_immobile.webp", "/event_g_mort_debout.webp"],
+    eleve: ["/event_gardien_eleve.webp", "/event_g_geant.webp", "/event_g_pierre.webp", "/event_g_armure_vide.webp"],
   },
   porte: {
     faible: ["/event_porte_faible.webp", "/event_po_trou.webp", "/event_po_noms.webp", "/event_po_cle.webp"],
@@ -111,9 +111,9 @@ const EVENT_IMAGES_BY_RISK: Partial<Record<string, Partial<Record<string, string
     eleve: ["/event_porte_eleve.webp", "/event_po_griffures.webp", "/event_po_cloches.webp", "/event_po_sang.webp"],
   },
   passage: {
-    faible: ["/event_passage_faible.webp", "/event_pa_racines.webp"],
-    moyen: "/event_passage_moyen.webp",
-    eleve: ["/event_passage_eleve.webp", "/event_pa_epees.webp"],
+    faible: ["/event_passage_faible.webp", "/event_pa_racines.webp", "/event_pa_etroit.webp", "/event_pa_lanternes.webp"],
+    moyen: ["/event_passage_moyen.webp", "/event_pa_echelle.webp", "/event_pa_effondre.webp", "/event_pa_corde.webp"],
+    eleve: ["/event_passage_eleve.webp", "/event_pa_epees.webp", "/event_pa_passerelle.webp", "/event_pa_pont.webp"],
   },
   // Découverte n'avait encore aucune variante de risque (toutes les
   // étapes, quel que soit le palier, partageaient la même image
