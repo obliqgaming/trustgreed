@@ -298,6 +298,9 @@ function VotePage() {
   const [drinkResult, setDrinkResult] = useState<number | null>(null);
   const [frontlineTally, setFrontlineTally] = useState<Record<string, number>>({});
   const [myFrontlineTarget, setMyFrontlineTarget] = useState<string | null>(null);
+  const [myMartyrTarget, setMyMartyrTarget] = useState<string | null>(null);
+  const [myInquisiteurInvestigation, setMyInquisiteurInvestigation] = useState<{ stepId: string; targetId: string } | null>(null);
+  const [inquisiteurFindings, setInquisiteurFindings] = useState<{ target_name: string; real_vote: string | null; pushed_frontline_target: string | null; attempted_larceny: boolean; used_secret_ability: boolean } | null>(null);
   // Bouclier de groupe : loot rare, attribué par vote séparé (voir
   // fetchShield / vote_shield / resolve_shield_vote).
   const [shield, setShield] = useState<{
@@ -579,8 +582,12 @@ function VotePage() {
         setVotedIds([]);
         setFrontlineTally({});
         setMyFrontlineTarget(null);
+        setMyMartyrTarget(null);
+        setInquisiteurFindings(null);
         setResult(null);
-        setMyPrivateRisk(null);
+        // Éclaireur : voit désormais le risque en permanence, sans action
+        // à faire — plus besoin d'un bouton "révéler" consommé une fois.
+        setMyPrivateRisk(myVocation === "Eclaireur" ? data.death_percentage : null);
         setAcked(false);
         setAckCount(null);
         resultShownRef.current = false;
@@ -837,14 +844,6 @@ function VotePage() {
 
   useEffect(() => { void refreshRiskReserveEffect(); }, [refreshRiskReserveEffect]);
 
-  async function useMartyr() {
-    if (!step || !character) return;
-    setVocationError(null); setVocationBusy("martyr");
-    const { error: rpcError } = await supabase.rpc("trigger_martyr", { p_step_id: step.id, p_character_id: character.id });
-    if (rpcError) setVocationError(rpcError.message);
-    else setUsedAbilities(prev => new Set(prev).add("martyr"));
-    setVocationBusy(null);
-  }
 
   async function useMartyrProvocation() {
     if (!step || !character) return;
@@ -870,6 +869,42 @@ function VotePage() {
     const { error: rpcError } = await supabase.rpc("use_tresorier_secure" as any, { p_character_id: character.id, p_expedition_id: expeditionId });
     if (rpcError) setVocationError(rpcError.message);
     else setUsedAbilities(prev => new Set(prev).add("tresorier_secure"));
+    setVocationBusy(null);
+  }
+
+  async function designateMartyrTarget(targetId: string) {
+    if (!step || !character) return;
+    const next = myMartyrTarget === targetId ? null : targetId;
+    setVocationError(null); setVocationBusy("martyr_target");
+    if (next) {
+      const { error: rpcError } = await supabase.rpc("designate_martyr_target" as any, {
+        p_step_id: step.id, p_character_id: character.id, p_target_character_id: next,
+      });
+      if (rpcError) { setVocationError(rpcError.message); setVocationBusy(null); return; }
+    }
+    setMyMartyrTarget(next);
+    setVocationBusy(null);
+  }
+
+  async function designateInquisiteurTarget(targetId: string) {
+    if (!step || !character) return;
+    setVocationError(null); setVocationBusy("inquisiteur_target");
+    const { error: rpcError } = await supabase.rpc("designate_inquisiteur_target" as any, {
+      p_step_id: step.id, p_character_id: character.id, p_target_character_id: targetId,
+    });
+    if (rpcError) setVocationError(rpcError.message);
+    else { setMyInquisiteurInvestigation({ stepId: step.id, targetId }); setUsedAbilities(prev => new Set(prev).add("inquisiteur_target")); }
+    setVocationBusy(null);
+  }
+
+  async function revealInquisiteurFindings() {
+    if (!character || !myInquisiteurInvestigation) return;
+    setVocationError(null); setVocationBusy("inquisiteur_reveal");
+    const { data, error: rpcError } = await supabase.rpc("get_inquisiteur_findings" as any, {
+      p_step_id: myInquisiteurInvestigation.stepId, p_character_id: character.id,
+    });
+    if (rpcError) setVocationError(rpcError.message);
+    else setInquisiteurFindings((data as any)?.[0] ?? null);
     setVocationBusy(null);
   }
 
@@ -1604,6 +1639,24 @@ function VotePage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 mt-1 flex-wrap">
+                  {p.is_alive && step && !step.resolving && !step.resolved && myVocation === "Martyr" && p.character_id !== character?.id && !usedAbilities.has("martyr_triggered") && (
+                    <button
+                      onClick={() => designateMartyrTarget(p.character_id)}
+                      title="Prendre le coup mortel à sa place s'il devait en recevoir un cette étape"
+                      className={`text-[10px] uppercase tracking-[0.05em] border px-1.5 py-0.5 whitespace-nowrap ${myMartyrTarget === p.character_id ? "border-red-400 text-red-300 bg-red-500/10" : "border-border/25 text-muted-foreground/55 hover:border-red-400/40 hover:text-red-300"}`}
+                    >
+                      {vocationBusy === "martyr_target" ? "…" : "Protéger"}
+                    </button>
+                  )}
+                  {p.is_alive && step && !step.resolving && !step.resolved && myVocation === "Inquisiteur" && p.character_id !== character?.id && !usedAbilities.has("inquisiteur_target") && (
+                    <button
+                      onClick={() => designateInquisiteurTarget(p.character_id)}
+                      title="Enquêter sur cette personne pour cette étape (une fois par expédition)"
+                      className="text-[10px] uppercase tracking-[0.05em] border px-1.5 py-0.5 whitespace-nowrap border-border/25 text-muted-foreground/55 hover:border-purple-400/40 hover:text-purple-300"
+                    >
+                      {vocationBusy === "inquisiteur_target" ? "…" : "Enquêter"}
+                    </button>
+                  )}
                   {p.is_alive && step && !step.resolving && !step.resolved && (
                     <button
                       onClick={() => voteFrontline(p.character_id)}
@@ -1882,17 +1935,12 @@ function VotePage() {
                     <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 [scrollbar-width:thin]">
                       {!step.resolving && myVocation && !myVote && (
                         <>
-                          {(myVocation === "Eclaireur" && !usedAbilities.has("eclaireur_reveal") || hasRiskReserveEffect) && (
+                          {hasRiskReserveEffect && (
                             <button onClick={useReveal} disabled={vocationBusy === "reveal"} className="w-full text-[10px] leading-tight border border-primary/35 text-primary px-2 py-1.5 hover:bg-primary/10 disabled:opacity-30">
                               {vocationBusy === "reveal" ? "…" : "Révéler le risque (à toi seul)"}
                             </button>
                           )}
-                          {myVocation === "Martyr" && !usedAbilities.has("martyr") && (
-                            <button onClick={useMartyr} disabled={vocationBusy === "martyr"} className="w-full text-[10px] leading-tight border border-red-400/35 text-red-300 px-2 py-1.5 hover:bg-red-400/10 disabled:opacity-30">
-                              {vocationBusy === "martyr" ? "…" : "M'armer pour intercepter le plus gros coup (une fois par expédition)"}
-                            </button>
-                          )}
-                          {usedAbilities.has("martyr") && <p className="text-[10px] text-red-300/65 italic px-1">Si un coup mortel devait tomber sur quelqu'un d'autre cette étape, tu le prends à sa place.</p>}
+                          {myMartyrTarget && <p className="text-[10px] text-red-300/65 italic px-1">Si un coup mortel devait tomber sur cette personne cette étape, tu le prends à sa place.</p>}
                           {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
                             <div>
                               <p className="text-[9px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
@@ -1903,6 +1951,20 @@ function VotePage() {
                           )}
                           {usedAbilities.has("martyr_provocation") && (
                             <p className="text-[10px] text-red-300/65 italic px-1">L'étape est déjà réglée, le résultat arrive.</p>
+                          )}
+                          {myInquisiteurInvestigation && myInquisiteurInvestigation.stepId === step.id && step.resolved && !inquisiteurFindings && (
+                            <button onClick={revealInquisiteurFindings} disabled={vocationBusy === "inquisiteur_reveal"} className="w-full text-[10px] leading-tight border border-purple-400/35 text-purple-300 px-2 py-1.5 hover:bg-purple-400/10 disabled:opacity-30">
+                              {vocationBusy === "inquisiteur_reveal" ? "…" : "Voir les résultats de l'enquête"}
+                            </button>
+                          )}
+                          {inquisiteurFindings && (
+                            <div className="text-[10px] text-purple-300/80 px-1 space-y-0.5">
+                              <p className="text-purple-300">Enquête sur {inquisiteurFindings.target_name}</p>
+                              <p>Vote réel : {inquisiteurFindings.real_vote ?? "n'a pas voté"}</p>
+                              <p>A tenté de pousser devant : {inquisiteurFindings.pushed_frontline_target ?? "personne"}</p>
+                              <p>Tentative de larcin : {inquisiteurFindings.attempted_larceny ? "oui" : "non"}</p>
+                              <p>Capacité secrète utilisée : {inquisiteurFindings.used_secret_ability ? "oui" : "non"}</p>
+                            </div>
                           )}
                           {myVocation === "Miracule" && !usedAbilities.has("miracle_bet") && (
                             <button onClick={useMiracleBet} disabled={vocationBusy === "miracle_bet"} className="w-full text-[10px] leading-tight border border-sky-400/35 text-sky-300 px-2 py-1.5 hover:bg-sky-400/10 disabled:opacity-30">
