@@ -2419,13 +2419,23 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   useEffect(() => { unlockAudio(); return () => { if (tensionRef.current) clearInterval(tensionRef.current); }; }, []);
 
   const fetchMessages = useCallback(async () => {
+    // Bug réel corrigé ici : order(ascending: true).limit(50) prend les 50
+    // PREMIERS messages de l'expédition (les plus vieux), pas les 50
+    // derniers — Postgres applique le LIMIT après avoir trié du plus ancien
+    // au plus récent, donc il coupe la fin, pas le début. Résultat une fois
+    // l'expédition au-delà de 50 messages : le chat reste figé sur les tout
+    // premiers échanges, et tout message inséré depuis n'apparaît plus
+    // jamais ("le chat a une capacité limitée" / "d'un coup nos messages ne
+    // s'affichent plus"). On trie désormais par le plus récent pour prendre
+    // les 50 DERNIERS, puis on ré-inverse côté client pour l'affichage
+    // chronologique (plus ancien en haut, plus récent en bas).
     const { data } = await supabase
       .from("expedition_chat_messages")
       .select("id, character_id, message, created_at, character:characters(name, portrait)")
       .eq("expedition_id", expeditionId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(50);
-    setMessages((data as any) ?? []);
+    setMessages(((data as any) ?? []).slice().reverse());
   }, [expeditionId]);
 
   useEffect(() => {
