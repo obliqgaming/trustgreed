@@ -365,11 +365,7 @@ function VotePage() {
   // vote détaillé par personne, pas d'enquête d'Inquisiteur, etc.).
   const [showHistory, setShowHistory] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historySteps, setHistorySteps] = useState<{
-    step_number: number; event_type: string; risk_level: string; resolved_at: string | null;
-    deaths_count: number; loot_earned: number | null; resolution_type: string | null;
-    was_retreat: boolean; description: string | null;
-  }[]>([]);
+  const [historySteps, setHistorySteps] = useState<HistoryStep[]>([]);
   const [botBusy, setBotBusy] = useState<string | null>(null);
   const [debugCopied, setDebugCopied] = useState(false);
   const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
@@ -471,19 +467,63 @@ function VotePage() {
     return enriched;
   }, [expeditionId]);
 
-  // Historique — uniquement les colonnes publiques une fois l'étape résolue :
-  // pas de required_vocation/flags internes, pas de qui a voté quoi, pas
-  // d'enquête d'Inquisiteur. Le texte narratif (description) reste celui
-  // affiché à tous pendant l'étape, donc déjà public.
+  // Historique — uniquement les infos publiques une fois l'étape résolue :
+  // pas d'enquête d'Inquisiteur, pas de vote individuel (qui a voté
+  // continuer/rentrer), pas de vocation déclarée d'autrui au-delà de ce qui
+  // est déjà visible dans le groupe. En revanche qui a été poussé devant et
+  // le détail des dégâts encaissés sont déjà montrés à tous au moment de la
+  // résolution (dans l'écran de résultat) — donc pas plus secrets ici que
+  // là, et l'historique doit les reprendre.
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
-    const { data } = await supabase
+    const { data: steps } = await supabase
       .from("expedition_steps")
-      .select("step_number, event_type, risk_level, resolved_at, deaths_count, loot_earned, resolution_type, was_retreat, description")
+      .select("id, step_number, event_type, risk_level, resolved_at, deaths_count, loot_earned, resolution_type, was_retreat, description")
       .eq("expedition_id", expeditionId)
       .eq("resolved", true)
       .order("step_number", { ascending: true });
-    setHistorySteps((data as any) ?? []);
+
+    const stepRows = (steps as any[]) ?? [];
+    const stepIds = stepRows.map((s) => s.id);
+
+    if (stepIds.length === 0) {
+      setHistorySteps([]);
+      setHistoryLoading(false);
+      return;
+    }
+
+    const [{ data: frontlineResults }, { data: damageRows }] = await Promise.all([
+      supabase.from("step_frontline_result" as any).select("step_id, target_character_id").in("step_id", stepIds),
+      supabase.from("step_damage_log" as any).select("step_id, character_id, damage").in("step_id", stepIds).gt("damage", 0),
+    ]);
+
+    // Noms des personnages référencés (poussés devant et/ou touchés) — une
+    // seule requête groupée plutôt qu'une par étape.
+    const charIds = Array.from(new Set([
+      ...((frontlineResults as any[]) ?? []).map((r) => r.target_character_id).filter(Boolean),
+      ...((damageRows as any[]) ?? []).map((r) => r.character_id).filter(Boolean),
+    ]));
+    const { data: charsData } = charIds.length > 0
+      ? await supabase.from("characters").select("id, name").in("id", charIds)
+      : { data: [] as any[] };
+    const nameById = new Map(((charsData as any[]) ?? []).map((c) => [c.id, c.name as string]));
+
+    const frontlineByStep = new Map<string, string>();
+    for (const r of (frontlineResults as any[]) ?? []) {
+      if (r.target_character_id) frontlineByStep.set(r.step_id, nameById.get(r.target_character_id) ?? "?");
+    }
+    const damageByStep = new Map<string, { name: string; damage: number }[]>();
+    for (const r of (damageRows as any[]) ?? []) {
+      const list = damageByStep.get(r.step_id) ?? [];
+      list.push({ name: nameById.get(r.character_id) ?? "?", damage: r.damage });
+      damageByStep.set(r.step_id, list);
+    }
+
+    setHistorySteps(stepRows.map((s) => ({
+      ...s,
+      pushedName: frontlineByStep.get(s.id) ?? null,
+      damageLog: damageByStep.get(s.id) ?? [],
+    })));
     setHistoryLoading(false);
   }, [expeditionId]);
 
@@ -1739,12 +1779,6 @@ function VotePage() {
         backgroundImage: "linear-gradient(rgba(10,8,6,0.55), rgba(10,8,6,0.75)), url(/game_frame.webp)",
         backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed",
       }}>
-        {/* Bouton historique — toujours accessible, peu importe l'état de
-            l'étape courante (vote en cours, résolution, récapitulatif). */}
-        <button onClick={openHistory}
-          className="fixed top-3 right-3 z-40 text-[10px] uppercase tracking-[0.06em] border border-border/40 bg-black/40 text-muted-foreground px-2.5 py-1.5 rounded-sm backdrop-blur-sm">
-          Historique
-        </button>
         {/* Bandeau bouclier / notice, comme sur PC */}
         {shieldNotice && (
           <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[92%] px-3 py-2 bg-card/95 border border-sky-400/40 backdrop-blur-sm rounded-sm text-xs text-center text-sky-100">
@@ -1855,6 +1889,10 @@ function VotePage() {
 
             {/* STATUT + TOTAUX */}
             <div className="shrink-0 px-4 pt-3 text-center">
+              <button onClick={openHistory}
+                className="mb-2 text-[9.5px] uppercase tracking-[0.06em] border border-border/30 bg-black/25 text-muted-foreground/70 px-2.5 py-1 rounded-sm">
+                Historique de l'expédition
+              </button>
               <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground/78">
                 <span>{isAsync ? "En attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
                 <span className="opacity-40">•</span>
@@ -2174,14 +2212,6 @@ function VotePage() {
           logique reste stable même si le contenu change.
           ================================================================ */}
 
-      {/* Bouton historique — toujours accessible, peu importe l'état de
-          l'étape courante (vote en cours, résolution, récapitulatif). */}
-      <button onClick={openHistory}
-        className="absolute z-20 text-[10px] uppercase tracking-[0.08em] border border-border/40 bg-black/40 text-muted-foreground/85 px-3 py-1.5 rounded-sm hover:border-primary/40 hover:text-primary backdrop-blur-sm"
-        style={{ top: "1.2%", left: "50%", transform: "translateX(-50%)" }}>
-        Historique de l'expédition
-      </button>
-
       {/* GAUCHE — groupe. Scroll local uniquement si le groupe est grand. */}
       <aside
         className="absolute z-10 overflow-y-auto [scrollbar-width:thin]"
@@ -2382,6 +2412,10 @@ function VotePage() {
             {/* 3 — ACTIONS : trois familles stables. Aucun scroll global. */}
             <section className="absolute flex flex-col px-[4.5%] pt-1.5 pb-2" style={{ left: 0, right: 0, top: "69.8%", bottom: "2.1%" }}>
               <div className="shrink-0 flex flex-col items-center justify-center gap-1.5 mb-2 min-h-[34px] text-center">
+                <button onClick={openHistory}
+                  className="text-[9.5px] uppercase tracking-[0.06em] border border-border/30 bg-black/25 text-muted-foreground/70 px-2.5 py-1 rounded-sm hover:border-primary/40 hover:text-primary">
+                  Historique de l'expédition
+                </button>
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground/78 max-w-[94%]">
                   <span>{isAsync ? "En attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
                   <span className="opacity-40">•</span>
@@ -2684,13 +2718,20 @@ type HistoryStep = {
   step_number: number; event_type: string; risk_level: string; resolved_at: string | null;
   deaths_count: number; loot_earned: number | null; resolution_type: string | null;
   was_retreat: boolean; description: string | null;
+  // Qui a été poussé devant (majorité de vote), et le détail des dégâts
+  // encaissés — déjà montrés à tous sur l'écran de résultat au moment de la
+  // résolution, donc pas plus secrets ici.
+  pushedName: string | null;
+  damageLog: { name: string; damage: number }[];
 };
 
 // Historique de l'expédition — liste des étapes déjà résolues avec leurs
-// infos publiques (numéro, type, risque, résultat, morts, butin, texte
-// narratif). Volontairement rien de plus : pas de détail de vote par
-// personne, pas de résultat d'enquête d'Inquisiteur, pas de vocation
-// déclarée d'autrui — ces informations restent privées même après coup.
+// infos publiques : numéro, type, risque, texte narratif, qui a été poussé
+// devant, détail des dégâts encaissés (par qui, combien), morts et butin.
+// Volontairement rien de plus : pas de vote individuel continuer/rentrer,
+// pas de résultat d'enquête d'Inquisiteur — ces informations restent
+// privées même après coup, contrairement au reste qui est déjà montré à
+// tout le groupe sur l'écran de résultat au moment de la résolution.
 function HistoryModal({ open, onClose, loading, steps }: {
   open: boolean; onClose: () => void; loading: boolean; steps: HistoryStep[];
 }) {
@@ -2709,7 +2750,12 @@ function HistoryModal({ open, onClose, loading, steps }: {
             <p className="text-xs text-muted-foreground/60 italic text-center py-6">Aucune étape résolue pour l'instant.</p>
           ) : (
             steps.map((s) => {
-              const wentWrong = s.deaths_count > 0;
+              // Même logique que l'écran de résultat en direct (wentWrong) :
+              // des dégâts sans mort restent un échec côté affichage, pas
+              // seulement une mort. Avant ce correctif, l'historique disait
+              // "Étape franchie" même quand quelqu'un avait pris des dégâts.
+              const hurtNoDeath = s.deaths_count === 0 && s.damageLog.length > 0;
+              const wentWrong = s.deaths_count > 0 || s.damageLog.length > 0;
               return (
                 <div key={s.step_number} className="border border-border/20 rounded-sm px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -2723,14 +2769,28 @@ function HistoryModal({ open, onClose, loading, steps }: {
                   {s.description && (
                     <p className="text-[11px] text-muted-foreground/80 italic leading-snug mb-1.5">{s.description}</p>
                   )}
+                  {s.pushedName && (
+                    <p className="text-[10.5px] text-amber-300/80 mb-1">{s.pushedName} a été poussé devant.</p>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px]">
-                    <span className={wentWrong ? "text-red-400" : "text-emerald-400"}>
-                      {s.was_retreat ? "Retour à la guilde" : wentWrong ? `${s.deaths_count} mort${s.deaths_count > 1 ? "s" : ""}` : "Étape franchie"}
+                    <span className={s.was_retreat ? "text-muted-foreground" : wentWrong ? "text-red-400" : "text-emerald-400"}>
+                      {s.was_retreat ? "Retour à la guilde"
+                        : s.deaths_count > 0 ? `${s.deaths_count} mort${s.deaths_count > 1 ? "s" : ""}`
+                        : hurtNoDeath ? "Franchie de justesse" : "Étape franchie"}
                     </span>
                     {!s.was_retreat && (s.loot_earned ?? 0) > 0 && (
                       <span className="text-amber-400 font-mono">+{Math.round(s.loot_earned ?? 0)} or</span>
                     )}
                   </div>
+                  {s.damageLog.length > 0 && (
+                    <div className="mt-1.5 pt-1.5 border-t border-red-400/15 space-y-0.5">
+                      {s.damageLog.map((d, i) => (
+                        <p key={i} className="text-[10px] text-red-300/85">
+                          {d.name} a pris {d.damage} point{d.damage > 1 ? "s" : ""} de dégâts.
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })
