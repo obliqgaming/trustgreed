@@ -359,6 +359,17 @@ function VotePage() {
   const finalizeAttemptedRef = useRef(false);
   const [myVocation, setMyVocation] = useState<VocationId | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  // Historique des étapes déjà résolues de l'expédition — uniquement des
+  // infos publiques (type, risque, résultat, morts, butin, texte narratif) :
+  // rien qui ne soit déjà visible de tous une fois l'étape passée (pas de
+  // vote détaillé par personne, pas d'enquête d'Inquisiteur, etc.).
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySteps, setHistorySteps] = useState<{
+    step_number: number; event_type: string; risk_level: string; resolved_at: string | null;
+    deaths_count: number; loot_earned: number | null; resolution_type: string | null;
+    was_retreat: boolean; description: string | null;
+  }[]>([]);
   const [botBusy, setBotBusy] = useState<string | null>(null);
   const [debugCopied, setDebugCopied] = useState(false);
   const [usedAbilities, setUsedAbilities] = useState<Set<string>>(new Set());
@@ -459,6 +470,27 @@ function VotePage() {
     setParticipants(enriched);
     return enriched;
   }, [expeditionId]);
+
+  // Historique — uniquement les colonnes publiques une fois l'étape résolue :
+  // pas de required_vocation/flags internes, pas de qui a voté quoi, pas
+  // d'enquête d'Inquisiteur. Le texte narratif (description) reste celui
+  // affiché à tous pendant l'étape, donc déjà public.
+  const fetchHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    const { data } = await supabase
+      .from("expedition_steps")
+      .select("step_number, event_type, risk_level, resolved_at, deaths_count, loot_earned, resolution_type, was_retreat, description")
+      .eq("expedition_id", expeditionId)
+      .eq("resolved", true)
+      .order("step_number", { ascending: true });
+    setHistorySteps((data as any) ?? []);
+    setHistoryLoading(false);
+  }, [expeditionId]);
+
+  async function openHistory() {
+    setShowHistory(true);
+    await fetchHistory();
+  }
 
   const fetchDeathDetails = useCallback(async (charId: string) => {
     const { data: charRow } = await supabase
@@ -1707,6 +1739,12 @@ function VotePage() {
         backgroundImage: "linear-gradient(rgba(10,8,6,0.55), rgba(10,8,6,0.75)), url(/game_frame.webp)",
         backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed",
       }}>
+        {/* Bouton historique — toujours accessible, peu importe l'état de
+            l'étape courante (vote en cours, résolution, récapitulatif). */}
+        <button onClick={openHistory}
+          className="fixed top-3 right-3 z-40 text-[10px] uppercase tracking-[0.06em] border border-border/40 bg-black/40 text-muted-foreground px-2.5 py-1.5 rounded-sm backdrop-blur-sm">
+          Historique
+        </button>
         {/* Bandeau bouclier / notice, comme sur PC */}
         {shieldNotice && (
           <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[92%] px-3 py-2 bg-card/95 border border-sky-400/40 backdrop-blur-sm rounded-sm text-xs text-center text-sky-100">
@@ -2118,6 +2156,7 @@ function VotePage() {
             </div>
           </>
         )}
+        <HistoryModal open={showHistory} onClose={() => setShowHistory(false)} loading={historyLoading} steps={historySteps} />
       </div>
     );
   }
@@ -2134,6 +2173,14 @@ function VotePage() {
           les 3 étages du centre sont positionnés indépendamment afin que la
           logique reste stable même si le contenu change.
           ================================================================ */}
+
+      {/* Bouton historique — toujours accessible, peu importe l'état de
+          l'étape courante (vote en cours, résolution, récapitulatif). */}
+      <button onClick={openHistory}
+        className="absolute z-20 text-[10px] uppercase tracking-[0.08em] border border-border/40 bg-black/40 text-muted-foreground/85 px-3 py-1.5 rounded-sm hover:border-primary/40 hover:text-primary backdrop-blur-sm"
+        style={{ top: "1.2%", left: "50%", transform: "translateX(-50%)" }}>
+        Historique de l'expédition
+      </button>
 
       {/* GAUCHE — groupe. Scroll local uniquement si le groupe est grand. */}
       <aside
@@ -2628,6 +2675,68 @@ function VotePage() {
               })()}
         </>
       )}
+      <HistoryModal open={showHistory} onClose={() => setShowHistory(false)} loading={historyLoading} steps={historySteps} />
+    </div>
+  );
+}
+
+type HistoryStep = {
+  step_number: number; event_type: string; risk_level: string; resolved_at: string | null;
+  deaths_count: number; loot_earned: number | null; resolution_type: string | null;
+  was_retreat: boolean; description: string | null;
+};
+
+// Historique de l'expédition — liste des étapes déjà résolues avec leurs
+// infos publiques (numéro, type, risque, résultat, morts, butin, texte
+// narratif). Volontairement rien de plus : pas de détail de vote par
+// personne, pas de résultat d'enquête d'Inquisiteur, pas de vocation
+// déclarée d'autrui — ces informations restent privées même après coup.
+function HistoryModal({ open, onClose, loading, steps }: {
+  open: boolean; onClose: () => void; loading: boolean; steps: HistoryStep[];
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-sm px-4" onClick={onClose}>
+      <div className="w-full max-w-lg max-h-[80vh] flex flex-col border border-primary/30 bg-card/95 backdrop-blur-sm rounded-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border/20">
+          <p className="text-sm tracking-[0.14em] uppercase text-primary">Historique de l'expédition</p>
+          <button onClick={onClose} className="text-muted-foreground/60 hover:text-foreground text-lg leading-none">✕</button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
+          {loading ? (
+            <p className="text-xs text-muted-foreground/60 italic text-center py-6">Chargement…</p>
+          ) : steps.length === 0 ? (
+            <p className="text-xs text-muted-foreground/60 italic text-center py-6">Aucune étape résolue pour l'instant.</p>
+          ) : (
+            steps.map((s) => {
+              const wentWrong = s.deaths_count > 0;
+              return (
+                <div key={s.step_number} className="border border-border/20 rounded-sm px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-[12px] font-semibold text-primary">
+                      Étape {s.step_number} — {EVENT_TYPE_LABEL[s.event_type] ?? s.event_type}
+                    </p>
+                    <span className={`text-[10px] font-semibold uppercase tracking-[0.05em] ${RISK_COLOR[s.risk_level] ?? "text-muted-foreground"}`}>
+                      {RISK_LABEL[s.risk_level] ?? s.risk_level}
+                    </span>
+                  </div>
+                  {s.description && (
+                    <p className="text-[11px] text-muted-foreground/80 italic leading-snug mb-1.5">{s.description}</p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px]">
+                    <span className={wentWrong ? "text-red-400" : "text-emerald-400"}>
+                      {s.was_retreat ? "Retour à la guilde" : wentWrong ? `${s.deaths_count} mort${s.deaths_count > 1 ? "s" : ""}` : "Étape franchie"}
+                    </span>
+                    {!s.was_retreat && (s.loot_earned ?? 0) > 0 && (
+                      <span className="text-amber-400 font-mono">+{Math.round(s.loot_earned ?? 0)} or</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2899,13 +3008,24 @@ function ChatBox({ expeditionId, character }: { expeditionId: string; character:
   // il n'y a pas de "position de lecture" à respecter : on doit atterrir
   // en bas d'office, comme n'importe quel chat. Avant, arriver sur une
   // conversation déjà longue ouvrait en haut plutôt qu'en bas.
-  const prevMsgCount = useRef(0);
+  //
+  // Bug réel corrigé ici : "grew" se basait sur messages.length, qui est
+  // plafonné par le .limit(50) de fetchMessages. Une fois le chat au-delà de
+  // 50 messages, chaque nouveau message fait sortir le plus vieux de la
+  // fenêtre des 50 — la LONGUEUR du tableau reste donc bloquée à 50 en
+  // permanence, "grew" ne redevient plus jamais vrai, et l'auto-scroll vers
+  // le bas ne se déclenche plus du tout (le contenu se met à jour via le
+  // temps réel, mais la vue reste plantée là où elle était). On compare
+  // désormais l'identité du DERNIER message (son id), qui change à chaque
+  // nouveau message reçu, peu importe où en est le compteur total.
+  const lastMsgIdRef = useRef<string | null>(null);
   const sentByMeRef = useRef(false);
   const initialScrollDone = useRef(false);
   useEffect(() => {
-    const grew = messages.length > prevMsgCount.current;
+    const lastId = messages[messages.length - 1]?.id ?? null;
+    const grew = lastId !== null && lastId !== lastMsgIdRef.current;
     const isInitialLoad = !initialScrollDone.current && messages.length > 0;
-    prevMsgCount.current = messages.length;
+    lastMsgIdRef.current = lastId;
     if (!grew && !isInitialLoad) return;
     if (isInitialLoad) {
       initialScrollDone.current = true;

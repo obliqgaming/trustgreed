@@ -54,13 +54,23 @@ export function GuildChatBox({ guildId, characterId }: { guildId: string; charac
   // proche du bas (ou que c'est lui qui vient d'envoyer un message) — sauf
   // au tout premier chargement, qui doit toujours atterrir en bas (pas de
   // position de lecture à respecter à l'arrivée).
-  const prevMsgCount = useRef(0);
+  //
+  // Bug réel corrigé ici (même bug que le chat d'expédition dans vote.tsx) :
+  // "grew" se basait sur messages.length, plafonné par le .limit(50) de
+  // fetchMessages. Passé 50 messages dans la guilde, la longueur du tableau
+  // reste bloquée à 50 en permanence (chaque nouveau message fait sortir le
+  // plus vieux) — "grew" ne redevient donc plus jamais vrai, et le chat
+  // arrête de défiler vers le bas tout seul. On compare désormais l'id du
+  // DERNIER message, qui change à chaque nouveau message, peu importe le
+  // compteur total.
+  const lastMsgIdRef = useRef<string | null>(null);
   const sentByMeRef = useRef(false);
   const initialScrollDone = useRef(false);
   useEffect(() => {
-    const grew = messages.length > prevMsgCount.current;
+    const lastId = messages[messages.length - 1]?.id ?? null;
+    const grew = lastId !== null && lastId !== lastMsgIdRef.current;
     const isInitialLoad = !initialScrollDone.current && messages.length > 0;
-    prevMsgCount.current = messages.length;
+    lastMsgIdRef.current = lastId;
     if (!grew && !isInitialLoad) return;
     if (isInitialLoad) {
       initialScrollDone.current = true;
