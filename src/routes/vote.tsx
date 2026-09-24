@@ -9,6 +9,7 @@ import { unlockAudio, soundVoteContinuer, soundVoteRentrer, soundVoteEnregistre,
 import { VocationBadge, vocationLabel, type VocationId } from "@/components/vocations";
 import { Frame, DecorativeBorder } from "@/components/frame";
 import { ImmersiveButton, FramedBox } from "@/components/immersive";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export const Route = createFileRoute("/vote")({
   ssr: false,
@@ -295,6 +296,12 @@ function getCinematic(eventType: string, hasDeath: boolean): string {
 function VotePage() {
   const navigate = useNavigate();
   const { expedition: expeditionId } = useSearch({ from: "/vote" });
+  // Layout desktop inchangé (3 colonnes en % absolus calées sur
+  // game_frame.webp) : jamais assez de place sur un écran de téléphone pour
+  // 3 colonnes + les cadres décoratifs (voir MobileVoteLayout plus bas, qui
+  // réutilise exactement les mêmes states/handlers dans une mise en page
+  // empilée, sans les assets de cadre).
+  const isMobile = useIsMobile();
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [myDeathScreen, setMyDeathScreen] = useState(false);
@@ -1683,6 +1690,435 @@ function VotePage() {
           )}
         </LedgerCard>
       </LedgerPage>
+    );
+  }
+
+  // Interface PC volontairement inchangée : le layout desktop plus bas (3
+  // colonnes en % absolus + cadres décoratifs calés sur game_frame.webp)
+  // reste tel quel pour !isMobile. Sur téléphone, on empile tout
+  // verticalement à la place, sans les assets de cadre décoratifs (pas la
+  // place pour eux sur un écran étroit) — écrit ici en ligne pour réutiliser
+  // directement tous les states/handlers déjà déclarés dans ce composant,
+  // sans avoir à en faire voyager des dizaines en props vers un composant
+  // séparé.
+  if (isMobile) {
+    return (
+      <div className="min-h-[100dvh] w-full bg-black text-[#f2e4c8] flex flex-col" style={{
+        backgroundImage: "linear-gradient(rgba(10,8,6,0.55), rgba(10,8,6,0.75)), url(/game_frame.webp)",
+        backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed",
+      }}>
+        {/* Bandeau bouclier / notice, comme sur PC */}
+        {shieldNotice && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 max-w-[92%] px-3 py-2 bg-card/95 border border-sky-400/40 backdrop-blur-sm rounded-sm text-xs text-center text-sky-100">
+            {shieldNotice}
+          </div>
+        )}
+        {shield && !shield.resolved && (() => {
+          const rarityLabel = shield.rarity === "leger" ? "léger" : shield.rarity === "moyen" ? "moyen" : "lourd";
+          const alive = participants.filter(p => p.is_alive);
+          const totalVotes = Object.values(shieldTally).reduce((a, b) => a + b, 0);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+              <div className="w-full max-w-sm border border-primary/30 bg-card/95 backdrop-blur-sm rounded-sm p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <img src={SHIELD_ICON[shield.rarity]} alt="" className="w-12 h-12 object-contain flex-shrink-0" />
+                  <div>
+                    <p className="text-xs tracking-[0.14em] uppercase text-primary">Bouclier {rarityLabel} trouvé</p>
+                    <p className="text-[11px] text-muted-foreground">-{shield.reduction} dégâts pendant {shield.duration_steps} tour{shield.duration_steps > 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">Le vote doit désigner un gagnant net, sinon il se brise pour tout le monde.</p>
+                <div className="space-y-1.5 mb-4">
+                  {alive.map(p => {
+                    const name = (p.character as any)?.name ?? "?";
+                    const votes = shieldTally[p.character_id] ?? 0;
+                    const isMine = myShieldTarget === p.character_id;
+                    return (
+                      <button key={p.character_id} disabled={shieldBusy} onClick={() => voteShield(p.character_id)}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs border ${isMine ? "border-primary text-primary" : "border-border/40 text-muted-foreground"} hover:border-primary/60 disabled:opacity-50`}>
+                        <span>{name}{p.character_id === character?.id ? " (toi)" : ""}</span>
+                        <span className="font-mono">{votes > 0 ? `${votes} vote${votes > 1 ? "s" : ""}` : ""}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  {totalVotes}/{alive.length} vote{alive.length > 1 ? "s" : ""}
+                  {isAsync ? " — clôture dès que tout le monde a voté" : " — clôture automatique à la fin du délai"}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
+        {step && (!step.resolved || revealingOutcome) && (
+          <>
+            {/* BANDEAU */}
+            <div className="shrink-0 px-4 pt-4 pb-3 text-center border-b border-white/10">
+              <div className="flex items-center justify-center gap-2">
+                {EVENT_TYPE_ICON[step.event_type] && <img src={EVENT_TYPE_ICON[step.event_type]} alt="" className="h-6 w-6 object-contain shrink-0" />}
+                <h1 className="font-serif text-xl tracking-[0.06em] uppercase text-primary truncate">
+                  Étape {step.step_number} — {EVENT_TYPE_LABEL[step.event_type] ?? step.event_type}
+                </h1>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px]">
+                <span className={`font-semibold ${RISK_COLOR[step.risk_level]}`}>⚠ Risque {RISK_LABEL[step.risk_level]}</span>
+                <span className="text-amber-400 font-mono">Butin : {step.loot_min}–{step.loot_max} or</span>
+                {visibleRisk !== null && <span className="font-mono text-muted-foreground/70">({Math.round(visibleRisk * 100)}% connu de tous)</span>}
+                {myPrivateRisk !== null && <span className="font-mono text-primary/80">({Math.round(myPrivateRisk * 100)}% connu de toi seul)</span>}
+              </div>
+              {(() => {
+                const knownRisk = resolvingRisk ?? visibleRisk ?? myPrivateRisk;
+                if (knownRisk == null) return null;
+                const fillPct = revealingOutcome ? gaugeWobble : Math.round((1 - knownRisk) * 100);
+                return (
+                  <div className="mt-2 mx-auto max-w-xs">
+                    <div className="h-2 border border-border/50 relative overflow-hidden">
+                      <div className={`absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/70 via-amber-400/70 to-emerald-500/70 ${revealingOutcome ? "transition-all duration-200" : "transition-all duration-700"}`} style={{ width: `${fillPct}%` }} />
+                    </div>
+                    <div className="flex justify-between text-[10px] uppercase tracking-[0.06em] mt-0.5">
+                      <span className={outcomeFlash === "failure" ? "text-red-300 scale-110 animate-pulse" : "text-muted-foreground/85"}>Échec</span>
+                      <span className={outcomeFlash === "success" ? "text-emerald-200 scale-110 animate-pulse" : "text-muted-foreground/85"}>Réussite</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* SCÈNE */}
+            <div className="shrink-0 px-3 pt-3">
+              {step.description && (() => {
+                const parchmentBg = communityInfo?.imagePath || pickParchmentBg(step);
+                return (
+                  <div className="relative overflow-hidden rounded-sm mx-auto" style={{ aspectRatio: "16 / 9", maxWidth: "100%" }}>
+                    {parchmentBg && <img src={parchmentBg} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none" />}
+                    <div className="absolute inset-0 bg-black/10 pointer-events-none" />
+                    <div className="absolute inset-0 flex items-center justify-center px-[8%] py-[6%] text-center">
+                      <div className="max-w-[92%]">
+                        {step.required_flag_sentiment && (
+                          <p className={`text-[9px] tracking-[0.1em] uppercase mb-1.5 font-bold ${step.required_flag_sentiment === "positif" ? "text-emerald-200" : "text-red-200"}`} style={{ textShadow: "0 2px 4px #000" }}>
+                            Conséquence d'un choix passé
+                          </p>
+                        )}
+                        <p className="text-sm font-sans italic leading-snug text-white" style={{ textShadow: "0 2px 6px rgba(0,0,0,.98), 0 1px 2px #000" }}>
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                    {communityInfo?.isCommunity && (
+                      <p className="absolute bottom-1 right-1.5 text-[8px] text-white/70 italic" style={{ textShadow: "0 1px 3px #000" }}>
+                        Événement imaginé par {communityInfo.authorName ?? "un joueur"}{communityInfo.guildName && <> — {communityInfo.guildName}</>}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* STATUT + TOTAUX */}
+            <div className="shrink-0 px-4 pt-3 text-center">
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground/78">
+                <span>{isAsync ? "En attente que chacun agisse" : `Temps restant : ${timeLeft !== null ? fmt(timeLeft) : "—"}`}</span>
+                <span className="opacity-40">•</span>
+                <span>Votes reçus : {votedIds.filter(id => aliveParticipants.some(p => p.character_id === id)).length} / {aliveParticipants.length}</span>
+              </div>
+              {runningTotals && (
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[9.5px] text-muted-foreground/72">
+                  <span>Or de guilde : <span className="text-amber-400 font-mono">{runningTotals.guildGold}</span></span>
+                  <span className="opacity-40">•</span>
+                  <span>XP : <span className="text-primary font-mono">{runningTotals.xp}</span></span>
+                  <span className="opacity-40">•</span>
+                  <span>
+                    Part perso si retour : {Math.max(Math.round(runningTotals.guildGold * 0.01) + myGoldAdjustment, 0)} or
+                    {myGoldAdjustment !== 0 && <span className={myGoldAdjustment > 0 ? "text-amber-400" : "text-red-400"}> ({myGoldAdjustment > 0 ? "+" : ""}{myGoldAdjustment})</span>}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* CORPS SCROLLABLE : vote, réserve, capacités, groupe, chat — tout empilé */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
+              {revealingOutcome ? (
+                <div className="py-8 text-center text-sm text-muted-foreground/65 italic">Le verdict tombe…</div>
+              ) : (
+                <>
+                  {/* VOTE */}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65 mb-2">Vote</p>
+                    {!step.resolving && !myVote ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => castVote("continuer")} disabled={busy || deadlineExpired}
+                          className="rounded-sm border border-emerald-400/50 bg-emerald-500/10 text-emerald-200 py-3 text-[13px] uppercase tracking-[0.05em] disabled:opacity-30 flex items-center justify-center gap-1.5">
+                          <img src="/icons/arrow_up.webp" alt="" className="h-4 w-4" />Continuer
+                        </button>
+                        <button onClick={() => castVote("rentrer")} disabled={busy || deadlineExpired}
+                          className="rounded-sm border border-border/50 bg-black/20 text-[#e8dcc0] py-3 text-[13px] uppercase tracking-[0.05em] disabled:opacity-30 flex items-center justify-center gap-1.5">
+                          <img src="/icons/door.webp" alt="" className="h-4 w-4" />Rentrer
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="rounded-sm border border-primary/20 bg-primary/5 px-3 py-2.5 text-center text-[11px] text-muted-foreground">
+                        {step.resolving ? "Vote clos — résolution du serveur…" : "Vote enregistré, en attente des autres…"}
+                      </div>
+                    )}
+                    {!step.resolving && !myVote && step.third_option_kind && step.third_option_label && (
+                      step.required_vocation && myVocation !== step.required_vocation ? (
+                        <p className="mt-2 px-2 py-1.5 text-center text-[10px] text-muted-foreground/55 italic border border-border/20 rounded-sm">
+                          {step.third_option_label}, réservé à un personnage {vocationLabel(step.required_vocation)}
+                        </p>
+                      ) : (() => {
+                        const delta = step.third_option_death_pct != null ? step.third_option_death_pct - step.death_percentage : null;
+                        const riskTag = delta === null ? null
+                          : delta > 0.08 ? { text: "risque nettement accru", color: "text-red-400" }
+                          : delta > 0 ? { text: "risque accru", color: "text-amber-400" }
+                          : delta < -0.08 ? { text: "risque nettement réduit", color: "text-emerald-400" }
+                          : delta < 0 ? { text: "risque réduit", color: "text-emerald-400" }
+                          : null;
+                        const hasLoot = step.third_option_loot_min != null && step.third_option_loot_max != null;
+                        const lootComparedToBase = hasLoot
+                          ? (step.third_option_loot_min! >= step.loot_max ? "butin plus élevé que Continuer"
+                            : step.third_option_loot_max! <= step.loot_min ? "butin plus faible que Continuer" : null)
+                          : null;
+                        return (
+                          <button onClick={() => castVote("troisieme")} disabled={busy || deadlineExpired}
+                            className="mt-2 w-full rounded-sm px-3 py-2.5 border border-amber-500/45 text-amber-300 disabled:opacity-30 text-[11px] leading-tight uppercase tracking-[0.04em] text-left">
+                            <span className="inline-flex items-start gap-1.5">
+                              <img src="/icons/scroll.webp" alt="" className="h-4 w-4 shrink-0 mt-0.5" />
+                              <span>
+                                {step.third_option_label}
+                                {step.required_vocation && ` (vous avez un·e ${vocationLabel(step.required_vocation)} dans le groupe)`}
+                                {step.third_option_cost != null && ` (${step.third_option_cost} or de guilde dépensé)`}
+                                {hasLoot && `, ${step.third_option_loot_min}–${step.third_option_loot_max} or à gagner`}
+                              </span>
+                            </span>
+                            {(riskTag || lootComparedToBase) && (
+                              <span className={`block mt-1 text-[9px] normal-case tracking-normal font-sans ${riskTag?.color ?? "text-muted-foreground"}`}>
+                                {riskTag && <>⚠ {riskTag.text} par rapport à Continuer</>}
+                                {riskTag && lootComparedToBase && " · "}
+                                {lootComparedToBase && lootComparedToBase}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })()
+                    )}
+                    <div className="mt-2 flex gap-1">
+                      {aliveParticipants.map((p) => <div key={p.character_id} className={`h-1 flex-1 rounded-full ${votedIds.includes(p.character_id) ? "bg-primary/70" : "bg-border/25"}`} />)}
+                    </div>
+                  </div>
+
+                  {/* RÉSERVE PERSONNELLE */}
+                  {!!interventionsRemaining && (
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65 mb-2">Réserve personnelle</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        <button onClick={useIntervention} disabled={step.resolving || interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                          className="relative rounded-sm min-h-[56px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary disabled:opacity-25">
+                          <img src="/icons/gauntlet.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase mt-0.5">Intervenir</span>
+                          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
+                        </button>
+                        <button onClick={searchForCuriosity} disabled={step.resolving || searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                          className="relative rounded-sm min-h-[56px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary disabled:opacity-25">
+                          <img src="/icons/magnifier.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase mt-0.5">Fouiller</span>
+                          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
+                        </button>
+                        {hasPotion ? (
+                          <button onClick={drinkPotion} disabled={step.resolving || drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                            className="relative rounded-sm min-h-[56px] flex flex-col items-center justify-center border border-emerald-400/30 bg-black/10 text-emerald-300 disabled:opacity-25">
+                            <img src="/icons/potion.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase leading-tight mt-0.5">Potion</span>
+                            <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
+                          </button>
+                        ) : <div className="min-h-[56px] rounded-sm border border-border/10 opacity-20" />}
+                        <LarcenyButton compact expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />
+                      </div>
+                      {(myIntervened || mySearched || myDrunk) && (
+                        <p className="mt-1.5 text-[9px] leading-tight text-muted-foreground/60 text-center">
+                          {myIntervened && "Intervention utilisée sur cette étape."}{mySearched && searchResult && (searchResult.found ? ` Fouille : trouvé ${searchResult.name}.` : " Fouille infructueuse.")}{myDrunk && drinkResult !== null && ` Potion bue, ${drinkResult} PV.`}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CAPACITÉS & SITUATION */}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65 mb-2">Capacités & situation</p>
+                    <div className="space-y-1.5">
+                      {!step.resolving && myVocation && !myVote && (
+                        <>
+                          {hasRiskReserveEffect && (
+                            <button onClick={useReveal} disabled={vocationBusy === "reveal"} className="w-full rounded-sm text-[11px] leading-tight border border-primary/35 text-primary px-3 py-2 disabled:opacity-30">
+                              {vocationBusy === "reveal" ? "…" : "Révéler le risque (à toi seul)"}
+                            </button>
+                          )}
+                          {myMartyrTarget && <p className="text-[10px] text-red-300/65 italic px-1">Si un coup mortel devait tomber sur cette personne cette étape, tu le prends à sa place.</p>}
+                          {myVocation === "Martyr" && step.event_type === "gardien" && !usedAbilities.has("martyr_provocation") && (
+                            <div>
+                              <p className="text-[9px] text-muted-foreground/60 mb-1">Disponible car tu es Martyr</p>
+                              <button onClick={useMartyrProvocation} disabled={vocationBusy === "martyr_provocation"} className="w-full rounded-sm text-[11px] leading-tight border border-red-400/35 text-red-300 px-3 py-2 disabled:opacity-30">
+                                {vocationBusy === "martyr_provocation" ? "…" : "Provoquer seul l'adversaire"}
+                              </button>
+                            </div>
+                          )}
+                          {usedAbilities.has("martyr_provocation") && <p className="text-[10px] text-red-300/65 italic px-1">L'étape est déjà réglée, le résultat arrive.</p>}
+                          {myInquisiteurInvestigation && myInquisiteurInvestigation.stepId === step.id && step.resolved && !inquisiteurFindings && (
+                            <button onClick={revealInquisiteurFindings} disabled={vocationBusy === "inquisiteur_reveal"} className="w-full rounded-sm text-[11px] leading-tight border border-purple-400/35 text-purple-300 px-3 py-2 disabled:opacity-30">
+                              {vocationBusy === "inquisiteur_reveal" ? "…" : "Voir les résultats de l'enquête"}
+                            </button>
+                          )}
+                          {inquisiteurFindings && (
+                            <div className="text-[10px] text-purple-300/80 px-1 space-y-0.5">
+                              <p className="text-purple-300">Enquête sur {inquisiteurFindings.target_name}</p>
+                              <p>Vote réel : {inquisiteurFindings.real_vote ?? "n'a pas voté"}</p>
+                              <p>A tenté de pousser devant : {inquisiteurFindings.pushed_frontline_target ?? "personne"}</p>
+                              <p>Tentative de larcin : {inquisiteurFindings.attempted_larceny ? "oui" : "non"}</p>
+                              <p>Capacité secrète utilisée : {inquisiteurFindings.used_secret_ability ? "oui" : "non"}</p>
+                            </div>
+                          )}
+                          {myVocation === "Miracule" && !usedAbilities.has("miracle_bet") && (
+                            <button onClick={useMiracleBet} disabled={vocationBusy === "miracle_bet"} className="w-full rounded-sm text-[11px] leading-tight border border-sky-400/35 text-sky-300 px-3 py-2 disabled:opacity-30">
+                              {vocationBusy === "miracle_bet" ? "…" : "Miser mon miracle sur cette étape"}
+                            </button>
+                          )}
+                          {usedAbilities.has("miracle_bet") && <p className="text-[10px] text-sky-300/65 italic px-1">Si tu devais mourir à cette résolution, tu survis à 1 PV.</p>}
+                          {myVocation === "Tresorier" && !usedAbilities.has("tresorier_secure") && (
+                            <button onClick={useTresorierSecure} disabled={vocationBusy === "tresorier_secure"} className="w-full rounded-sm text-[11px] leading-tight border border-amber-400/35 text-amber-300 px-3 py-2 disabled:opacity-30">
+                              {vocationBusy === "tresorier_secure" ? "…" : "Mettre 30% du butin à l'abri"}
+                            </button>
+                          )}
+                          {usedAbilities.has("tresorier_secure") && <p className="text-[10px] text-amber-300/65 italic px-1">Cette part est acquise même si l'expédition tourne mal.</p>}
+                        </>
+                      )}
+                      {step.event_type === "marchand" && !step.resolving && !step.resolved && <PotionShop step={step} character={character} expeditionId={expeditionId} />}
+                      {allInterventionUsers.length > 0 && <p className="text-[9px] text-amber-300/65 px-1">Déjà agi : {allInterventionUsers.map(u => `${u.name} (${u.action === "aide" ? "intervention" : u.action === "fouille" ? "fouille" : "potion"})`).join(", ")}</p>}
+                      <LedgerError message={vocationError} />
+                      <LedgerError message={error} />
+                      {canResolve && error && (
+                        <button onClick={resolveStep} disabled={busy} className="w-full rounded-sm text-[10px] border border-primary/40 text-primary px-3 py-2">{busy ? "Résolution…" : "Réessayer"}</button>
+                      )}
+                      {availableBotsForIntervention.length > 0 && isAdmin && (
+                        <div className="flex flex-wrap gap-1 pt-1 border-t border-border/15">
+                          {availableBotsForIntervention.map(p => <button key={p.character_id} onClick={() => useInterventionAsBot(p.character_id)} disabled={interventionBusy} className="text-[9px] border border-amber-500/30 text-amber-300 px-2 py-1 rounded-sm">Intervenir ({p.character.name})</button>)}
+                        </div>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <button onClick={copyDebugReport} className="mt-2 text-[9px] uppercase tracking-[0.06em] text-muted-foreground/45">
+                        {debugCopied ? "Rapport de debug copié ✓" : "Copier le rapport de debug"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* GROUPE */}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65 mb-2">Groupe</p>
+                    <div className="space-y-2">
+                      {participants.map((p) => {
+                        const maxHp = getMaxHp((p.character as any)?.level ?? 1);
+                        const hp = (p.character as any)?.hp ?? maxHp;
+                        const hpRatio = maxHp > 0 ? hp / maxHp : 1;
+                        const hpColor = hpRatio <= 0.3 ? "#ef4444" : hpRatio <= 0.6 ? "#f59e0b" : "#22c55e";
+                        const votes = frontlineTally[p.character_id] ?? 0;
+                        const isMe = p.character_id === character?.id;
+                        return (
+                          <div key={p.character_id} className={`rounded-sm border border-border/25 bg-black/20 px-2.5 py-2 ${!p.is_alive ? "opacity-30" : ""}`}>
+                            <div className="flex items-center gap-2">
+                              <PortraitDisplay portraitId={(p.character as any)?.portrait ?? "ombre"} size={44} bordered={false} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <p className={`text-[13px] truncate ${!p.is_alive ? "line-through text-red-400/50" : isMe ? "text-primary" : "text-muted-foreground"}`}>
+                                    {(p.character as any)?.name}{!p.is_alive ? " ✝" : ""}
+                                  </p>
+                                  <div className="ml-auto shrink-0"><VocationBadge vocationId={(p.character as any)?.declared_vocation} /></div>
+                                </div>
+                                {p.is_alive && (
+                                  <>
+                                    <div className="h-1.5 mt-1 rounded-sm bg-black/55 border border-black/60 overflow-hidden">
+                                      <div className="h-full transition-all duration-500" style={{ width: `${Math.round(hpRatio * 100)}%`, backgroundColor: hpColor }} />
+                                    </div>
+                                    <div className="flex items-center justify-between mt-0.5">
+                                      <p className="text-[10px] font-mono flex items-center gap-1" style={{ color: hpColor }}>{hp}/{maxHp}<Heart size={9} className="fill-current" /></p>
+                                      <span className={votedIds.includes(p.character_id) ? "text-primary text-[11px]" : "text-muted-foreground/35 text-[11px]"}>{votedIds.includes(p.character_id) ? "✓" : "…"}</span>
+                                    </div>
+                                  </>
+                                )}
+                                {shield && shield.resolved && !shield.broken_reason && shield.holder_character_id === p.character_id && shield.steps_remaining !== null && shield.steps_remaining > 0 && (
+                                  <p className="text-[9px] font-mono flex items-center gap-1 text-sky-400">
+                                    <img src={SHIELD_ICON[shield.rarity]} alt="" className="w-3.5 h-3.5 object-contain" /> {shield.steps_remaining}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                              {p.is_alive && step && !step.resolving && !step.resolved && myVocation === "Martyr" && p.character_id !== character?.id && !usedAbilities.has("martyr_triggered") && (
+                                <button onClick={() => designateMartyrTarget(p.character_id)}
+                                  className={`text-[9px] uppercase tracking-[0.04em] border rounded-sm px-1.5 py-1 ${myMartyrTarget === p.character_id ? "border-red-400 text-red-300 bg-red-500/10" : "border-border/25 text-muted-foreground/55"}`}>
+                                  {vocationBusy === "martyr_target" ? "…" : "Protéger"}
+                                </button>
+                              )}
+                              {p.is_alive && step && !step.resolving && !step.resolved && myVocation === "Inquisiteur" && p.character_id !== character?.id && !usedAbilities.has("inquisiteur_target") && (
+                                <button onClick={() => designateInquisiteurTarget(p.character_id)}
+                                  className="text-[9px] uppercase tracking-[0.04em] border rounded-sm px-1.5 py-1 border-border/25 text-muted-foreground/55">
+                                  {vocationBusy === "inquisiteur_target" ? "…" : "Enquêter"}
+                                </button>
+                              )}
+                              {p.is_alive && step && !step.resolving && !step.resolved && (
+                                <button onClick={() => voteFrontline(p.character_id)}
+                                  className={`text-[9px] uppercase tracking-[0.04em] border rounded-sm px-1.5 py-1 ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/25 text-muted-foreground/55"}`}>
+                                  Pousser{votes > 0 && !isMe ? ` (${votes})` : ""}
+                                </button>
+                              )}
+                              {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
+                                inspectResult?.id === p.character_id ? (
+                                  <span className={`text-[9px] ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>{inspectResult.honest ? "Honnête" : "Traître"}</span>
+                                ) : usedAbilities.has("inquisiteur_inspect") ? null : (
+                                  <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
+                                    className="text-[9px] uppercase tracking-[0.04em] border rounded-sm border-border/30 text-muted-foreground px-1.5 py-1 disabled:opacity-30">
+                                    {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
+                                  </button>
+                                )
+                              )}
+                              {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
+                                <div className="ml-auto flex gap-1 opacity-60">
+                                  <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id} className="text-[8px] uppercase border border-amber-500/30 text-amber-300 px-1.5 py-1 rounded-sm">Continuer</button>
+                                  <button onClick={() => botVote(p.character_id, "rentrer")} disabled={botBusy === p.character_id} className="text-[8px] uppercase border border-amber-500/30 text-amber-300 px-1.5 py-1 rounded-sm">Rentrer</button>
+                                </div>
+                              )}
+                              {isAdmin && p.character.is_bot && !p.is_alive && (
+                                <button onClick={() => botRevive(p.character_id)} disabled={botBusy === p.character_id} className="text-[8px] uppercase border border-amber-500/30 text-amber-300 px-1.5 py-1 rounded-sm">
+                                  {botBusy === p.character_id ? "…" : "Ressusciter"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* CHAT — replié, sous forme de section repliable pour ne pas alourdir le scroll vertical */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65">Chat</p>
+                  {isAsync && character && (
+                    <button type="button" onClick={toggleAsyncDiscordNotifications} disabled={discordNotifsBusy}
+                      className={`text-[9px] uppercase tracking-[0.06em] border rounded-sm px-2 py-1 ${discordNotifsEnabled ? "border-emerald-400/35 text-emerald-300/80" : "border-border/30 text-muted-foreground/55"} disabled:opacity-40`}>
+                      {discordNotifsBusy ? "Discord…" : `Discord : ${discordNotifsEnabled ? "activé" : "désactivé"}`}
+                    </button>
+                  )}
+                </div>
+                <div className="rounded-sm border border-border/20 bg-black/20" style={{ height: "40vh" }}>
+                  <div className="h-full flex flex-col p-3">
+                    <ChatBox expeditionId={expeditionId} character={character} />
+                  </div>
+                </div>
+                <NotificationsPanel character={character} />
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     );
   }
 

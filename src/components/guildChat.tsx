@@ -12,13 +12,21 @@ export function GuildChatBox({ guildId, characterId }: { guildId: string; charac
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMessages = useCallback(async () => {
+    // Même bug que le chat d'expédition (vote.tsx) : order(ascending:
+    // true).limit(50) garde les 50 PREMIERS messages de la guilde (les plus
+    // vieux), pas les 50 derniers, puisque le LIMIT s'applique après le tri
+    // du plus ancien au plus récent. Passé 50 messages au total, le chat
+    // reste figé sur les tout premiers échanges et plus aucun nouveau
+    // message n'apparaît. On trie par le plus récent pour prendre les 50
+    // DERNIERS, puis on ré-inverse côté client pour l'affichage
+    // chronologique normal.
     const { data } = await supabase
       .from("guild_chat_messages")
       .select("id, character_id, message, created_at, character:characters(name)")
       .eq("guild_id", guildId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(50);
-    setMessages((data as any) ?? []);
+    setMessages(((data as any) ?? []).slice().reverse());
   }, [guildId]);
 
   useEffect(() => {
