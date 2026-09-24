@@ -311,7 +311,16 @@ function VotePage() {
   const [runningTotals, setRunningTotals] = useState<{ guildGold: number; xp: number } | null>(null);
   const [myGoldAdjustment, setMyGoldAdjustment] = useState(0);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const aliveParticipants = participants.filter(p => p.is_alive);
+  // Mémoïsé : aliveParticipants est une dépendance de fetchShield (plus
+  // bas). Recalculé sans useMemo, il produisait une NOUVELLE référence de
+  // tableau à CHAQUE rendu -> fetchShield changeait d'identité à chaque
+  // rendu -> startPoll (qui en dépend) aussi -> le useEffect de montage
+  // (qui dépend de startPoll) se redéclenchait en boucle, relançant tout le
+  // setup (session, personnage, vocation, admin, poll 5s...) sans fin.
+  // C'est ce qui a fait planter l'expédition à 4 joueurs : plus de joueurs
+  // actifs -> plus de rendus -> boucle qui s'emballe -> le navigateur finit
+  // par refuser toute nouvelle requête (ERR_INSUFFICIENT_RESOURCES).
+  const aliveParticipants = useMemo(() => participants.filter(p => p.is_alive), [participants]);
   const [votedIds, setVotedIds] = useState<string[]>([]);
   const [myVote, setMyVote] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -743,19 +752,37 @@ function VotePage() {
     return data;
   }, [expeditionId, fetchVotes]);
 
-  // Poll central — vérifie mort + participants + votes + étape
+  // Toujours la dernière version de ces callbacks, sans jamais redémarrer le
+  // poll ni redéclencher le useEffect de montage. fetchShield en particulier
+  // change d'identité chaque fois que aliveParticipants change de contenu
+  // (nouveau participant, mort...) : si le setInterval ci-dessous capturait
+  // fetchShield une fois pour toutes au démarrage (comme avant), il aurait
+  // continué à tourner indéfiniment avec un aliveParticipants figé au moment
+  // du montage, faussant le calcul d'unanimité du bouclier pour toute la
+  // durée de l'expédition.
+  const fetchParticipantsRef = useRef(fetchParticipants);
+  const fetchStepRef = useRef(fetchStep);
+  const fetchShieldRef = useRef(fetchShield);
+  useEffect(() => { fetchParticipantsRef.current = fetchParticipants; }, [fetchParticipants]);
+  useEffect(() => { fetchStepRef.current = fetchStep; }, [fetchStep]);
+  useEffect(() => { fetchShieldRef.current = fetchShield; }, [fetchShield]);
+
+  // Poll central — vérifie mort + participants + votes + étape. Démarré une
+  // seule fois (voir le useEffect de montage) : ne dépend plus des callbacks
+  // eux-mêmes, seulement des refs toujours à jour ci-dessus, pour ne jamais
+  // avoir besoin d'être recréé.
   const startPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       // Participants (avec statut vivant/mort)
-      await fetchParticipants();
+      await fetchParticipantsRef.current();
       // Étape + votes (la détection de mort personnelle est gérée dans showStepResult,
       // déclenché naturellement quand l'étape se résout)
-      void fetchStep();
+      void fetchStepRef.current();
       // Bouclier de groupe (apparition, vote en cours, ou déjà porté)
-      void fetchShield();
+      void fetchShieldRef.current();
     }, 5000);
-  }, [fetchStep, fetchParticipants, fetchShield]);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -827,7 +854,19 @@ function VotePage() {
       startPoll();
     })();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [expeditionId, navigate, fetchStep, fetchParticipants, fetchShield, startPoll]);
+    // Ce useEffect est le SETUP DE MONTAGE de la page : il ne doit s'exécuter
+    // qu'une fois par expédition (session, personnage, vocation, admin,
+    // participation, première étape, démarrage du poll). Il ne doit surtout
+    // pas se redéclencher juste parce que fetchStep/fetchParticipants/
+    // fetchShield/startPoll changent d'identité d'un rendu à l'autre — ces
+    // fonctions sont lues une fois ici pour lancer le setup, pas pour être
+    // "suivies". Les avoir dans ce tableau de dépendances est exactement ce
+    // qui a provoqué la boucle de rendu infinie (voir le commentaire sur
+    // aliveParticipants plus haut) : bouclier fetchShield → startPoll →
+    // CE useEffect qui relance TOUT le setup à chaque rendu, jusqu'à ce que
+    // le navigateur refuse toute nouvelle requête (ERR_INSUFFICIENT_RESOURCES).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expeditionId]);
 
   // Minuteur — n'a de sens qu'en mode synchrone : en asynchrone, il n'y a
   // délibérément aucune échéance forcée (le serveur attend que tout le
