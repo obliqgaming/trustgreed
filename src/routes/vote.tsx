@@ -2023,32 +2023,14 @@ function VotePage() {
                           </button>
                         ) : <div className="min-h-[56px] rounded-sm border border-border/10 opacity-20" />}
                         <LarcenyButton compact expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />
+                        {step && !step.resolving && !step.resolved && (
+                          <PushFrontlineButton compact myFrontlineTarget={myFrontlineTarget} aliveParticipants={aliveParticipants} character={character} onSelect={setFrontlineTarget} />
+                        )}
                       </div>
                       {(myIntervened || mySearched || myDrunk) && (
                         <p className="mt-1.5 text-[9px] leading-tight text-muted-foreground/60 text-center">
                           {myIntervened && "Intervention utilisée sur cette étape."}{mySearched && searchResult && (searchResult.found ? ` Fouille : trouvé ${searchResult.name}.` : " Fouille infructueuse.")}{myDrunk && drinkResult !== null && ` Potion bue, ${drinkResult} PV.`}
                         </p>
-                      )}
-                      {step && !step.resolving && !step.resolved && (
-                        <div className="mt-2" title="Pousser devant : redirige les dégâts sur la personne choisie">
-                          <label className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground/60 block mb-1">Pousser devant</label>
-                          <select
-                            value={myFrontlineTarget ?? ""}
-                            onChange={(e) => setFrontlineTarget(e.target.value || null)}
-                            className="w-full bg-black/20 border border-amber-500/25 text-amber-300 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none focus:border-amber-400/50"
-                          >
-                            <option value="">— Personne —</option>
-                            {aliveParticipants.map((p) => {
-                              const isMeOpt = p.character_id === character?.id;
-                              const votesOpt = frontlineTally[p.character_id] ?? 0;
-                              return (
-                                <option key={p.character_id} value={p.character_id}>
-                                  {(p.character as any)?.name}{isMeOpt ? " (moi)" : ""}{votesOpt > 0 && !isMeOpt ? ` · ${votesOpt} vote${votesOpt > 1 ? "s" : ""}` : ""}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
                       )}
                     </div>
                   )}
@@ -2171,8 +2153,9 @@ function VotePage() {
                               )}
                               {p.is_alive && step && !step.resolving && !step.resolved && myVocation === "Inquisiteur" && p.character_id !== character?.id && !usedAbilities.has("inquisiteur_target") && (
                                 <button onClick={() => designateInquisiteurTarget(p.character_id)}
+                                  title="Surveiller cette personne pendant cette étape (rapport détaillé après résolution)"
                                   className="text-[9px] uppercase tracking-[0.04em] border rounded-sm px-1.5 py-1 border-border/25 text-muted-foreground/55">
-                                  {vocationBusy === "inquisiteur_target" ? "…" : "Enquêter"}
+                                  {vocationBusy === "inquisiteur_target" ? "…" : "Surveiller"}
                                 </button>
                               )}
                               {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
@@ -2180,8 +2163,9 @@ function VotePage() {
                                   <span className={`text-[9px] ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>{inspectResult.honest ? "Honnête" : "Traître"}</span>
                                 ) : usedAbilities.has("inquisiteur_inspect") ? null : (
                                   <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
+                                    title="Sonder immédiatement si cette personne est honnête ou traître (une fois par expédition)"
                                     className="text-[9px] uppercase tracking-[0.04em] border rounded-sm border-border/30 text-muted-foreground px-1.5 py-1 disabled:opacity-30">
-                                    {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
+                                    {vocationBusy === `inspect-${p.character_id}` ? "…" : "Sonder"}
                                   </button>
                                 )
                               )}
@@ -2304,10 +2288,10 @@ function VotePage() {
                   {p.is_alive && step && !step.resolving && !step.resolved && myVocation === "Inquisiteur" && p.character_id !== character?.id && !usedAbilities.has("inquisiteur_target") && (
                     <button
                       onClick={() => designateInquisiteurTarget(p.character_id)}
-                      title="Enquêter sur cette personne pour cette étape (une fois par expédition)"
+                      title="Surveiller cette personne pendant cette étape (rapport détaillé après résolution)"
                       className="text-[10px] uppercase tracking-[0.05em] border px-1.5 py-0.5 whitespace-nowrap border-border/25 text-muted-foreground/55 hover:border-purple-400/40 hover:text-purple-300"
                     >
-                      {vocationBusy === "inquisiteur_target" ? "…" : "Enquêter"}
+                      {vocationBusy === "inquisiteur_target" ? "…" : "Surveiller"}
                     </button>
                   )}
                   {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
@@ -2315,8 +2299,9 @@ function VotePage() {
                       <span className={`text-[9px] ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>{inspectResult.honest ? "Honnête" : "Traître"}</span>
                     ) : usedAbilities.has("inquisiteur_inspect") ? null : (
                       <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
+                        title="Sonder immédiatement si cette personne est honnête ou traître (une fois par expédition)"
                         className="text-[10px] uppercase tracking-[0.05em] border border-border/30 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
-                        {vocationBusy === `inspect-${p.character_id}` ? "…" : "Enquêter"}
+                        {vocationBusy === `inspect-${p.character_id}` ? "…" : "Sonder"}
                       </button>
                     )
                   )}
@@ -2563,6 +2548,9 @@ function VotePage() {
                             </button>
                           ) : <div className="min-h-[48px] border border-border/10 opacity-20" />}
                           <LarcenyButton compact expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />
+                          {step && !step.resolving && !step.resolved && (
+                            <PushFrontlineButton myFrontlineTarget={myFrontlineTarget} aliveParticipants={aliveParticipants} character={character} onSelect={setFrontlineTarget} />
+                          )}
                         </>
                       )}
                     </div>
@@ -2570,27 +2558,6 @@ function VotePage() {
                       <p className="mt-1 text-[8px] leading-tight text-muted-foreground/60 text-center">
                         {myIntervened && "Intervention utilisée sur cette étape."}{mySearched && searchResult && (searchResult.found ? ` Fouille : trouvé ${searchResult.name}.` : " Fouille infructueuse.")}{myDrunk && drinkResult !== null && ` Potion bue, ${drinkResult} PV.`}
                       </p>
-                    )}
-                    {step && !step.resolving && !step.resolved && (
-                      <div className="mt-1.5" title="Pousser devant : redirige les dégâts sur la personne choisie">
-                        <label className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground/60 block mb-1">Pousser devant</label>
-                        <select
-                          value={myFrontlineTarget ?? ""}
-                          onChange={(e) => setFrontlineTarget(e.target.value || null)}
-                          className="w-full bg-black/20 border border-amber-500/25 text-amber-300 text-[10px] rounded-sm px-2 py-1 focus:outline-none focus:border-amber-400/50"
-                        >
-                          <option value="">— Personne —</option>
-                          {aliveParticipants.map((p) => {
-                            const isMeOpt = p.character_id === character?.id;
-                            const votesOpt = frontlineTally[p.character_id] ?? 0;
-                            return (
-                              <option key={p.character_id} value={p.character_id}>
-                                {(p.character as any)?.name}{isMeOpt ? " (moi)" : ""}{votesOpt > 0 && !isMeOpt ? ` · ${votesOpt} vote${votesOpt > 1 ? "s" : ""}` : ""}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
                     )}
                   </div>
 
@@ -2888,6 +2855,64 @@ function NotificationsPanel({ character }: { character: Character | null }) {
           <button onClick={() => dismiss(n.id)} className="text-amber-400/60 hover:text-amber-300 text-xs leading-none">✕</button>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Bouton "Pousser devant" de la Réserve personnelle : une icône comme les
+// autres actions de la réserve (Intervenir/Fouiller/Potion/Larcin), qui
+// ouvre au clic un petit menu déroulant pour choisir la cible — plutôt
+// qu'un <select> nu affiché en permanence sous la grille, illisible et pas
+// homogène avec le reste du bloc.
+function PushFrontlineButton({ compact, myFrontlineTarget, aliveParticipants, character, onSelect }: {
+  compact?: boolean;
+  myFrontlineTarget: string | null;
+  aliveParticipants: { character_id: string; character: { name: string } }[];
+  character: Character | null;
+  onSelect: (targetId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const targetName = myFrontlineTarget
+    ? (aliveParticipants.find(p => p.character_id === myFrontlineTarget)?.character as any)?.name ?? "?"
+    : null;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Pousser devant : redirige les dégâts sur la personne choisie"
+        className={`relative w-full ${compact ? "min-h-[56px]" : "min-h-[48px]"} rounded-sm flex flex-col items-center justify-center border ${myFrontlineTarget ? "border-amber-400 bg-amber-500/10 text-amber-300" : "border-amber-500/30 bg-black/10 text-amber-300/90"}`}
+      >
+        <img src="/icons/hooded_group.webp" alt="" className="h-6 w-6 object-contain" />
+        <span className="text-[8px] uppercase leading-tight mt-0.5 text-center px-0.5">
+          {targetName ? `→ ${targetName}` : "Pousser devant"}
+        </span>
+      </button>
+      {open && (
+        <div className="absolute z-20 bottom-full mb-1.5 left-0 right-0 min-w-[160px] bg-card border border-amber-500/30 rounded-sm shadow-lg p-2">
+          <p className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground/60 mb-1.5">Pousser devant</p>
+          <div className="max-h-40 overflow-y-auto space-y-1">
+            <button
+              onClick={() => { onSelect(null); setOpen(false); }}
+              className={`w-full text-left text-[11px] px-2 py-1 rounded-sm ${!myFrontlineTarget ? "bg-amber-500/15 text-amber-300" : "text-muted-foreground hover:bg-black/20"}`}
+            >
+              — Personne —
+            </button>
+            {aliveParticipants.map((p) => {
+              const isMeOpt = p.character_id === character?.id;
+              return (
+                <button
+                  key={p.character_id}
+                  onClick={() => { onSelect(p.character_id); setOpen(false); }}
+                  className={`w-full text-left text-[11px] px-2 py-1 rounded-sm ${myFrontlineTarget === p.character_id ? "bg-amber-500/15 text-amber-300" : "text-muted-foreground hover:bg-black/20"}`}
+                >
+                  {(p.character as any)?.name}{isMeOpt ? " (moi)" : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
