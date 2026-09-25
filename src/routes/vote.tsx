@@ -980,17 +980,26 @@ function VotePage() {
   async function castVote(vote: "continuer" | "rentrer" | "troisieme") {
     if (!step || !character || myVote) return;
     setError(null); setBusy(true);
-    if (vote === "continuer") soundVoteContinuer(); else if (vote === "rentrer") soundVoteRentrer(); else soundVoteEnregistre();
-    const { error: rpcError } = await supabase.rpc("cast_vote", {
-      p_step_id: step.id, p_character_id: character.id, p_vote: vote,
-    });
-    if (rpcError) { setError(rpcError.message); }
-    else {
-      soundVoteEnregistre();
-      setMyVote(vote);
-      setVotedIds(prev => prev.includes(character.id) ? prev : [...prev, character.id]);
+    // try/finally : un throw non attrapé ici (réseau, son qui échoue...)
+    // laissait busy bloqué à true pour toujours, désactivant silencieusement
+    // les boutons de vote sans le moindre message d'erreur affiché — même
+    // symptôme et même cause que dans resolveStep() ci-dessus.
+    try {
+      if (vote === "continuer") soundVoteContinuer(); else if (vote === "rentrer") soundVoteRentrer(); else soundVoteEnregistre();
+      const { error: rpcError } = await supabase.rpc("cast_vote", {
+        p_step_id: step.id, p_character_id: character.id, p_vote: vote,
+      });
+      if (rpcError) { setError(rpcError.message); }
+      else {
+        soundVoteEnregistre();
+        setMyVote(vote);
+        setVotedIds(prev => prev.includes(character.id) ? prev : [...prev, character.id]);
+      }
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur inattendue pendant le vote.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function drinkPotion() {
@@ -1337,17 +1346,30 @@ function VotePage() {
     if (!step) return;
     setBusy(true); setError(null);
 
-    // 3/3 votes (ou fin du délai en synchrone) => résolution serveur immédiate.
-    // Intervenir/Fouiller/Potion/Larcin sont disponibles pendant toute la phase
-    // de vote : il n'y a plus de fenêtre d'intervention après la fermeture.
-    const { data: beganStep, error: beginError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
-    if (beginError) { setError(beginError.message); setBusy(false); return; }
+    // IMPORTANT : resolveStep() se déclenche automatiquement, en arrière-plan,
+    // pour TOUS les clients dès que le groupe semble avoir fini de voter (voir
+    // l'effet plus bas). "busy" est aussi ce qui désactive les boutons
+    // Continuer/Rentrer du joueur — si un throw non attrapé survient ici
+    // (panne réseau, exception JS...), setBusy(false) n'était jamais atteint
+    // et le vote de CE joueur restait bloqué en silence, sans aucune erreur
+    // affichée, même s'il n'avait pas encore voté lui-même. try/finally
+    // garantit que busy repasse toujours à false, quoi qu'il arrive.
+    try {
+      // 3/3 votes (ou fin du délai en synchrone) => résolution serveur immédiate.
+      // Intervenir/Fouiller/Potion/Larcin sont disponibles pendant toute la phase
+      // de vote : il n'y a plus de fenêtre d'intervention après la fermeture.
+      const { data: beganStep, error: beginError } = await supabase.rpc("begin_resolution", { p_step_id: step.id });
+      if (beginError) { setError(beginError.message); return; }
 
-    // begin_resolution finalise désormais lui-même les issues probabilistes
-    // côté serveur. Le client ne lance plus une seconde RPC et ne connaît plus
-    // de phase intermédiaire intervenir/fouiller/passer.
-    await fetchStep();
-    setBusy(false);
+      // begin_resolution finalise désormais lui-même les issues probabilistes
+      // côté serveur. Le client ne lance plus une seconde RPC et ne connaît plus
+      // de phase intermédiaire intervenir/fouiller/passer.
+      await fetchStep();
+    } catch (e: any) {
+      setError(e?.message ?? "Erreur inattendue pendant la résolution.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function useIntervention() {
