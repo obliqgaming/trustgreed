@@ -576,6 +576,20 @@ function VotePage() {
     await fetchFrontlineVotes(step.id);
   }
 
+  // Variante pour le menu déroulant de la Réserve personnelle : contrairement
+  // à voteFrontline (qui bascule sélection/désélection sur un clic bouton),
+  // ici on choisit une cible explicite dans un <select> — une chaîne vide
+  // veut dire "aucune cible", sans logique de bascule.
+  async function setFrontlineTarget(targetId: string | null) {
+    if (!step || !character) return;
+    setMyFrontlineTarget(targetId); // optimiste
+    const { error: rpcError } = await supabase.rpc("vote_frontline" as any, {
+      p_step_id: step.id, p_voter_character_id: character.id, p_target_character_id: targetId,
+    });
+    if (rpcError) setError(rpcError.message);
+    await fetchFrontlineVotes(step.id);
+  }
+
   // Bouclier de groupe : récupère le bouclier actif de l'expédition (en
   // vote ou porté), son décompte de votes, et déclenche resolve_shield_vote
   // si la fenêtre est écoulée — même pattern best-effort que fetchStep
@@ -1989,17 +2003,20 @@ function VotePage() {
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65 mb-2">Réserve personnelle</p>
                       <div className="grid grid-cols-4 gap-2">
                         <button onClick={useIntervention} disabled={step.resolving || interventionBusy || myIntervened || mySearched || !interventionsRemaining}
+                          title="Intervenir : réduit les risques de cette étape"
                           className="relative rounded-sm min-h-[56px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary disabled:opacity-25">
                           <img src="/icons/gauntlet.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase mt-0.5">Intervenir</span>
                           <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                         </button>
                         <button onClick={searchForCuriosity} disabled={step.resolving || searchBusy || myIntervened || mySearched || !interventionsRemaining}
+                          title="Fouiller : cherche un objet caché sur cette étape"
                           className="relative rounded-sm min-h-[56px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary disabled:opacity-25">
                           <img src="/icons/magnifier.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase mt-0.5">Fouiller</span>
                           <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                         </button>
                         {hasPotion ? (
                           <button onClick={drinkPotion} disabled={step.resolving || drinkBusy || myIntervened || mySearched || !interventionsRemaining}
+                            title="Potion : bois une potion pour récupérer des PV"
                             className="relative rounded-sm min-h-[56px] flex flex-col items-center justify-center border border-emerald-400/30 bg-black/10 text-emerald-300 disabled:opacity-25">
                             <img src="/icons/potion.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase leading-tight mt-0.5">Potion</span>
                             <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
@@ -2011,6 +2028,27 @@ function VotePage() {
                         <p className="mt-1.5 text-[9px] leading-tight text-muted-foreground/60 text-center">
                           {myIntervened && "Intervention utilisée sur cette étape."}{mySearched && searchResult && (searchResult.found ? ` Fouille : trouvé ${searchResult.name}.` : " Fouille infructueuse.")}{myDrunk && drinkResult !== null && ` Potion bue, ${drinkResult} PV.`}
                         </p>
+                      )}
+                      {step && !step.resolving && !step.resolved && (
+                        <div className="mt-2" title="Pousser devant : redirige les dégâts sur la personne choisie">
+                          <label className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground/60 block mb-1">Pousser devant</label>
+                          <select
+                            value={myFrontlineTarget ?? ""}
+                            onChange={(e) => setFrontlineTarget(e.target.value || null)}
+                            className="w-full bg-black/20 border border-amber-500/25 text-amber-300 text-[11px] rounded-sm px-2 py-1.5 focus:outline-none focus:border-amber-400/50"
+                          >
+                            <option value="">— Personne —</option>
+                            {aliveParticipants.map((p) => {
+                              const isMeOpt = p.character_id === character?.id;
+                              const votesOpt = frontlineTally[p.character_id] ?? 0;
+                              return (
+                                <option key={p.character_id} value={p.character_id}>
+                                  {(p.character as any)?.name}{isMeOpt ? " (moi)" : ""}{votesOpt > 0 && !isMeOpt ? ` · ${votesOpt} vote${votesOpt > 1 ? "s" : ""}` : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
                       )}
                     </div>
                   )}
@@ -2135,12 +2173,6 @@ function VotePage() {
                                 <button onClick={() => designateInquisiteurTarget(p.character_id)}
                                   className="text-[9px] uppercase tracking-[0.04em] border rounded-sm px-1.5 py-1 border-border/25 text-muted-foreground/55">
                                   {vocationBusy === "inquisiteur_target" ? "…" : "Enquêter"}
-                                </button>
-                              )}
-                              {p.is_alive && step && !step.resolving && !step.resolved && (
-                                <button onClick={() => voteFrontline(p.character_id)}
-                                  className={`text-[9px] uppercase tracking-[0.04em] border rounded-sm px-1.5 py-1 ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/25 text-muted-foreground/55"}`}>
-                                  Pousser{votes > 0 && !isMe ? ` (${votes})` : ""}
                                 </button>
                               )}
                               {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
@@ -2276,19 +2308,6 @@ function VotePage() {
                       className="text-[10px] uppercase tracking-[0.05em] border px-1.5 py-0.5 whitespace-nowrap border-border/25 text-muted-foreground/55 hover:border-purple-400/40 hover:text-purple-300"
                     >
                       {vocationBusy === "inquisiteur_target" ? "…" : "Enquêter"}
-                    </button>
-                  )}
-                  {p.is_alive && step && !step.resolving && !step.resolved && (
-                    <button
-                      onClick={() => voteFrontline(p.character_id)}
-                      title="Pousser cette personne devant pour la prochaine étape"
-                      className={`text-[10px] uppercase tracking-[0.05em] border px-1.5 py-0.5 whitespace-nowrap ${myFrontlineTarget === p.character_id ? "border-amber-400 text-amber-300 bg-amber-500/10" : "border-border/25 text-muted-foreground/55 hover:border-amber-400/40 hover:text-amber-300"}`}
-                    >
-                      {/* Le compte de votes reste caché à la personne visée
-                          elle-même — sinon voir "on veut te pousser" en
-                          boucle décourage de continuer à jouer. Les autres
-                          le voient normalement. */}
-                      Pousser devant{votes > 0 && !isMe ? ` (${votes})` : ""}
                     </button>
                   )}
                   {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
@@ -2527,18 +2546,18 @@ function VotePage() {
                       {!!interventionsRemaining && (
                         <>
                           <button onClick={useIntervention} disabled={step.resolving || interventionBusy || myIntervened || mySearched || !interventionsRemaining}
-                            title={`Intervenir (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
+                            title={`Intervenir : réduit les risques de cette étape (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
                             <img src="/icons/gauntlet.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Intervenir</span>
                             <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                           </button>
                           <button onClick={searchForCuriosity} disabled={step.resolving || searchBusy || myIntervened || mySearched || !interventionsRemaining}
-                            title={`Fouiller (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
+                            title={`Fouiller : cherche un objet caché sur cette étape (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-primary/30 bg-black/10 text-primary hover:bg-primary/10 disabled:opacity-25">
                             <img src="/icons/magnifier.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase">Fouiller</span>
                             <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-primary/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                           </button>
                           {hasPotion ? (
                             <button onClick={drinkPotion} disabled={step.resolving || drinkBusy || myIntervened || mySearched || !interventionsRemaining}
-                              title={`Boire une potion (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-emerald-400/30 bg-black/10 text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-25">
+                              title={`Potion : bois une potion pour récupérer des PV (${interventionsRemaining} restante${interventionsRemaining > 1 ? "s" : ""})`} className="relative min-h-[48px] flex flex-col items-center justify-center border border-emerald-400/30 bg-black/10 text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-25">
                               <img src="/icons/potion.webp" alt="" className="h-6 w-6 object-contain" /><span className="text-[8px] uppercase leading-tight">Boire une potion</span>
                               <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-emerald-400/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
                             </button>
@@ -2551,6 +2570,27 @@ function VotePage() {
                       <p className="mt-1 text-[8px] leading-tight text-muted-foreground/60 text-center">
                         {myIntervened && "Intervention utilisée sur cette étape."}{mySearched && searchResult && (searchResult.found ? ` Fouille : trouvé ${searchResult.name}.` : " Fouille infructueuse.")}{myDrunk && drinkResult !== null && ` Potion bue, ${drinkResult} PV.`}
                       </p>
+                    )}
+                    {step && !step.resolving && !step.resolved && (
+                      <div className="mt-1.5" title="Pousser devant : redirige les dégâts sur la personne choisie">
+                        <label className="text-[9px] uppercase tracking-[0.06em] text-muted-foreground/60 block mb-1">Pousser devant</label>
+                        <select
+                          value={myFrontlineTarget ?? ""}
+                          onChange={(e) => setFrontlineTarget(e.target.value || null)}
+                          className="w-full bg-black/20 border border-amber-500/25 text-amber-300 text-[10px] rounded-sm px-2 py-1 focus:outline-none focus:border-amber-400/50"
+                        >
+                          <option value="">— Personne —</option>
+                          {aliveParticipants.map((p) => {
+                            const isMeOpt = p.character_id === character?.id;
+                            const votesOpt = frontlineTally[p.character_id] ?? 0;
+                            return (
+                              <option key={p.character_id} value={p.character_id}>
+                                {(p.character as any)?.name}{isMeOpt ? " (moi)" : ""}{votesOpt > 0 && !isMeOpt ? ` · ${votesOpt} vote${votesOpt > 1 ? "s" : ""}` : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
                     )}
                   </div>
 
@@ -2912,7 +2952,7 @@ function LarcenyButton({ expeditionId, step, character, aliveParticipants, compa
   }
 
   if (!confirm) return compact ? (
-    <button onClick={() => setConfirm(true)} title="Tenter un larcin"
+    <button onClick={() => setConfirm(true)} title="Larcin : tente de voler de l'or (à la guilde ou à un·e coéquipier·e)"
       className="relative min-h-[48px] flex flex-col items-center justify-center border border-amber-500/30 bg-black/10 text-amber-300 hover:bg-amber-500/10 transition-colors">
       <img src="/icons/pouch_hand.webp" alt="" className="h-6 w-6 object-contain" />
       <span className="text-[8px] uppercase leading-tight text-center">Larcin</span>
