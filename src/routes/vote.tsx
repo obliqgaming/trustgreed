@@ -397,8 +397,6 @@ function VotePage() {
   const [shieldNotice, setShieldNotice] = useState<string | null>(null);
   const [vocationBusy, setVocationBusy] = useState<string | null>(null);
   const [vocationError, setVocationError] = useState<string | null>(null);
-  const [inspectTarget, setInspectTarget] = useState<string | null>(null);
-  const [inspectResult, setInspectResult] = useState<{ id: string; honest: boolean } | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tensionRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1096,17 +1094,6 @@ function VotePage() {
     });
     if (rpcError) setVocationError(rpcError.message);
     else setInquisiteurFindings((data as any)?.[0] ?? null);
-    setVocationBusy(null);
-  }
-
-  async function useInspect(targetId: string) {
-    if (!character) return;
-    setVocationError(null); setVocationBusy(`inspect-${targetId}`); setInspectResult(null);
-    const { data, error: rpcError } = await supabase.rpc("inspect_vocation", {
-      p_caller_character_id: character.id, p_target_character_id: targetId,
-    });
-    if (rpcError) setVocationError(rpcError.message);
-    else { setInspectResult({ id: targetId, honest: !!data }); setUsedAbilities(prev => new Set(prev).add("inquisiteur_inspect")); }
     setVocationBusy(null);
   }
 
@@ -1998,7 +1985,7 @@ function VotePage() {
                   </div>
 
                   {/* RÉSERVE PERSONNELLE */}
-                  {!!interventionsRemaining && (
+                  {(!!interventionsRemaining || !!myFrontlineTarget) && (
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground/65 mb-2">Réserve personnelle</p>
                       <div className="grid grid-cols-4 gap-2">
@@ -2023,8 +2010,9 @@ function VotePage() {
                           </button>
                         ) : <div className="min-h-[56px] rounded-sm border border-border/10 opacity-20" />}
                         <LarcenyButton compact expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />
-                        {step && !step.resolving && !step.resolved && (
-                          <PushFrontlineButton compact myFrontlineTarget={myFrontlineTarget} aliveParticipants={aliveParticipants} character={character} onSelect={setFrontlineTarget} />
+                        {step && !step.resolved && (
+                          <PushFrontlineButton compact myFrontlineTarget={myFrontlineTarget} aliveParticipants={aliveParticipants} character={character}
+                            interventionsRemaining={interventionsRemaining} disabled={step.resolving} onSelect={setFrontlineTarget} />
                         )}
                       </div>
                       {(myIntervened || mySearched || myDrunk) && (
@@ -2158,17 +2146,6 @@ function VotePage() {
                                   {vocationBusy === "inquisiteur_target" ? "…" : "Surveiller"}
                                 </button>
                               )}
-                              {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
-                                inspectResult?.id === p.character_id ? (
-                                  <span className={`text-[9px] ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>{inspectResult.honest ? "Honnête" : "Traître"}</span>
-                                ) : usedAbilities.has("inquisiteur_inspect") ? null : (
-                                  <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
-                                    title="Sonder immédiatement si cette personne est honnête ou traître (une fois par expédition)"
-                                    className="text-[9px] uppercase tracking-[0.04em] border rounded-sm border-border/30 text-muted-foreground px-1.5 py-1 disabled:opacity-30">
-                                    {vocationBusy === `inspect-${p.character_id}` ? "…" : "Sonder"}
-                                  </button>
-                                )
-                              )}
                               {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
                                 <div className="ml-auto flex gap-1 opacity-60">
                                   <button onClick={() => botVote(p.character_id, "continuer")} disabled={botBusy === p.character_id} className="text-[8px] uppercase border border-amber-500/30 text-amber-300 px-1.5 py-1 rounded-sm">Continuer</button>
@@ -2293,17 +2270,6 @@ function VotePage() {
                     >
                       {vocationBusy === "inquisiteur_target" ? "…" : "Surveiller"}
                     </button>
-                  )}
-                  {myVocation === "Inquisiteur" && p.is_alive && p.character_id !== character?.id && (
-                    inspectResult?.id === p.character_id ? (
-                      <span className={`text-[9px] ${inspectResult.honest ? "text-emerald-400" : "text-red-400"}`}>{inspectResult.honest ? "Honnête" : "Traître"}</span>
-                    ) : usedAbilities.has("inquisiteur_inspect") ? null : (
-                      <button onClick={() => useInspect(p.character_id)} disabled={vocationBusy === `inspect-${p.character_id}`}
-                        title="Sonder immédiatement si cette personne est honnête ou traître (une fois par expédition)"
-                        className="text-[10px] uppercase tracking-[0.05em] border border-border/30 text-muted-foreground px-1.5 py-0.5 hover:border-primary/40 hover:text-primary disabled:opacity-30">
-                        {vocationBusy === `inspect-${p.character_id}` ? "…" : "Sonder"}
-                      </button>
-                    )
                   )}
                   {/* Contrôles bots conservés pour l'admin, volontairement discrets. */}
                   {isAdmin && p.character.is_bot && p.is_alive && step && !votedIds.includes(p.character_id) && (
@@ -2548,10 +2514,11 @@ function VotePage() {
                             </button>
                           ) : <div className="min-h-[48px] border border-border/10 opacity-20" />}
                           <LarcenyButton compact expeditionId={expeditionId} step={step} character={character} aliveParticipants={aliveParticipants} />
-                          {step && !step.resolving && !step.resolved && (
-                            <PushFrontlineButton myFrontlineTarget={myFrontlineTarget} aliveParticipants={aliveParticipants} character={character} onSelect={setFrontlineTarget} />
-                          )}
                         </>
+                      )}
+                      {step && !step.resolved && (
+                        <PushFrontlineButton myFrontlineTarget={myFrontlineTarget} aliveParticipants={aliveParticipants} character={character}
+                          interventionsRemaining={interventionsRemaining} disabled={step.resolving} onSelect={setFrontlineTarget} />
                       )}
                     </div>
                     {(myIntervened || mySearched || myDrunk) && (
@@ -2864,29 +2831,41 @@ function NotificationsPanel({ character }: { character: Character | null }) {
 // ouvre au clic un petit menu déroulant pour choisir la cible — plutôt
 // qu'un <select> nu affiché en permanence sous la grille, illisible et pas
 // homogène avec le reste du bloc.
-function PushFrontlineButton({ compact, myFrontlineTarget, aliveParticipants, character, onSelect }: {
+function PushFrontlineButton({ compact, myFrontlineTarget, aliveParticipants, character, interventionsRemaining, disabled, onSelect }: {
   compact?: boolean;
   myFrontlineTarget: string | null;
   aliveParticipants: { character_id: string; character: { name: string } }[];
   character: Character | null;
+  interventionsRemaining: number | null;
+  disabled?: boolean;
   onSelect: (targetId: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const targetName = myFrontlineTarget
     ? (aliveParticipants.find(p => p.character_id === myFrontlineTarget)?.character as any)?.name ?? "?"
     : null;
+  // Comme les autres actions de la réserve personnelle, pousser quelqu'un
+  // devant consomme une charge de interventions_remaining (une seule fois
+  // par étape — changer de cible ensuite reste gratuit, annuler la
+  // rembourse ; voir vote_frontline côté SQL). Le bouton reste utilisable
+  // sans charge s'il y a déjà une cible active, pour pouvoir l'annuler.
+  const isBlocked = disabled || (!interventionsRemaining && !myFrontlineTarget);
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => !isBlocked && setOpen(o => !o)}
+        disabled={isBlocked}
         title="Pousser devant : redirige les dégâts sur la personne choisie"
-        className={`relative w-full ${compact ? "min-h-[56px]" : "min-h-[48px]"} rounded-sm flex flex-col items-center justify-center border ${myFrontlineTarget ? "border-amber-400 bg-amber-500/10 text-amber-300" : "border-amber-500/30 bg-black/10 text-amber-300/90"}`}
+        className={`relative w-full ${compact ? "min-h-[56px]" : "min-h-[48px]"} rounded-sm flex flex-col items-center justify-center border disabled:opacity-25 ${myFrontlineTarget ? "border-amber-400 bg-amber-500/10 text-amber-300" : "border-amber-500/30 bg-black/10 text-amber-300/90"}`}
       >
         <img src="/icons/hooded_group.webp" alt="" className="h-6 w-6 object-contain" />
         <span className="text-[8px] uppercase leading-tight mt-0.5 text-center px-0.5">
           {targetName ? `→ ${targetName}` : "Pousser devant"}
         </span>
+        {interventionsRemaining !== null && (
+          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-[#1d3a4a] border border-amber-400/50 text-[8px] flex items-center justify-center">{interventionsRemaining}</span>
+        )}
       </button>
       {open && (
         <div className="absolute z-20 bottom-full mb-1.5 left-0 right-0 min-w-[160px] bg-card border border-amber-500/30 rounded-sm shadow-lg p-2">
